@@ -15,11 +15,7 @@ import type {
   MobileWebShellStep
 } from './mobile-web-shell-session-contract'
 import { awaitsGates, gateKey, gateVerdict } from './mobile-web-shell-gates'
-import {
-  grantsForRoute,
-  implementedPageRouteEntries,
-  matchesRoutePattern
-} from './page-route-policy'
+import { matchesRoutePattern, routeViewOf } from './page-route-policy'
 
 /**
  * The host's connection state as the three answers a step here needs.
@@ -43,23 +39,6 @@ export function readMobileWebShellReachability(
 
 const CHECKING: MobileWebShellSessionState = { kind: 'checking' }
 const NATIVE_ROUTE: MobileWebShellSessionState = { kind: 'native-route' }
-
-/** Whether the page renders this route: listed by the bundle, and needing nothing this shell lacks. */
-/**
- * What one bundle's route list says about this session, in the three shapes the reducer needs.
- *
- * Derived together because they are one reading of one list: the patterns the page may keep, what
- * each of them declared, and what this route itself was granted. Three sites used to spell this
- * out; a fourth spelling is how they drift.
- */
-function routeViewOf(routes: Parameters<typeof implementedPageRouteEntries>[0], pathname: string) {
-  const entries = implementedPageRouteEntries(routes)
-  return {
-    pageRoutes: entries.map((route) => route.pathname),
-    pageRouteGrants: entries,
-    routeGrants: grantsForRoute(routes, pathname)
-  }
-}
 
 function rendersRoute(pageRoutes: readonly string[], pathname: string): boolean {
   return pageRoutes.some((pattern) => matchesRoutePattern(pathname, pattern))
@@ -210,6 +189,7 @@ function onManifestRead(
     session,
     {
       pageRoutes,
+      pageRouteGrants,
       routeGrants,
       state: {
         kind: 'fetching',

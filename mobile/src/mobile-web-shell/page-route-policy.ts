@@ -94,3 +94,19 @@ export function grantsForRoute(
   const declared = (routes ?? []).find((route) => matchesRoutePattern(pathname, route.pathname))
   return declared === undefined ? [] : declared.grants.filter(implementsGrant)
 }
+
+/**
+ * What one bundle's route list says about one session, in the three shapes the reducer needs.
+ *
+ * Derived together because they are one reading of one list: the patterns the page may keep, what
+ * each of them declared, and what this route itself was granted. Three sites used to spell this
+ * out; a fourth spelling is how they drift.
+ */
+export function routeViewOf(routes: readonly MobileWebPageRoute[] | undefined, pathname: string) {
+  const entries = implementedPageRouteEntries(routes)
+  return {
+    pageRoutes: entries.map((route) => route.pathname),
+    pageRouteGrants: entries,
+    routeGrants: grantsForRoute(routes, pathname)
+  }
+}
