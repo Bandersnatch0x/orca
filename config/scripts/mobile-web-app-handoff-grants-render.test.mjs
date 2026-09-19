@@ -24,8 +24,10 @@ import {
  */
 
 const HOST_ROUTE = '/h/render-check-host'
+const FILES_ROUTE = '/h/render-check-host/files/wt-1'
 const HOST_PATTERN = '/h/[hostId]'
 const TASKS_PATTERN = '/h/[hostId]/tasks'
+const FILES_PATTERN = '/h/[hostId]/files/[worktreeId]'
 const SHELL_SESSION_ID = 'render-check-session'
 const SHELL_BUILD_ID = 'render-check-build'
 const SHELL_HOST = {
@@ -37,6 +39,7 @@ const SHELL_HOST = {
 /** The manifest's own pairs, as the shell would send them. */
 const PAGE_ROUTE_GRANTS = [
   { pathname: HOST_PATTERN, grants: ['navigate', 'storage'] },
+  { pathname: FILES_PATTERN, grants: ['navigate', 'storage', 'externalLink'] },
   { pathname: TASKS_PATTERN, grants: ['navigate', 'storage', 'native.clipboard.write'] }
 ]
 /** Wide enough for `app/h/_layout.tsx` to render the sidebar beside the route. */
@@ -79,18 +82,24 @@ afterAll(async () => {
 })
 
 /** Opens the worktree list at a viewport, under a named set of session grants. */
-async function openHostRoute({ viewport, grants, pageRouteGrants = PAGE_ROUTE_GRANTS }) {
+async function openHostRoute({
+  viewport,
+  grants,
+  pageRouteGrants = PAGE_ROUTE_GRANTS,
+  route = HOST_ROUTE,
+  awaitText = SHELL_HOST.name
+}) {
   const page = await browser.newPage({ viewport })
   await page.addInitScript(installShellDouble, {
     version: bridgeVersion,
     sessionId: SHELL_SESSION_ID,
     buildId: SHELL_BUILD_ID,
-    route: { pathname: HOST_ROUTE },
+    route: { pathname: route },
     host: SHELL_HOST,
     storage: {},
     faultGrant,
     grants,
-    pageRoutes: [HOST_PATTERN, TASKS_PATTERN],
+    pageRoutes: [HOST_PATTERN, FILES_PATTERN, TASKS_PATTERN],
     pageRouteGrants
   })
   const errors = []
@@ -202,6 +211,30 @@ describeRender('the sidebar hop to tasks, under the session it was opened with',
       polling: 250
     })
     expect(await navigates(page)).toEqual([])
+    expect(errors).toEqual([])
+    await page.close()
+  }, 60_000)
+
+  it('hands the sidebar hop over from a files route too, which is the general shape', async () => {
+    // The defect is not "the worktree list pushes tasks": on a wide layout the sidebar renders
+    // beside EVERY `/h` route, so the same hop exists from files, whose session carries
+    // `externalLink` but not `native.clipboard.write`. One opener proving it would leave the
+    // general case to inference.
+    const opened = await openHostRoute({
+      viewport: WIDE,
+      grants: [faultGrant, 'navigate', 'storage', 'externalLink'],
+      route: FILES_ROUTE,
+      awaitText: SHELL_HOST.name
+    })
+    const { page, errors, scripts } = opened
+    const loadedBefore = [...scripts]
+    await page.getByLabel('Tasks').first().click()
+    await page.waitForTimeout(1_500)
+    expect(await navigates(page)).toEqual([
+      { v: bridgeVersion, type: 'notify', name: 'navigate', href: `${HOST_ROUTE}/tasks` }
+    ])
+    expect(await page.evaluate(() => location.pathname)).toBe(FILES_ROUTE)
+    expect(scripts.filter((path) => !loadedBefore.includes(path))).toEqual([])
     expect(errors).toEqual([])
     await page.close()
   }, 60_000)
