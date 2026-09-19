@@ -489,7 +489,10 @@ describe('an in-page hop the session cannot cover', () => {
   const TASKS = '/h/host-a/tasks'
   const PAIRS = [
     { pathname: '/h/[hostId]', grants: ['navigate', 'storage'] },
-    { pathname: '/h/[hostId]/tasks', grants: ['navigate', 'storage', 'native.clipboard.write'] }
+    {
+      pathname: '/h/[hostId]/tasks',
+      grants: ['navigate', 'storage', 'externalLink', 'native.clipboard.write']
+    }
   ]
   const withPairs = (native: string[]) => ({
     ...INIT,
@@ -508,10 +511,23 @@ describe('an in-page hop the session cannot cover', () => {
   })
 
   it('stays in this document when the session already covers the target', () => {
-    const { posted, handoff } = mount(withPairs(['navigate', 'storage', 'native.clipboard.write']))
+    const { posted, handoff } = mount(
+      withPairs(['navigate', 'storage', 'externalLink', 'native.clipboard.write'])
+    )
     handoff.push(TASKS)
     expect(navigations(posted)).toEqual([])
     expect(router.push).toHaveBeenCalledWith(TASKS, undefined)
+  })
+
+  it("hands off when the session lacks any one of the target's grants, not the clipboard alone", () => {
+    // The tasks route declares four grants and this session holds three. Without a case that
+    // withholds `externalLink` alone, a rule reading only the verb grants would pass every case.
+    const { posted, handoff } = mount(withPairs(['navigate', 'storage', 'native.clipboard.write']))
+    handoff.push(TASKS)
+    expect(navigations(posted)).toEqual([
+      { v: BRIDGE_PROTOCOL_VERSION, type: 'notify', name: 'navigate', href: TASKS }
+    ])
+    expect(router.push).not.toHaveBeenCalled()
   })
 
   it('keeps a hop whose target declares a subset, which is C3.1 without its pairwise pin', () => {

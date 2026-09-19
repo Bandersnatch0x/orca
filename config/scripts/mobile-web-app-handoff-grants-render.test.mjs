@@ -40,7 +40,10 @@ const SHELL_HOST = {
 const PAGE_ROUTE_GRANTS = [
   { pathname: HOST_PATTERN, grants: ['navigate', 'storage'] },
   { pathname: FILES_PATTERN, grants: ['navigate', 'storage', 'externalLink'] },
-  { pathname: TASKS_PATTERN, grants: ['navigate', 'storage', 'native.clipboard.write'] }
+  {
+    pathname: TASKS_PATTERN,
+    grants: ['navigate', 'storage', 'externalLink', 'native.clipboard.write']
+  }
 ]
 /** Wide enough for `app/h/_layout.tsx` to render the sidebar beside the route. */
 const WIDE = { width: 1180, height: 820 }
@@ -162,7 +165,7 @@ describeRender('the sidebar hop to tasks, under the session it was opened with',
     // page that simply never navigates.
     const opened = await openHostRoute({
       viewport: WIDE,
-      grants: [faultGrant, 'navigate', 'storage', 'native.clipboard.write']
+      grants: [faultGrant, 'navigate', 'storage', 'externalLink', 'native.clipboard.write']
     })
     const { page, errors } = opened
     await page.getByLabel('Tasks').first().click()
