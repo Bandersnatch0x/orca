@@ -76,10 +76,22 @@ function sameRoute(pushed, declared) {
  * Empty would mean every page route covers every other, which is not a property this codebase has
  * and not one to assume: the point of the pin is that a new entry appears when a route's grants
  * grow, and that the entry is read before it ships rather than found on a device.
+ *
+ * What is NOT here is the point of the census. `files/[worktreeId] -> files/preview/[worktreeId]`
+ * is absent because the preview declares no more than the explorer, so that hop stays in the
+ * document — which is C3.1's pairwise pin, now a consequence of the rule rather than a rule of its
+ * own. The two `-> tasks` entries and the four `-> files/*` entries are the hops the sidebar and
+ * the rows make into a route that asks for more than their opener holds.
  */
 const HANDED_OFF = [
+  '/h/[hostId] -> /h/[hostId]/files/[worktreeId]',
+  '/h/[hostId] -> /h/[hostId]/files/preview/[worktreeId]',
   '/h/[hostId] -> /h/[hostId]/tasks',
-  '/h/[hostId]/agent-history/[worktreeId] -> /h/[hostId]/tasks'
+  '/h/[hostId]/agent-history/[worktreeId] -> /h/[hostId]/files/[worktreeId]',
+  '/h/[hostId]/agent-history/[worktreeId] -> /h/[hostId]/files/preview/[worktreeId]',
+  '/h/[hostId]/agent-history/[worktreeId] -> /h/[hostId]/tasks',
+  '/h/[hostId]/files/[worktreeId] -> /h/[hostId]/tasks',
+  '/h/[hostId]/files/preview/[worktreeId] -> /h/[hostId]/tasks'
 ]
 
 describe('in-page hops between page routes', () => {
@@ -114,11 +126,17 @@ describe('in-page hops between page routes', () => {
   it('covers a hop whose target asks for no more than its opener, rather than handing it off', () => {
     // The other half of the rule, asserted on the manifest rather than assumed: a target declaring
     // a subset stays in the document, which is what keeps an ordinary hop cheap.
-    const tasks = MOBILE_WEB_PAGE_ROUTES.find((route) => route.pathname === '/h/[hostId]/tasks')
-    const list = MOBILE_WEB_PAGE_ROUTES.find((route) => route.pathname === '/h/[hostId]')
-    if (!tasks || !list) {
+    // The explorer to its own preview, which is the hop C3.1 pinned pairwise: the preview asks for
+    // no more than the explorer, so the rule keeps it local and the pairwise pin is redundant.
+    const explorer = MOBILE_WEB_PAGE_ROUTES.find(
+      (route) => route.pathname === '/h/[hostId]/files/[worktreeId]'
+    )
+    const preview = MOBILE_WEB_PAGE_ROUTES.find(
+      (route) => route.pathname === '/h/[hostId]/files/preview/[worktreeId]'
+    )
+    if (!explorer || !preview) {
       throw new Error('the manifest lost a route this census is written against')
     }
-    expect(list.grants.every((grant) => tasks.grants.includes(grant))).toBe(true)
+    expect(preview.grants.filter((grant) => !explorer.grants.includes(grant))).toEqual([])
   })
 })
