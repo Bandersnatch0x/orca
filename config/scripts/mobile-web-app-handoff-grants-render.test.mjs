@@ -121,14 +121,10 @@ async function openHostRoute({
     timeout: 30_000,
     polling: 250
   })
-  await page.waitForFunction(
-    (needle) => document.body.innerText.includes(needle),
-    SHELL_HOST.name,
-    {
-      timeout: 30_000,
-      polling: 250
-    }
-  )
+  await page.waitForFunction((needle) => document.body.innerText.includes(needle), awaitText, {
+    timeout: 30_000,
+    polling: 250
+  })
   return { page, errors, scripts }
 }
 
