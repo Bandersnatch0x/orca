@@ -713,6 +713,7 @@ jobs:
             config/scripts/mobile-web-app-web-overrides.test.mjs \
             config/scripts/mobile-web-app-render.test.mjs \
             config/scripts/mobile-web-app-drawer-render.test.mjs \
+            config/scripts/mobile-web-app-handoff-grants-render.test.mjs \
             config/scripts/mobile-web-app-agent-history-render.test.mjs \
             config/scripts/mobile-web-app-tasks-render.test.mjs \
             config/scripts/mobile-web-app-tasks-external-links.test.mjs \
