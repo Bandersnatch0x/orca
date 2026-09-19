@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { clientFrame, createFakeRpcClient } from './bridge-host-test-fakes'
-import { harness, HOST, PAGE_ROUTES, ROUTE } from './bridge-host-test-harness'
+import { harness, HOST, PAGE_ROUTE_GRANTS, PAGE_ROUTES, ROUTE } from './bridge-host-test-harness'
 import {
   BRIDGE_MAX_PENDING_REQUESTS,
   BRIDGE_MAX_ROUTE_PATHNAME_CHARS,
@@ -48,9 +48,42 @@ describe('init and state', () => {
       },
       route: ROUTE,
       pageRoutes: PAGE_ROUTES,
+      pageRouteGrants: PAGE_ROUTE_GRANTS,
       host: HOST,
       storage: {}
     })
+  })
+
+  /**
+   * The page cannot decide an in-page hop without knowing what the target needs.
+   *
+   * `pageRoutes` says which patterns this shell would render; it does not say what each one
+   * declared. A page that keeps a push local on the strength of the pattern alone runs the target
+   * under the opener's grants, which is how the tasks page reached the sidebar without
+   * `native.clipboard.write`. So `init` carries the manifest's own pairs.
+   */
+  it('carries what every page route declared, not only which patterns exist', () => {
+    const bridge = harness()
+    bridge.host.receive(clientFrame({ type: 'ready' }))
+    const init = bridge.last()
+    expect(init.type).toBe('init')
+    if (init.type !== 'init') {
+      throw new Error('expected an init frame')
+    }
+    // Every pattern the page is told it may keep has an entry saying what keeping it costs.
+    expect((init.pageRouteGrants ?? []).map((entry) => entry.pathname)).toEqual([...PAGE_ROUTES])
+    expect(init.pageRouteGrants).toEqual(PAGE_ROUTE_GRANTS)
+  })
+
+  it('refuses a grant name the manifest grammar refuses, rather than forwarding it', () => {
+    // The host reads the manifest through the same grammar the desktop wrote it under, so a name
+    // the bundle could not have declared cannot reach the page through this field either.
+    const bridge = harness({
+      pageRouteGrants: [{ pathname: '/h/[hostId]', grants: ['native.clipboard'] }]
+    })
+    bridge.host.receive(clientFrame({ type: 'ready' }))
+    expect(bridge.routeRefusals.length).toBe(1)
+    expect(bridge.posted.length).toBe(0)
   })
 
   it('names the screen the page is standing in for, which its own `/` cannot tell it', () => {

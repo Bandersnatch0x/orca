@@ -49,11 +49,16 @@ export function matchesRoutePattern(pathname: string, pattern: string): boolean 
   })
 }
 
-/** The patterns this shell will render from the page: listed, and needing nothing it lacks. */
+/** The routes this shell will render from the page: listed, and needing nothing it lacks. */
+export function implementedPageRouteEntries(
+  routes: readonly MobileWebPageRoute[] | undefined
+): MobileWebPageRoute[] {
+  return (routes ?? []).filter((route) => route.grants.every(implementsGrant))
+}
+
+/** The patterns alone, for the callers that only name routes. */
 export function implementedPageRoutes(routes: readonly MobileWebPageRoute[] | undefined): string[] {
-  return (routes ?? [])
-    .filter((route) => route.grants.every(implementsGrant))
-    .map((route) => route.pathname)
+  return implementedPageRouteEntries(routes).map((route) => route.pathname)
 }
 
 /**

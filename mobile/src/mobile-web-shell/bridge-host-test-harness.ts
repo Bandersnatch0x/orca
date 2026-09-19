@@ -46,6 +46,8 @@ export type Harness = {
 
 export const ROUTE = { pathname: '/h/host-a' }
 export const PAGE_ROUTES = ['/h/[hostId]']
+/** What those patterns declared, as the manifest would carry it. */
+export const PAGE_ROUTE_GRANTS = [{ pathname: '/h/[hostId]', grants: ['navigate', 'storage'] }]
 export const HOST = { id: 'host-a', name: 'Host A', endpoint: 'ws://host-a', lastConnected: 5 }
 
 export function harness(
@@ -66,6 +68,8 @@ export function harness(
      */
     /** What the mounted route declared; everything this shell implements unless a case narrows it. */
     routeGrants?: readonly string[]
+    /** The manifest pairs this shell would send; a case may hand it a malformed one. */
+    pageRouteGrants?: readonly { pathname: string; grants: readonly string[] }[]
     /** Stands for a host rebuilt under a page whose session already handshook. */
     sessionEstablished?: boolean
     ready?: boolean
@@ -96,6 +100,7 @@ export function harness(
     sessionId: 'session-a',
     route: options.route ?? ROUTE,
     pageRoutes: PAGE_ROUTES,
+    pageRouteGrants: options.pageRouteGrants ?? PAGE_ROUTE_GRANTS,
     routeGrants: options.routeGrants ?? MOBILE_WEB_SHELL_GRANTS,
     sessionEstablished: options.sessionEstablished ?? false,
     host: HOST,

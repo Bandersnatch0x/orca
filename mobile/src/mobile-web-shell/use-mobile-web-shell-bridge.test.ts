@@ -123,6 +123,7 @@ function Harness(props: {
     // Built inline on every render, as a caller writes it: the host is not rebuilt for it.
     route: { pathname: '/h/host-1' },
     pageRoutes: ['/h/[hostId]'],
+    pageRouteGrants: [{ pathname: '/h/[hostId]', grants: ['navigate', 'storage'] }],
     routeGrants: ['navigate', 'storage', 'externalLink', ...BRIDGE_NATIVE_VERB_NAMES],
     onNavigate: (href) => props.probe.navigations.push(href),
     onExternalLink: (url) => props.probe.externalLinks.push(url),
