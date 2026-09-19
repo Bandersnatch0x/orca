@@ -102,6 +102,7 @@ describe('in-page hops between page routes', () => {
     if (!explorer || !preview) {
       throw new Error('the manifest lost a route this census is written against')
     }
+    expect(preview.grants.length, 'the preview declares something to inherit').toBeGreaterThan(0)
     expect(preview.grants.filter((grant) => !explorer.grants.includes(grant))).toEqual([])
   })
 })
