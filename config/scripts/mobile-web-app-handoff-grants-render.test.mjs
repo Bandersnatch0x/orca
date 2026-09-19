@@ -107,6 +107,9 @@ async function openHostRoute({
   })
   const errors = []
   const scripts = []
+  // Every script answer, not only the ones that arrived: a chunk the navigation waits on can fail
+  // with a status the 200-only list cannot show.
+  const jsResponses = []
   page.on('pageerror', (error) => errors.push(`${error.name}: ${error.message}`))
   page.on('console', (message) => {
     if (message.type() === 'error') {
@@ -115,7 +118,11 @@ async function openHostRoute({
   })
   page.on('response', (response) => {
     const path = new URL(response.url()).pathname
-    if (response.status() === 200 && path.endsWith('.js')) {
+    if (!path.endsWith('.js')) {
+      return
+    }
+    jsResponses.push({ status: response.status(), path })
+    if (response.status() === 200) {
       scripts.push(path)
     }
   })
@@ -128,7 +135,7 @@ async function openHostRoute({
     timeout: 30_000,
     polling: 250
   })
-  return { page, errors, scripts }
+  return { page, errors, scripts, jsResponses }
 }
 
 /** Every `navigate` notify the page posted, in order. */
@@ -136,6 +143,37 @@ function navigates(page) {
   return page.evaluate(() =>
     (globalThis.__orcaRenderCheckNotifies ?? []).filter((frame) => frame.name === 'navigate')
   )
+}
+
+/**
+ * The wait for the hop to land, and the page's own account of why it did not.
+ *
+ * A navigation that never commits reads as a bare 30 s timeout. The CI failure this file first hit
+ * was a `TypeError` thrown inside React Navigation that blanked the document, and it was invisible
+ * because the error assertions run after a wait that never returns.
+ */
+async function waitForTasksRoute(page, opened, clickedAt) {
+  try {
+    await page.waitForFunction(() => location.pathname.endsWith('/tasks'), {
+      timeout: 30_000,
+      polling: 250
+    })
+  } catch (cause) {
+    const seen = await page.evaluate(() => ({
+      pathname: location.pathname,
+      text: document.body.innerText.slice(0, 300)
+    }))
+    throw new Error(
+      [
+        `the document never reached /tasks; pathname is ${seen.pathname}`,
+        `page errors: ${JSON.stringify(opened.errors)}`,
+        `navigate notifies: ${JSON.stringify(await navigates(page))}`,
+        `body text: ${JSON.stringify(seen.text)}`,
+        `js responses since the click: ${JSON.stringify(opened.jsResponses.slice(clickedAt))}`
+      ].join('\n'),
+      { cause }
+    )
+  }
 }
 
 describeRender('the sidebar hop to tasks, under the session it was opened with', () => {
@@ -168,11 +206,9 @@ describeRender('the sidebar hop to tasks, under the session it was opened with',
       grants: [faultGrant, 'navigate', 'storage', 'externalLink', 'native.clipboard.write']
     })
     const { page, errors } = opened
+    const clickedAt = opened.jsResponses.length
     await page.getByLabel('Tasks').first().click()
-    await page.waitForFunction(() => location.pathname.endsWith('/tasks'), {
-      timeout: 30_000,
-      polling: 250
-    })
+    await waitForTasksRoute(page, opened, clickedAt)
     expect(await navigates(page)).toEqual([])
     expect(errors).toEqual([])
     await page.close()
@@ -204,11 +240,9 @@ describeRender('the sidebar hop to tasks, under the session it was opened with',
       pageRouteGrants: null
     })
     const { page, errors } = opened
+    const clickedAt = opened.jsResponses.length
     await page.getByLabel('Tasks').first().click()
-    await page.waitForFunction(() => location.pathname.endsWith('/tasks'), {
-      timeout: 30_000,
-      polling: 250
-    })
+    await waitForTasksRoute(page, opened, clickedAt)
     expect(await navigates(page)).toEqual([])
     expect(errors).toEqual([])
     await page.close()
