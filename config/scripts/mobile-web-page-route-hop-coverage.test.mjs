@@ -1,7 +1,5 @@
-import { readdirSync, readFileSync } from 'node:fs'
-import { join } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { mobileAppNavigationTargets } from './mobile-app-navigation-targets.mjs'
 import { MOBILE_WEB_PAGE_ROUTES } from './mobile-web-page-routes.mjs'
 
 /**
@@ -16,45 +14,11 @@ import { MOBILE_WEB_PAGE_ROUTES } from './mobile-web-page-routes.mjs'
  * Openers are every page route, not the one that pushes: on a wide layout `app/h/_layout.tsx`
  * renders the worktree-list sidebar beside every `/h` route, and its header pushes tasks. That is
  * what makes a pairwise pin the wrong shape — the sidebar reaches everything.
+ *
+ * Targets are the routes the app navigates to, read from its call sites rather than from every
+ * `/h/...` template in the sources: a route's own mount declares its pathname, so harvesting those
+ * made every declared route reachable and the filter inert.
  */
-
-const MOBILE_ROOT = join(fileURLToPath(new URL('../..', import.meta.url)), 'mobile')
-
-/** Every `/h/${…}/…` target the app builds, as written. */
-const HOST_HREF = /`\/h\/\$\{[^}]*\}([^`]*)`/g
-
-function sourceFiles(dir) {
-  const found = []
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    const path = join(dir, entry.name)
-    if (entry.isDirectory()) {
-      found.push(...sourceFiles(path))
-    } else if (/\.tsx?$/.test(entry.name) && !entry.name.includes('.test.')) {
-      found.push(path)
-    }
-  }
-  return found
-}
-
-/** The route patterns the app can push to, derived from the hrefs it builds. */
-function pushedPatterns() {
-  const patterns = new Set()
-  for (const dir of ['src', 'app']) {
-    for (const file of sourceFiles(join(MOBILE_ROOT, dir))) {
-      const source = readFileSync(file, 'utf8')
-      for (const [, rest] of source.matchAll(HOST_HREF)) {
-        // The tail after the host segment, with its own interpolations reduced to one segment and
-        // its query dropped: `/session/${encodeURIComponent(id)}?name=…` becomes `/session/[p]`.
-        const tail = rest
-          .split('?')[0]
-          .replaceAll(/\$\{[^}]*\}/g, '[p]')
-          .replace(/\/$/, '')
-        patterns.add(`/h/[hostId]${tail}`)
-      }
-    }
-  }
-  return patterns
-}
 
 /** Whether a concrete pattern from the source names the same route as a manifest pattern. */
 function sameRoute(pushed, declared) {
@@ -96,14 +60,15 @@ const HANDED_OFF = [
 
 describe('in-page hops between page routes', () => {
   it('finds the hops the app actually builds, so the census is not empty', () => {
-    const pushed = pushedPatterns()
+    const { targets } = mobileAppNavigationTargets()
     // The sidebar's tasks push is the hop this lane exists for; if the census stops seeing it the
-    // pin below would go quietly green.
-    expect([...pushed].some((pattern) => sameRoute(pattern, '/h/[hostId]/tasks'))).toBe(true)
+    // pin below would go quietly green. Deleting the header's two pushes reds this case, which is
+    // what the derivation bought: the tasks screen still declares its own pathname.
+    expect(targets.some((pattern) => sameRoute(pattern, '/h/[hostId]/tasks'))).toBe(true)
   })
 
   it('pins every hop the handoff must take away from the page', () => {
-    const pushed = [...pushedPatterns()]
+    const pushed = mobileAppNavigationTargets().targets
     const handedOff = []
     for (const opener of MOBILE_WEB_PAGE_ROUTES) {
       for (const target of MOBILE_WEB_PAGE_ROUTES) {
