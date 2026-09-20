@@ -26,7 +26,7 @@ const preFlipScript = readFileSync(
 )
 
 describe('the whole terminal document script', () => {
-  it('is what the modules emit, modulo the seven normalisations', async () => {
+  it('is what the modules emit, modulo the eight counted classes', async () => {
     const emitted = await Promise.all(
       TERMINAL_DOCUMENT_MODULE_ORDER.map((name) =>
         emitTerminalDocumentModule(fileURLToPath(new URL(`./${name}.ts`, import.meta.url)))
