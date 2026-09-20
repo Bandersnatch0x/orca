@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { emitTerminalDocumentModule } from './build-terminal-document-script.mjs'
+import { terminalBackgroundFallback } from '../src/terminal/document/document-constants'
 
 /**
  * What the generator drops, what it keeps, and how it puts a module back into the document.
@@ -60,5 +61,16 @@ describe('emitting one terminal document module', () => {
         'export type T = { a: number }\nexport function f(v: T): number {\n  return v.a\n}\n'
       )
     ).toBe('  function f(v) {\n    return v.a;\n  }')
+  })
+
+  it('substitutes a build-time constant the document carries as a literal', async () => {
+    const emitted = await emit(
+      "import { terminalBackgroundFallback } from '../src/terminal/document/document-constants'\n" +
+        'export function paint() {\n' +
+        '  return terminalBackgroundFallback\n' +
+        '}\n'
+    )
+    expect(emitted).toContain(JSON.stringify(terminalBackgroundFallback))
+    expect(emitted).not.toContain('terminalBackgroundFallback')
   })
 })

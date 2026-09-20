@@ -1,5 +1,7 @@
 import { readFile } from 'node:fs/promises'
+import path from 'node:path'
 import * as esbuild from 'esbuild'
+import { importTypeScriptModule } from './import-typescript-module.mjs'
 
 /**
  * Turns one module of the in-WebView terminal document back into the script text the document
@@ -19,6 +21,34 @@ import * as esbuild from 'esbuild'
  * document's order is part of what the equivalence test holds fixed.
  */
 const INDENT = '  '
+
+const constantsPath = path.join(
+  import.meta.dirname,
+  '..',
+  'src',
+  'terminal',
+  'document',
+  'document-constants.ts'
+)
+
+let substitutions = null
+
+/**
+ * `document-constants.ts` as esbuild `define` entries.
+ *
+ * Substitution happens after the import lines are dropped, when the names are free again; while the
+ * import is still there esbuild sees a bound name and leaves it alone, which is the correct thing
+ * for the page and the wrong thing for the document.
+ */
+async function documentConstantSubstitutions() {
+  if (substitutions === null) {
+    const module = await importTypeScriptModule(constantsPath)
+    substitutions = Object.fromEntries(
+      Object.entries(module).map(([name, value]) => [name, JSON.stringify(value)])
+    )
+  }
+  return substitutions
+}
 
 /** Whether a line opens an import the document does not need. */
 function isImportLine(line) {
@@ -68,7 +98,15 @@ export async function emitTerminalDocumentModule(modulePath) {
     }
     kept.push(line.startsWith('export ') ? line.slice('export '.length) : line)
   }
-  const body = kept.join('\n').trim()
+  const define = await documentConstantSubstitutions()
+  const substituted = await esbuild.transform(kept.join('\n'), {
+    loader: 'js',
+    format: 'esm',
+    target: 'chrome74',
+    minify: false,
+    define
+  })
+  const body = substituted.code.trim()
   return body
     .split('\n')
     .map((line) => (line.length === 0 ? line : `${INDENT}${line}`))

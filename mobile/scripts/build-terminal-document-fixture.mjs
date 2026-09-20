@@ -1,6 +1,6 @@
 import { writeFile } from 'node:fs/promises'
 import path from 'node:path'
-import * as esbuild from 'esbuild'
+import { importTypeScriptModule } from './import-typescript-module.mjs'
 
 /**
  * Writes the committed copy of the terminal WebView document that
@@ -36,19 +36,6 @@ export const TERMINAL_DOCUMENT_FIXTURE_PATH = path.join(
 export const ENGINE_JS_PLACEHOLDER = '__ORCA_TERMINAL_ENGINE_JS__'
 export const ENGINE_CSS_PLACEHOLDER = '__ORCA_TERMINAL_ENGINE_CSS__'
 
-async function loadModule(entryPoint) {
-  const result = await esbuild.build({
-    entryPoints: [entryPoint],
-    bundle: true,
-    format: 'esm',
-    platform: 'node',
-    write: false,
-    logLevel: 'silent'
-  })
-  const code = result.outputFiles[0].text
-  return import(`data:text/javascript;base64,${Buffer.from(code, 'utf8').toString('base64')}`)
-}
-
 /**
  * The document with both generated sections replaced by their placeholders.
  *
@@ -76,8 +63,8 @@ export function terminalDocumentFixture(document, engineJs, engineCss) {
 
 async function main() {
   const [{ XTERM_HTML }, { XTERM_ENGINE_JS, XTERM_ENGINE_CSS }] = await Promise.all([
-    loadModule(entry),
-    loadModule(enginePath)
+    importTypeScriptModule(entry),
+    importTypeScriptModule(enginePath)
   ])
   const fixture = terminalDocumentFixture(XTERM_HTML, XTERM_ENGINE_JS, XTERM_ENGINE_CSS)
   await writeFile(TERMINAL_DOCUMENT_FIXTURE_PATH, fixture)
