@@ -67,53 +67,62 @@ function moduleSource(name: string): string {
  * remount still holding the first mount's node. Object and regex literals are not work, which is
  * why this reads the tree rather than the text.
  */
+/** A node's own properties, or nothing when it is not one. Read rather than asserted. */
+function fieldsOf(node: unknown): [string, unknown][] {
+  return node !== null && typeof node === 'object' && !Array.isArray(node)
+    ? Object.entries(node)
+    : []
+}
+
+function stringField(node: unknown, key: string): string {
+  const found = fieldsOf(node).find(([name]) => name === key)?.[1]
+  return typeof found === 'string' ? found : ''
+}
+
+function field(node: unknown, key: string): unknown {
+  return fieldsOf(node).find(([name]) => name === key)?.[1]
+}
+
+const RUNS_NOW = new Set([
+  'CallExpression',
+  'NewExpression',
+  'AwaitExpression',
+  'TaggedTemplateExpression'
+])
+/** What an initialiser *is* rather than what it does: its body runs later, not now. */
+const RUNS_LATER = new Set(['FunctionExpression', 'ArrowFunctionExpression', 'ClassExpression'])
+
+function isElementGlobal(node: unknown): boolean {
+  const name = stringField(node, 'name')
+  return stringField(node, 'type') === 'Identifier' && (name === 'document' || name === 'window')
+}
+
 function initialiserRuns(node: unknown): boolean {
-  if (node === null || typeof node !== 'object') {
-    return false
-  }
   if (Array.isArray(node)) {
     return node.some(initialiserRuns)
   }
-  const record: Record<string, unknown> = node as Record<string, unknown>
-  const type = record.type
-  if (
-    type === 'CallExpression' ||
-    type === 'NewExpression' ||
-    type === 'AwaitExpression' ||
-    type === 'TaggedTemplateExpression'
-  ) {
+  const type = stringField(node, 'type')
+  if (RUNS_NOW.has(type)) {
     return true
   }
-  // A function or class the initialiser *is* has a body that runs later, not now.
-  if (
-    type === 'FunctionExpression' ||
-    type === 'ArrowFunctionExpression' ||
-    type === 'ClassExpression'
-  ) {
+  if (RUNS_LATER.has(type)) {
     return false
   }
-  if (type === 'MemberExpression') {
-    const object: Record<string, unknown> = record.object as Record<string, unknown>
-    if (object.type === 'Identifier' && (object.name === 'document' || object.name === 'window')) {
-      return true
-    }
+  if (type === 'MemberExpression' && isElementGlobal(field(node, 'object'))) {
+    return true
   }
-  return Object.entries(record).some(([key, value]) => key !== 'type' && initialiserRuns(value))
+  return fieldsOf(node).some(([key, value]) => key !== 'type' && initialiserRuns(value))
 }
 
 /** Whether anything at a module's top level reaches an element, at any depth. */
 function readsTheDocument(node: unknown): boolean {
-  if (node === null || typeof node !== 'object') {
-    return false
-  }
   if (Array.isArray(node)) {
     return node.some(readsTheDocument)
   }
-  const record: Record<string, unknown> = node as Record<string, unknown>
-  if (record.type === 'Identifier' && (record.name === 'document' || record.name === 'window')) {
+  if (isElementGlobal(node)) {
     return true
   }
-  return Object.entries(record).some(([key, value]) => key !== 'type' && readsTheDocument(value))
+  return fieldsOf(node).some(([key, value]) => key !== 'type' && readsTheDocument(value))
 }
 
 function parseTimeEffects(name: string): string[] {
