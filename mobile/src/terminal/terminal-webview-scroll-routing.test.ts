@@ -2,14 +2,13 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { XTERM_HTML } from './terminal-webview-html'
 
-// The in-WebView JS lives in terminal-webview-html.ts; the RN wrapper in
-// TerminalWebView.tsx. Concatenate both so assertions resolve regardless of file.
+// The RN wrapper and the pending-message queue are TypeScript; everything the WebView runs is the
+// generated document. Concatenated so assertions resolve regardless of file.
 const source =
   readFileSync(new URL('./TerminalWebView.tsx', import.meta.url), 'utf8') +
   readFileSync(new URL('./use-terminal-webview-controller.ts', import.meta.url), 'utf8') +
   readFileSync(new URL('./terminal-webview-ready-promises.ts', import.meta.url), 'utf8') +
   readFileSync(new URL('./terminal-webview-pending-messages.ts', import.meta.url), 'utf8') +
-  readFileSync(new URL('./terminal-webview-url-tap.ts', import.meta.url), 'utf8') +
   XTERM_HTML
 const sessionSource = readFileSync(
   new URL('../session/use-mobile-session-terminal-input.ts', import.meta.url),
@@ -246,7 +245,7 @@ describe('TerminalWebView scroll routing', () => {
     expect(tapHandlerBlock).toContain(
       'if (focusKeyboard || !isClickMouseTrackingMode(getMouseTrackingMode()))'
     )
-    expect(tapHandlerBlock).toContain("notify({ type: 'terminal-tap' });")
+    expect(tapHandlerBlock).toContain('notify({ type: "terminal-tap" });')
   })
 
   it('allows x10 mouse gesture reports through the mobile session gate', () => {

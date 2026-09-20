@@ -59,19 +59,15 @@ describe('terminal WebView reflow', () => {
     expect(htmlSource).toContain('notify({ type: "measure-result", cols: null, rows: null });')
   })
 
-  // Why: the raw-source assertions above pass even if the reflow module is
-  // dropped from the XTERM_HTML concatenation (a broken/removed import or an
-  // emptied TERMINAL_REFLOW_JS leaves the `${...}` placeholder in the template
-  // but never injects the routine). That was the regression class reported when
-  // a sibling refactor extracted the tap dispatcher next to the reflow inject.
-  // Guard the *assembled* document so the routine and its dispatch are really
-  // present in what the WebView runs.
+  // Why: the assertions above read the reflow module's own emission, which still reads whole if
+  // the generator drops the module from the document or emits it twice. That was the regression
+  // class reported when a sibling refactor extracted the tap dispatcher next to reflow. Guard the
+  // assembled document so the routine, once, and its dispatch are really in what the WebView runs.
   describe('assembled XTERM_HTML', () => {
-    it('still injects the reflow routine (placeholder fully expanded)', () => {
+    it('carries the reflow routine exactly once', () => {
       expect(XTERM_HTML).toContain('function reflow(cols, rows) {')
-      expect(XTERM_HTML).toContain('term.resize(nextCols, nextRows);')
-      // No unexpanded template placeholder for the injected reflow JS.
-      expect(XTERM_HTML).not.toContain('TERMINAL_REFLOW_JS}')
+      expect(XTERM_HTML).toContain('scope.term.resize(nextCols, nextRows);')
+      expect(XTERM_HTML.split(reflowSource).length - 1).toBe(1)
     })
 
     it('still routes the reflow message to the injected routine', () => {

@@ -1,11 +1,13 @@
 import { createContext, Script } from 'node:vm'
 import { describe, expect, it } from 'vitest'
 import type { TappedFilePath } from './terminal-path-tap'
-import { generatedDocumentModule } from './document/generated-document-region.test-support'
+import {
+  documentDeclaredFunction,
+  generatedDocumentModule
+} from './document/generated-document-region.test-support'
 import {
   TERMINAL_HTTP_URL_MAX_LENGTH,
   TERMINAL_HTTP_URL_REGEX_SOURCE,
-  URL_TAP_WEBVIEW_JS,
   findFileUrlAtColumn,
   findUrlAtColumn,
   resolveTerminalOscFileTap,
@@ -13,7 +15,12 @@ import {
 } from './terminal-webview-url-tap'
 import { XTERM_HTML } from './terminal-webview-html'
 
-const pathTapSource = await generatedDocumentModule('path-tap')
+// The three modules the document carries the URL-tap group as, in its own order.
+const urlTapGroupSource = (
+  await Promise.all(
+    ['path-tap', 'url-tap', 'osc-link-tap', 'surface-tap'].map(generatedDocumentModule)
+  )
+).join('\n')
 
 type FileTapResolverCase = {
   name: string
@@ -101,19 +108,15 @@ function createInjectedFileTapResolvers(): {
   resolveTerminalFileUrlTap: InjectedFileTapResolver
   resolveTerminalOscFileTap: InjectedFileTapResolver
 } {
-  const context = createContext({ URL })
+  const context: Record<string, unknown> = createContext({ URL })
   new Script(
-    `${pathTapSource}\n${URL_TAP_WEBVIEW_JS}\n` +
+    `${urlTapGroupSource}\n` +
       'this.__resolveTerminalFileUrlTap = resolveTerminalFileUrlTap;\n' +
       'this.__resolveTerminalOscFileTap = resolveTerminalOscFileTap;'
   ).runInContext(context)
-  const injected = context as {
-    __resolveTerminalFileUrlTap: InjectedFileTapResolver
-    __resolveTerminalOscFileTap: InjectedFileTapResolver
-  }
   return {
-    resolveTerminalFileUrlTap: injected.__resolveTerminalFileUrlTap,
-    resolveTerminalOscFileTap: injected.__resolveTerminalOscFileTap
+    resolveTerminalFileUrlTap: documentDeclaredFunction(context, '__resolveTerminalFileUrlTap'),
+    resolveTerminalOscFileTap: documentDeclaredFunction(context, '__resolveTerminalOscFileTap')
   }
 }
 

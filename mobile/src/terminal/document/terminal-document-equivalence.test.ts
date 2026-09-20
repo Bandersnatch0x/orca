@@ -144,6 +144,45 @@ describe('terminal document script equivalence', () => {
     ).toEqual({ ...NONE, scopeFieldDeclarations: 1, unshadowedNames: 2 })
   })
 
+  it('refuses a numeric-suffix rename that is not a listed unshadowed binding', () => {
+    // The shape `value2` -> `value` is what the printer does to a shadow, but this pair is not one
+    // of the document's, so it is a renamed local: a changed program, not a normalisation.
+    expect(
+      normalisationsOf('function f() { return value2; }', 'function f() { return value; }')
+    ).toBe('token 6: expected name value2, generated name value')
+  })
+
+  it('refuses a bare block the baseline does not have', () => {
+    // A block that is nobody's body cannot be the `curly` rule's work, so absorbing it would hide
+    // a statement boundary the baseline never had.
+    expect(normalisationsOf('let value = 1; use(value);', '{ let value = 1; } use(value);')).toBe(
+      'token 0: expected name let, generated {'
+    )
+  })
+
+  it('counts a braced body only for a head that can carry an unbraced one', () => {
+    expect(normalisationsOf('if (a) b();', 'if (a) { b(); }')).toEqual({
+      ...NONE,
+      bracedBodies: 1
+    })
+    expect(normalisationsOf('for (;;) b();', 'for (;;) { b(); }')).toEqual({
+      ...NONE,
+      bracedBodies: 1
+    })
+    expect(normalisationsOf('while (a) b();', 'while (a) { b(); }')).toEqual({
+      ...NONE,
+      bracedBodies: 1
+    })
+    expect(normalisationsOf('if (a) b(); else c();', 'if (a) { b(); } else { c(); }')).toEqual({
+      ...NONE,
+      bracedBodies: 2
+    })
+    expect(normalisationsOf('do b(); while (a);', 'do { b(); } while (a);')).toEqual({
+      ...NONE,
+      bracedBodies: 1
+    })
+  })
+
   it('refuses a changed literal', () => {
     expect(normalisationsOf('var a = 1;', 'var a = 2')).toBe(
       'token 3: expected num 1, generated num 2'
