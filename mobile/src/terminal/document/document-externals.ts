@@ -42,12 +42,6 @@ export declare function shouldRouteScrollToTerminalInput(): boolean
 /** `mouse-report-and-scroll-routing`: sends a line scroll to the terminal at a point. */
 export declare function routeScrollLines(lines: number, clientX: number, clientY: number): void
 
-/** `smooth-scroll-and-cell-geometry`: queues a pixel scroll of the normal buffer. */
-export declare function enqueueNormalBufferScrollDelta(deltaY: number): void
-
-/** `smooth-scroll-and-cell-geometry`: drops any sub-line smooth-scroll travel. */
-export declare function resetSmoothScrollOffset(): void
-
 /** `term-observers-and-mode-mirroring`: disposes every xterm listener the last terminal held. */
 export declare function disposeTermObservers(): void
 
@@ -59,12 +53,6 @@ export declare function viewportToCell(
   originX: number,
   originY: number
 ): { row: number; col: number } | null
-
-/** `selection-overlay`: the text of one viewport row. */
-export declare function getLineText(row: number): string
-
-/** `selection-overlay`: the string index a cell column lands on, wide characters included. */
-export declare function cellColToStringIndex(row: number, col: number): number
 
 /** `selection-overlay`: starts a selection at a cell. */
 export declare function enterSelect(col: number, row: number): void

@@ -54,7 +54,7 @@ export type TerminalDocumentCell = {
 /** One buffer line, as the document inspects it. */
 export type TerminalDocumentLine = {
   readonly length: number
-  translateToString: (trimRight: boolean) => string
+  translateToString: (trimRight: boolean, startColumn?: number, endColumn?: number) => string
   getCell?: (x: number, cell?: TerminalDocumentCell | null) => TerminalDocumentCell | null
 }
 
@@ -142,6 +142,12 @@ export type TerminalDocumentScope = {
   sgrMouseMode: boolean
   /** `runtime-state`: whether the TUI asked for SGR pixel (1016) mouse reports. */
   sgrMousePixelsMode: boolean
+  /** `normal-buffer-smooth-scroll`: sub-row scroll travel not yet committed to xterm. */
+  smoothScrollOffsetY: number
+  /** `normal-buffer-smooth-scroll`: scroll travel waiting for the next frame. */
+  pendingNormalScrollDeltaY: number
+  /** `normal-buffer-smooth-scroll`: the frame request that will apply it, if one is pending. */
+  normalScrollFrameId: number | null
   /** `selection-state-and-eviction`: what counts as one word for select-all and word seeding. */
   WORD_RE: RegExp
   /** `selection-state-and-eviction`: how close to an edge a handle drag starts scrolling. */
@@ -262,6 +268,9 @@ export function createTerminalDocumentScope(): TerminalDocumentScope {
     trackedMouseTrackingMode: 'none',
     sgrMouseMode: false,
     sgrMousePixelsMode: false,
+    smoothScrollOffsetY: 0,
+    pendingNormalScrollDeltaY: 0,
+    normalScrollFrameId: null,
     WORD_RE: /[\p{L}\p{N}_./:@~+=?&#%-]/u,
     EDGE_SCROLL_PX: 40,
     EDGE_SCROLL_INTERVAL: 60,

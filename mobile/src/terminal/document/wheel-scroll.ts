@@ -1,12 +1,14 @@
 import {
-  enqueueNormalBufferScrollDelta,
   getCellHeight,
   getTotalScale,
-  resetSmoothScrollOffset,
   routeScrollLines,
   shouldRouteScrollToTerminalInput
 } from './document-externals'
 import { dispatcherShouldBlockSurface } from './tap-dispatch'
+import {
+  enqueueNormalBufferScrollDelta,
+  resetSmoothScrollOffset
+} from './normal-buffer-smooth-scroll'
 import { scope } from './document-scope'
 
 scope.wheelAccumDeltaY = 0

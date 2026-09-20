@@ -1,4 +1,5 @@
-import { cellColToStringIndex, getLineText, viewportToCell } from './document-externals'
+import { cellColToStringIndex, getLineText } from './cell-geometry'
+import { viewportToCell } from './document-externals'
 import {
   scope,
   type TerminalDocumentLine,
