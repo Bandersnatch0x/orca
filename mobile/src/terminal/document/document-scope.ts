@@ -16,10 +16,20 @@
  * The table grows one group at a time as C7.1 extracts them; a field arrives with its group.
  */
 
+/** One side of xterm's buffer, as the document reads it. */
+export type TerminalDocumentBuffer = {
+  readonly viewportY: number
+  readonly baseY: number
+}
+
 /** As much of xterm's terminal as the document's own code touches. */
 export type TerminalDocumentTerminal = {
   readonly cols: number
   readonly rows: number
+  readonly buffer: { readonly active: TerminalDocumentBuffer }
+  resize: (cols: number, rows: number) => void
+  scrollToBottom: () => void
+  scrollLines: (amount: number) => void
 }
 
 export type TerminalDocumentScope = {
@@ -32,6 +42,8 @@ export type TerminalDocumentScope = {
   terminalGeneration: number
   /** `term-observers`: xterm listener handles to dispose when the terminal is replaced. */
   termObserverDisposables: TerminalDocumentDisposable[]
+  /** `terminal-init-and-write`: the row count the last init or reflow settled on. */
+  initRows: number
 }
 
 /** An xterm listener handle, as the document disposes of one. */
@@ -49,7 +61,8 @@ export function createTerminalDocumentScope(): TerminalDocumentScope {
     panX: 0,
     panY: 0,
     terminalGeneration: 0,
-    termObserverDisposables: []
+    termObserverDisposables: [],
+    initRows: 24
   }
 }
 

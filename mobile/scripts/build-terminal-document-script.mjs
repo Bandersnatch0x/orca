@@ -25,6 +25,11 @@ function isImportLine(line) {
   return /^import[\s{'"]/.test(line)
 }
 
+/** Whether a statement that started on this line also ended on it. */
+function closesOnSameLine(line, closer) {
+  return line.includes(closer)
+}
+
 /**
  * The emitted text of one module: transpiled, unexported, un-imported and indented into the IIFE.
  *
@@ -42,19 +47,23 @@ export async function emitTerminalDocumentModule(modulePath) {
     minify: false
   })
   const kept = []
-  let inExportList = false
+  // esbuild wraps a long import or export list across lines, so both are skipped to their closer
+  // rather than by their first line. An export list dropped by its keyword alone would leave a
+  // bare block statement in the document, and an import list would leave its names loose.
+  let skipUntil = null
   for (const line of code.split('\n')) {
-    if (inExportList) {
-      inExportList = !line.startsWith('}')
+    if (skipUntil !== null) {
+      if (closesOnSameLine(line, skipUntil)) {
+        skipUntil = null
+      }
       continue
     }
     if (isImportLine(line)) {
+      skipUntil = closesOnSameLine(line, ' from ') || closesOnSameLine(line, ';') ? null : ' from '
       continue
     }
-    // esbuild prints an ESM module's exports as one trailing `export { … };` block. Dropping only
-    // the keyword would leave a bare block statement in the document.
     if (line.startsWith('export {')) {
-      inExportList = !line.includes('}')
+      skipUntil = closesOnSameLine(line, '}') ? null : '}'
       continue
     }
     kept.push(line.startsWith('export ') ? line.slice('export '.length) : line)

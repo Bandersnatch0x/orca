@@ -23,3 +23,15 @@ export declare function notify(message: Record<string, unknown>): void
 
 /** `write-queue`: runs a callback when the replay queue reaches the point it was enqueued at. */
 export declare function enqueueWriteBoundary(callback: () => void): void
+
+/** `terminal-init-and-write`: whether xterm is showing the alternate screen buffer. */
+export declare function isAlternateBufferActive(): boolean
+
+/** `terminal-fit-scale`: recomputes the fit scale and applies it, naming why. */
+export declare function applyFitScale(reason: string): void
+
+/** `smooth-scroll-and-cell-geometry`: shows or hides the scroll indicator. */
+export declare function updateScrollIndicator(visible: boolean): void
+
+/** `term-observers-and-mode-mirroring`: posts the keyboard-avoidance geometry to the host. */
+export declare function emitKeyboardAvoidanceMetrics(): void
