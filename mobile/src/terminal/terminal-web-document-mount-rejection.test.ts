@@ -36,13 +36,15 @@ describe('a page mount whose document chunk failed', () => {
     let resizeListeners = 0
     const realAdd = window.addEventListener.bind(window)
     const realRemove = window.removeEventListener.bind(window)
-    window.addEventListener = (type, listener, options) => {
-      resizeListeners += type === 'resize' ? 1 : 0
-      realAdd(type, listener, options)
+    // Parameters taken from the bound original, so the wrapper carries the real signature rather
+    // than three implicit `any`s the tests typecheck refuses.
+    window.addEventListener = (...added: Parameters<typeof realAdd>) => {
+      resizeListeners += added[0] === 'resize' ? 1 : 0
+      realAdd(...added)
     }
-    window.removeEventListener = (type, listener, options) => {
-      resizeListeners -= type === 'resize' ? 1 : 0
-      realRemove(type, listener, options)
+    window.removeEventListener = (...removed: Parameters<typeof realRemove>) => {
+      resizeListeners -= removed[0] === 'resize' ? 1 : 0
+      realRemove(...removed)
     }
 
     const abandoned = mountTerminalWebDocument(host, () => {})

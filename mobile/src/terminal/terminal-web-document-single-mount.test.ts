@@ -234,17 +234,19 @@ describe('the page terminal document', () => {
     const listeners = new Set<unknown>()
     const realAdd = window.addEventListener.bind(window)
     const realRemove = window.removeEventListener.bind(window)
-    window.addEventListener = (type, listener, options) => {
-      if (type === 'resize') {
-        listeners.add(listener)
+    // Parameters taken from the bound original, so the wrapper carries the real signature rather
+    // than three implicit `any`s the tests typecheck refuses.
+    window.addEventListener = (...added: Parameters<typeof realAdd>) => {
+      if (added[0] === 'resize') {
+        listeners.add(added[1])
       }
-      realAdd(type, listener, options)
+      realAdd(...added)
     }
-    window.removeEventListener = (type, listener, options) => {
-      if (type === 'resize') {
-        listeners.delete(listener)
+    window.removeEventListener = (...removed: Parameters<typeof realRemove>) => {
+      if (removed[0] === 'resize') {
+        listeners.delete(removed[1])
       }
-      realRemove(type, listener, options)
+      realRemove(...removed)
     }
 
     const mounted = mountTerminalWebDocument(host, () => {})
