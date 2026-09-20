@@ -56,6 +56,21 @@ async function documentConstantSubstitutions() {
 }
 
 /**
+ * Replaces each constant's name with its literal.
+ *
+ * The replacement is a function, not the literal itself: as a string, `$&`, `` $` ``, `$'` and
+ * `$n` are replacement patterns, so a constant whose value contains one would be spliced with the
+ * match rather than written out. A function replacer has no such reading.
+ */
+export function substituteDocumentConstants(text, substitutions) {
+  let substituted = text
+  for (const [name, literal] of Object.entries(substitutions)) {
+    substituted = substituted.replaceAll(new RegExp(`\\b${name}\\b`, 'g'), () => literal)
+  }
+  return substituted
+}
+
+/**
  * Whether a line is a lint directive.
  *
  * These are removed before the transform, not after it: a directive inside an expression makes
@@ -119,10 +134,7 @@ export async function emitTerminalDocumentModule(modulePath) {
     }
     kept.push(line.startsWith('export ') ? line.slice('export '.length) : line)
   }
-  let text = kept.join('\n')
-  for (const [name, literal] of Object.entries(await documentConstantSubstitutions())) {
-    text = text.replaceAll(new RegExp(`\\b${name}\\b`, 'g'), literal)
-  }
+  const text = substituteDocumentConstants(kept.join('\n'), await documentConstantSubstitutions())
   const substituted = await esbuild.transform(text, {
     loader: 'js',
     format: 'esm',

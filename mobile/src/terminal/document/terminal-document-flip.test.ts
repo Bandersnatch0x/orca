@@ -19,6 +19,11 @@ import { compareTerminalDocumentScripts } from './terminal-document-equivalence.
  *
  * The scope object is the one thing the emitted script has that the document did not, so it is
  * pinned on its own below rather than folded into a count.
+ *
+ * Retirement, per ruling 18: this test is the proof of the flip and holds only while no module
+ * changes, so the first lane that must change one retires it together with
+ * `terminal-document-pre-flip-script.txt`, and the standing pin from then on is
+ * `terminal-document-identity.test.ts`, whose fixture regeneration is a review event.
  */
 const preFlipScript = readFileSync(
   new URL('../terminal-document-pre-flip-script.txt', import.meta.url),

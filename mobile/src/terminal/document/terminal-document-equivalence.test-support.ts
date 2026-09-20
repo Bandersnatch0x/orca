@@ -5,10 +5,11 @@ import { transformSync } from 'esbuild'
  * Whether two versions of the in-WebView document script are the same program, allowing only the
  * scope qualifier that moving it into modules requires.
  *
- * C7.1 turns the document's one 2,758-line IIFE into modules the web page can import. The 57
- * variables the script reassigns cannot stay free variables across ES modules — assigning an
- * imported binding is a syntax error — so they become fields of one scope object, and every read
- * and write of them gains a qualifier. Nothing else about the program may change.
+ * C7.1 turns the document's one 2,758-line IIFE into modules the web page can import. A variable
+ * the script assigns across what became a module boundary cannot stay a free variable — assigning
+ * an imported binding is a syntax error — so those become fields of one scope object, 73
+ * declaration sites in all, and every read and write of them gains a qualifier. Nothing else about
+ * the program may change.
  *
  * Byte comparison cannot make that claim once the source is formatter-owned: `oxfmt` writes the
  * repository's style, which drops the semicolons the hand-written document carries, so the emitted
@@ -23,10 +24,13 @@ import { transformSync } from 'esbuild'
 /**
  * The differences moving the script into modules is allowed to make, each counted on its own.
  *
- * Four classes and no others. Three are the repository's own rules rewriting the document's ES5
- * style the moment its source is a linted module — measured, not assumed: `curly` braces 279
- * brace-less bodies, `no-unused-vars` unbinds 38 catch clauses, and 446 `var` declarators become
- * `const`, `let` or a scope field. The fourth is the move itself. Semicolons and whitespace are the
+ * Eight classes and no others. Six are the repository's own rules and the printer rewriting the
+ * document's ES5 style the moment its source is a linted module — measured over the whole script,
+ * not assumed: `curly` braces 279 brace-less bodies, `no-unused-vars` unbinds 36 catch clauses, 373
+ * `var` declarators become `const` or `let`, `unicorn/prefer-number-properties` moves 17 globals
+ * onto `Number`, the printer spells out 4 shorthand properties whose value gained a qualifier, and
+ * it stops renaming 7 bindings that are no longer shadows. The other two are the move itself: 609
+ * qualified references and 73 declarations onto the scope. Semicolons and whitespace are the
  * formatter's and never reach the token stream at all.
  *
  * Counted separately because the flip commit pins each number: a total would let one class absorb
@@ -58,14 +62,6 @@ export type TerminalDocumentNormalisations = {
 }
 
 /**
- * The globals `unicorn/prefer-number-properties` moves onto `Number`.
- *
- * Measured over the whole script: seventeen sites, and the rule is the only one of its kind that
- * appears often enough to be worth matching. Each is equivalent here because every call is already
- * behind a `typeof … === 'number'` check or is parsing a string, which is what the `Number` form
- * does with no coercion of its own.
- */
-/**
  * Whether `printed` is the printer's disambiguated form of `original`: the same name with a decimal
  * suffix it appends when two bindings of that name are visible at once.
  */
@@ -76,6 +72,14 @@ function isPrinterDisambiguation(printed: string, original: string): boolean {
   return /^[2-9][0-9]*$/.test(printed.slice(original.length))
 }
 
+/**
+ * The globals `unicorn/prefer-number-properties` moves onto `Number`.
+ *
+ * Measured over the whole script: seventeen sites, and the rule is the only one of its kind that
+ * appears often enough to be worth matching. Each is equivalent here because every call is already
+ * behind a `typeof … === 'number'` check or is parsing a string, which is what the `Number` form
+ * does with no coercion of its own.
+ */
 const NUMBER_GLOBALS = new Set(['isFinite', 'isNaN', 'parseInt', 'parseFloat'])
 
 export type TerminalDocumentEquivalence =
@@ -105,16 +109,17 @@ function readDocumentToken(token: unknown): DocumentToken | null {
   return { label, text: value === undefined || value === null ? '' : String(value) }
 }
 
+/** The directive prepended to both sides, and checked to have survived printing. */
+const STRICT_DIRECTIVE = 'use strict'
+
 /**
  * Both sides are printed by the generator's own printer before being read.
  *
  * Otherwise every choice the printer makes — semicolons, property shorthand, quote style — reads as
  * a difference in the program, when it is a difference in who typed it. Printing both sides with
  * one printer removes that whole class by construction rather than by a rule per symptom, and
- * leaves only what the four normalisations and the qualifier cover.
+ * leaves only what the eight counted classes cover.
  */
-const STRICT_DIRECTIVE = 'use strict'
-
 function significantTokens(source: string): DocumentToken[] {
   // Read strict on both sides. A loose script has to defend Annex B's block-scoped function
   // declarations, and the printer does that by hoisting a `var` and renaming the function; a module

@@ -2,7 +2,10 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { emitTerminalDocumentModule } from './build-terminal-document-script.mjs'
+import {
+  emitTerminalDocumentModule,
+  substituteDocumentConstants
+} from './build-terminal-document-script.mjs'
 import { terminalBackgroundFallback } from '../src/terminal/document/document-constants'
 
 /**
@@ -80,5 +83,23 @@ describe('emitting one terminal document module', () => {
         'export const R =\n' + '  // oxlint-disable-next-line no-useless-escape\n' + '  /a/g\n'
       )
     ).toBe('  const R = /a/g;')
+  })
+})
+
+describe('substituting a build-time constant', () => {
+  it('writes a value containing a replacement pattern out as it stands', () => {
+    // `$&` is the matched text to `String.replaceAll`'s string form, which would splice the
+    // constant's own name in here and ship a document that says something else.
+    const literal = JSON.stringify('a $& b')
+    expect(substituteDocumentConstants('const v = marker;', { marker: literal })).toBe(
+      'const v = "a $& b";'
+    )
+  })
+
+  // `$n` is not listed: the pattern has no capture group, so it is already literal under either
+  // form and a case for it could not tell them apart.
+  it.each([['$&'], ["$'"], ['$`']])('is not read as the replacement pattern %s', (pattern) => {
+    const literal = JSON.stringify(`x${pattern}y`)
+    expect(substituteDocumentConstants('marker', { marker: literal })).toBe(literal)
   })
 })
