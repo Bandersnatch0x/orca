@@ -122,26 +122,26 @@ export type TerminalDocumentTerminal = {
 }
 
 export type TerminalDocumentScope = {
-  /** `terminal-init-and-write`: the live xterm terminal, or null before the first init. */
+  /** `terminal-handle`: the live xterm terminal, or null before the first init. */
   term: TerminalDocumentTerminal | null
-  /** `smooth-scroll-and-cell-geometry`: the surface's pan offset, in viewport pixels. */
+  /** `viewport-transform`: the surface's pan offset, in viewport pixels. */
   panX: number
   panY: number
-  /** `terminal-init-and-write`: bumped on every re-init, so a late callback can tell it is stale. */
+  /** `terminal-init`: bumped on every re-init, so a late callback can tell it is stale. */
   terminalGeneration: number
   /** `term-observers`: xterm listener handles to dispose when the terminal is replaced. */
   termObserverDisposables: TerminalDocumentDisposable[]
-  /** `terminal-init-and-write`: the row count the last init or reflow settled on. */
+  /** `terminal-init`: the row count the last init or reflow settled on. */
   initRows: number
   /** `webgl-recovery`: the loaded WebGL addon, or null on the DOM renderer. */
   webglAddon: TerminalDocumentWebglAddon | null
   /** `webgl-recovery`: the pending single retry after a context loss. */
   webglRecoveryTimer: ReturnType<typeof setTimeout> | null
-  /** `runtime-state-and-text-scaling`: the theme the host last sent, replayed on visibility. */
+  /** `terminal-theme`: the theme the host last sent, replayed on visibility. */
   terminalThemeInput: TerminalDocumentThemeMessage
   /** `wheel-scroll`: sub-line wheel travel carried between events; reset by a touch scroll. */
   wheelAccumDeltaY: number
-  /** `runtime-state`: the built-in theme, and the fallback for every slot a host theme omits. */
+  /** `terminal-theme`: the built-in theme, and the fallback for every slot a host theme omits. */
   defaultTheme: TerminalDocumentTheme
   /** `terminal-theme`: the host theme normalised against the built-in one. */
   terminalTheme: TerminalDocumentTheme
@@ -151,21 +151,21 @@ export type TerminalDocumentScope = {
   initialOscLinks: TerminalInitialOscLink[]
   /** `selection-overlay`: how far the captured rows have scrolled out of the buffer. */
   initialOscLinkRowOffset: number
-  /** `runtime-state`: the escape byte every report is prefixed with. */
+  /** `runtime-constants`: the escape byte every report is prefixed with. */
   ESC: string
   /** `mode-mirroring`: the last mode set published to the host, to suppress repeats. */
   lastEmittedModes: TerminalDocumentModes
-  /** `terminal-init-and-write`: whether the terminal has ever reached ready. */
+  /** `terminal-init`: whether the terminal has ever reached ready. */
   everReady: boolean
-  /** `runtime-state`: the C1 form of the control sequence introducer. */
+  /** `runtime-constants`: the C1 form of the control sequence introducer. */
   C1_CSI: string
-  /** `runtime-state`: the tail of the last chunk, in case a DECSET straddles two writes. */
+  /** `mouse-mode-decset-scan`: the tail of the last chunk, in case a DECSET straddles two writes. */
   mouseModeScanTail: string
-  /** `runtime-state`: the mouse tracking mode the TUI last asked for. */
+  /** `mouse-mode-decset-scan`: the mouse tracking mode the TUI last asked for. */
   trackedMouseTrackingMode: string
-  /** `runtime-state`: whether the TUI asked for SGR (1006) mouse reports. */
+  /** `mouse-mode-decset-scan`: whether the TUI asked for SGR (1006) mouse reports. */
   sgrMouseMode: boolean
-  /** `runtime-state`: whether the TUI asked for SGR pixel (1016) mouse reports. */
+  /** `mouse-mode-decset-scan`: whether the TUI asked for SGR pixel (1016) mouse reports. */
   sgrMousePixelsMode: boolean
   /** `text-scaling`: the scroll indicator's hide timer. */
   scrollIndicatorHideTimer: ReturnType<typeof setTimeout> | null
@@ -177,39 +177,39 @@ export type TerminalDocumentScope = {
   MAX_TEXT_SCALE: number
   /** `viewport-transform`: host message ids already handled, to drop repeats. */
   handledMessageIds: number[]
-  /** `runtime-state`: the text scale the user picked, as a preset index. */
+  /** `text-scaling`: the text scale the user picked, as a preset index. */
   currentTextScale: number
-  /** `runtime-state`: the font stack xterm renders with. */
+  /** `text-scaling`: the font stack xterm renders with. */
   terminalFontFamily: string
-  /** `terminal-init-and-write`: whether the first live chunk since init is still pending. */
+  /** `terminal-init`: whether the first live chunk since init is still pending. */
   firstDataPending: boolean
-  /** `terminal-init-and-write`: whether the replayed snapshot was an alternate screen. */
+  /** `terminal-init`: whether the replayed snapshot was an alternate screen. */
   activeAltScreenSnapshot: boolean
-  /** `terminal-fit-scale`: the fit scale the document committed. */
+  /** `fit-scale`: the fit scale the document committed. */
   currentScale: number
-  /** `runtime-state`: the pinch zoom the user applied on top of the fit scale. */
+  /** `text-scaling`: the pinch zoom the user applied on top of the fit scale. */
   userScale: number
-  /** `runtime-state`: Claude's record dot, which iOS WebKit would otherwise promote to emoji. */
+  /** `runtime-constants`: Claude's record dot, which iOS WebKit would otherwise promote to emoji. */
   CLAUDE_STATUS_DOT: string
-  /** `runtime-state`: the variation selector that forces the text glyph. */
+  /** `runtime-constants`: the variation selector that forces the text glyph. */
   TEXT_PRESENTATION_SELECTOR: string
-  /** `runtime-state`: the variation selector that forces the emoji glyph. */
+  /** `runtime-constants`: the variation selector that forces the emoji glyph. */
   EMOJI_PRESENTATION_SELECTOR: string
-  /** `runtime-state`: the dot with any trailing selectors, as one pattern. */
+  /** `runtime-constants`: the dot with any trailing selectors, as one pattern. */
   CLAUDE_STATUS_DOT_PATTERN: RegExp
-  /** `runtime-state`: whether a chunk ended mid-selector, so the next one starts inside it. */
+  /** `write-queue`: whether a chunk ended mid-selector, so the next one starts inside it. */
   statusDotPendingSelector: boolean
-  /** `runtime-state`: how far a split DECSET may be carried before the scan gives up. */
+  /** `write-queue`: how far a split DECSET may be carried before the scan gives up. */
   PRIVATE_MODE_SCAN_TAIL_LIMIT: number
-  /** `runtime-state`: chunks and boundaries waiting for xterm. */
+  /** `write-queue`: chunks and boundaries waiting for xterm. */
   writeQueue: TerminalWriteQueueEntry[]
-  /** `runtime-state`: how far the queue has been consumed, before compaction. */
+  /** `write-queue`: how far the queue has been consumed, before compaction. */
   writeQueueHead: number
-  /** `runtime-state`: whether a write is parsing right now. */
+  /** `write-queue`: whether a write is parsing right now. */
   writesDraining: boolean
-  /** `runtime-state`: callbacks waiting for the queue to empty. */
+  /** `write-queue`: callbacks waiting for the queue to empty. */
   afterDrainCallbacks: (() => void)[]
-  /** `runtime-state`: whether the terminal has been initialised. */
+  /** `terminal-init`: whether the terminal has been initialised. */
   ready: boolean
   /** `normal-buffer-smooth-scroll`: sub-row scroll travel not yet committed to xterm. */
   smoothScrollOffsetY: number
@@ -237,7 +237,7 @@ export type TerminalDocumentScope = {
   edgeScrollClientX: number
   /** `selection-state-and-eviction`: where the dragging finger last was. */
   edgeScrollClientY: number
-  /** `runtime-state`: whether captured OSC 8 rows may start shifting with eviction. */
+  /** `selection-state-and-eviction`: whether captured OSC 8 rows may start shifting with eviction. */
   initialOscLinkEvictionReady: boolean
   /** `selection-overlay`: the press duration that starts a selection, in milliseconds. */
   LONG_PRESS_MS: number

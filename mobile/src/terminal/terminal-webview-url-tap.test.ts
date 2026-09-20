@@ -1,7 +1,7 @@
 import { createContext, Script } from 'node:vm'
 import { describe, expect, it } from 'vitest'
 import type { TappedFilePath } from './terminal-path-tap'
-import { TERMINAL_PATH_TAP_JS } from './terminal-path-tap-injected'
+import { generatedDocumentModule } from './document/generated-document-region.test-support'
 import {
   TERMINAL_HTTP_URL_MAX_LENGTH,
   TERMINAL_HTTP_URL_REGEX_SOURCE,
@@ -12,6 +12,8 @@ import {
   resolveTerminalFileUrlTap
 } from './terminal-webview-url-tap'
 import { XTERM_HTML } from './terminal-webview-html'
+
+const pathTapSource = await generatedDocumentModule('path-tap')
 
 type FileTapResolverCase = {
   name: string
@@ -101,7 +103,7 @@ function createInjectedFileTapResolvers(): {
 } {
   const context = createContext({ URL })
   new Script(
-    `${TERMINAL_PATH_TAP_JS}\n${URL_TAP_WEBVIEW_JS}\n` +
+    `${pathTapSource}\n${URL_TAP_WEBVIEW_JS}\n` +
       'this.__resolveTerminalFileUrlTap = resolveTerminalFileUrlTap;\n' +
       'this.__resolveTerminalOscFileTap = resolveTerminalOscFileTap;'
   ).runInContext(context)

@@ -138,5 +138,4 @@ export function handleDragMove(handle: string, clientX: number, clientY: number)
   }
 }
 
-// Latching document-level touch dispatcher: see
-// terminal-webview-tap-dispatch-injected.ts (extracted for max-lines).
+// Latching document-level touch dispatcher: see tap-dispatch.ts.

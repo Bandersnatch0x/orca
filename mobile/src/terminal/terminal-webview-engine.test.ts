@@ -2,21 +2,12 @@ import { Script } from 'node:vm'
 import { parse } from 'acorn'
 import { describe, expect, it, vi } from 'vitest'
 import { XTERM_ENGINE_CSS, XTERM_ENGINE_JS } from './terminal-webview-engine.generated'
+import { documentScopePreamble } from './document/generated-document-region.test-support'
 import { XTERM_HTML } from './terminal-webview-html'
 
 // Assert against the assembled document so extracted fragments cannot silently
 // disappear from the WebView while source-level checks still pass.
 const terminalHtmlSource = XTERM_HTML
-
-/** The scope object the document opens with; the extracted block reads its state through it. */
-function documentScopePreamble(): string {
-  const start = terminalHtmlSource.indexOf('(function() {\n')
-  const end = terminalHtmlSource.indexOf('  scope.surface = document.getElementById', start)
-  if (start === -1 || end <= start) {
-    throw new Error('the document does not open with the scope object')
-  }
-  return terminalHtmlSource.slice(start + '(function() {\n'.length, end)
-}
 
 function createWebglRecoveryHarness(failSecondAttach = false) {
   const recoveryStart = terminalHtmlSource.indexOf('  function refreshTerminalSurface()')

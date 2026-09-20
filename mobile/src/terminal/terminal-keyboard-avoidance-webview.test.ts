@@ -1,11 +1,16 @@
 import { Script } from 'node:vm'
 import { Terminal } from '@xterm/xterm'
 import { describe, expect, it, vi } from 'vitest'
-import { TERMINAL_KEYBOARD_AVOIDANCE_METRICS_JS } from './terminal-keyboard-avoidance-metrics-injected'
+import {
+  documentScopePreamble,
+  generatedDocumentModule
+} from './document/generated-document-region.test-support'
 import { parseTerminalKeyboardAvoidanceMetrics } from './terminal-webview-contract'
 import { XTERM_HTML } from './terminal-webview-html'
 
 const terminalHtmlSource = XTERM_HTML
+// The scope object plus the metrics block, exactly as the document carries them.
+const keyboardAvoidanceMetricsScript = `${documentScopePreamble()}\nscope.term = term;\n${await generatedDocumentModule('keyboard-avoidance-metrics')}`
 
 type Cell = { isBgDefault: () => boolean; isInverse: () => number }
 type MetricsNotification = {
@@ -43,17 +48,15 @@ function runMetrics(lines: (ReturnType<typeof makeLine> | undefined)[], altScree
     notify: (message: Record<string, unknown>) => notifications.push(message),
     term: { buffer: { active: buffer }, cols: 10, rows: lines.length }
   }
-  new Script(
-    `${TERMINAL_KEYBOARD_AVOIDANCE_METRICS_JS}\nemitKeyboardAvoidanceMetrics();`
-  ).runInNewContext(context)
+  new Script(`${keyboardAvoidanceMetricsScript}\nemitKeyboardAvoidanceMetrics();`).runInNewContext(
+    context
+  )
   return notifications[0] as MetricsNotification
 }
 
 function runTerminalMetrics(term: Terminal) {
   const notifications: Record<string, unknown>[] = []
-  new Script(
-    `${TERMINAL_KEYBOARD_AVOIDANCE_METRICS_JS}\nemitKeyboardAvoidanceMetrics();`
-  ).runInNewContext({
+  new Script(`${keyboardAvoidanceMetricsScript}\nemitKeyboardAvoidanceMetrics();`).runInNewContext({
     notify: (message: Record<string, unknown>) => notifications.push(message),
     term
   })

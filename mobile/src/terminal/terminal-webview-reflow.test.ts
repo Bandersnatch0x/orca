@@ -1,14 +1,12 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
+import { generatedDocumentModule } from './document/generated-document-region.test-support'
 import { XTERM_HTML } from './terminal-webview-html'
 
-// The reflow logic lives as injected in-WebView JS; the message dispatch and
-// handle wiring live in terminal-webview-html.ts / TerminalWebView.tsx. Assert
-// the load-bearing invariants from source, mirroring the other tests here.
-const reflowSource = readFileSync(
-  new URL('./terminal-webview-reflow-injected.ts', import.meta.url),
-  'utf8'
-)
+// The reflow logic runs inside the WebView document; the message dispatch and handle wiring live
+// in terminal-webview-html.ts / TerminalWebView.tsx. Assert the load-bearing invariants from the
+// document the WebView runs, mirroring the other tests here.
+const reflowSource = await generatedDocumentModule('reflow')
 // Use the assembled document so the test covers what the WebView actually runs.
 const htmlSource = XTERM_HTML
 const handleSource = readFileSync(new URL('./TerminalWebView.tsx', import.meta.url), 'utf8')
@@ -23,24 +21,24 @@ describe('terminal WebView reflow', () => {
   it('skips the alternate screen so TUI snapshots are not mutated', () => {
     // Why: alt-screen snapshots are repainted by the PTY; a local resize there
     // can drop SGR attributes (white text). Reflow must early-return.
-    expect(reflowFnBody()).toContain('if (!term || isAlternateBufferActive()) return;')
+    expect(reflowFnBody()).toContain('if (!scope.term || isAlternateBufferActive()) {')
   })
 
   it('rewraps the local buffer via term.resize to the new cols', () => {
-    expect(reflowFnBody()).toContain('term.resize(nextCols, nextRows);')
+    expect(reflowFnBody()).toContain('scope.term.resize(nextCols, nextRows);')
   })
 
   it('preserves the user scroll position across the rewrap', () => {
     const body = reflowFnBody()
     // At the live bottom -> stay pinned; scrolled up -> hold distance-from-bottom.
-    expect(body).toContain('var wasAtBottom = buffer.viewportY >= buffer.baseY;')
-    expect(body).toContain('term.scrollToBottom();')
+    expect(body).toContain('const wasAtBottom = buffer.viewportY >= buffer.baseY;')
+    expect(body).toContain('scope.term.scrollToBottom();')
     expect(body).toContain('rewrapped.baseY - distanceFromBottom - rewrapped.viewportY')
   })
 
   it('is no-op when the dimensions are unchanged', () => {
     expect(reflowFnBody()).toContain(
-      'if (nextCols === term.cols && nextRows === term.rows) return;'
+      'if (nextCols === scope.term.cols && nextRows === scope.term.rows) {'
     )
   })
 

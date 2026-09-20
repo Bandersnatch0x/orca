@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
+import {
+  documentScopePreamble,
+  generatedDocumentModule
+} from './document/generated-document-region.test-support'
 import { XTERM_WEBVIEW_SOURCE } from './terminal-webview-html'
-import { TERMINAL_QUERY_REPLY_JS } from './terminal-webview-query-reply-injected'
+
+const queryReplySource = await generatedDocumentModule('query-reply')
 
 type QueryReplyGate = {
   forward: (data: string) => void
@@ -15,17 +20,18 @@ function createQueryReplyGate(notify: (message: unknown) => void): {
   queuedBoundaries: Array<() => void>
 } {
   const queuedBoundaries: Array<() => void> = []
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the body's return literal names exactly the five entries below.
   const factory = new Function(
     'notify',
     'enqueueWriteBoundary',
-    `var terminalGeneration = 0;
-      ${TERMINAL_QUERY_REPLY_JS}
+    `${documentScopePreamble()}
+      ${queryReplySource}
       return {
         forward: forwardTerminalDataReply,
         queueBoundary: enqueueTerminalDataReplyBoundary,
         reset: resetTerminalDataReplyAuthority,
         resume: resumeTerminalDataReplyAuthority,
-        setGeneration: function(next) { terminalGeneration = next; }
+        setGeneration: function(next) { scope.terminalGeneration = next; }
       };`
   ) as (
     notify: (message: unknown) => void,

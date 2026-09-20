@@ -1,6 +1,10 @@
 import { readFileSync } from 'node:fs'
 import { Script } from 'node:vm'
 import { describe, expect, it } from 'vitest'
+import {
+  documentScopePreamble,
+  generatedDocumentModule
+} from './document/generated-document-region.test-support'
 import { XTERM_HTML } from './terminal-webview-html'
 
 const terminalWebViewSource = readFileSync(
@@ -19,22 +23,7 @@ const terminalHtmlDocumentShellSource = readFileSync(
 // alone cannot prove the generated script carries the code.
 const terminalHtmlSource = XTERM_HTML
 
-/**
- * The scope object the document opens with, which every extracted fragment below needs in order to
- * run: the fragments read and write document state through it.
- */
-function documentScopePreamble(): string {
-  const start = terminalHtmlSource.indexOf('(function() {\n')
-  const end = terminalHtmlSource.indexOf('  scope.surface = document.getElementById', start)
-  if (start === -1 || end <= start) {
-    throw new Error('the document does not open with the scope object')
-  }
-  return terminalHtmlSource.slice(start + '(function() {\n'.length, end)
-}
-const terminalWebglRecoverySource = readFileSync(
-  new URL('./terminal-webview-webgl-recovery-injected.ts', import.meta.url),
-  'utf8'
-)
+const terminalWebglRecoverySource = await generatedDocumentModule('webgl-recovery')
 
 function extractStatusDotNormalizer() {
   const declarationStart = terminalHtmlSource.indexOf('  scope.CLAUDE_STATUS_DOT =')

@@ -42,5 +42,5 @@ export function cellColToStringIndex(absRow: number, col: number) {
   return line.translateToString(false, 0, col).length
 }
 
-// File-path-under-tap detection (matchFilePathAtColumn). See
-// terminal-path-tap-injected.ts; mirrors the unit-tested terminal-path-tap.ts.
+// File-path-under-tap detection (matchFilePathAtColumn). See path-tap.ts;
+// mirrors the unit-tested terminal-path-tap.ts.

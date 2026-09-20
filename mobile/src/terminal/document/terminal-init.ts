@@ -198,4 +198,4 @@ export function resize(cols: number, rows: number) {
   notify({ type: 'ready', cols: cols, rows: rows })
 }
 
-// reflow(): see terminal-webview-reflow-injected.ts (extracted for max-lines).
+// reflow(): see reflow.ts.
