@@ -222,6 +222,56 @@ describe('the page terminal document', () => {
     remounted.dispose()
   })
 
+  it('tears down a document that started, however late the dispose is', async () => {
+    // The start sequence and the handle on what undoes it have to land in one turn. They did not:
+    // the build started the document, installed its listeners and returned, and the assignment
+    // that recorded it ran a microtask later — so a dispose in between found nothing started,
+    // skipped the teardown and handed the page back with the document still running on it. The
+    // dispose here is queued behind the document module import the build awaits, which puts it in
+    // that window rather than before or after it.
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const listeners = new Set<unknown>()
+    const realAdd = window.addEventListener.bind(window)
+    const realRemove = window.removeEventListener.bind(window)
+    window.addEventListener = (type, listener, options) => {
+      if (type === 'resize') {
+        listeners.add(listener)
+      }
+      realAdd(type, listener, options)
+    }
+    window.removeEventListener = (type, listener, options) => {
+      if (type === 'resize') {
+        listeners.delete(listener)
+      }
+      realRemove(type, listener, options)
+    }
+
+    const mounted = mountTerminalWebDocument(host, () => {})
+    try {
+      await import('./document/page-document-modules')
+      mounted.dispose()
+      await mounted.ready
+    } finally {
+      window.addEventListener = realAdd
+      window.removeEventListener = realRemove
+    }
+
+    // The precondition: the document did start, so there was something to tear down. A build that
+    // bailed at the ownership check would add no listener and satisfy the emptiness below for the
+    // one reason this case exists to refuse.
+    expect(
+      listeners.size + Number(host.querySelector('#terminal-container') === null)
+    ).toBeGreaterThan(0)
+    expect(listeners.size, 'the resize listener the started document added').toBe(0)
+    const { scope } = await import('./document/page-document-modules')
+    expect(scope.term).toBe(null)
+    // And the page is free, which a handle that lost track of what it started would not have left.
+    const remounted = mountTerminalWebDocument(host, () => {})
+    await remounted.ready
+    remounted.dispose()
+  })
+
   it('gives the page back when the mount itself fails, so Reload can try again', async () => {
     // The overlay's Reload path. A mount that threw holds nothing, and a flag left set would
     // refuse every later attempt — the document's chunk failing to load is exactly that case.

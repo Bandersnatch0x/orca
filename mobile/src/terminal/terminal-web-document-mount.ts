@@ -169,23 +169,19 @@ export function mountTerminalWebDocument(
     throw error
   }
 
-  const ready = buildTerminalWebDocument(host, receive, token).then(
-    (built) => {
-      if (built === null) {
-        // Disposed while the import was in flight, and the build stopped at the await without
-        // touching anything. Nothing to keep and nothing to give back.
-        return
-      }
-      started = built
-    },
-    (error: unknown) => {
-      // The import failed, so nothing was started and the page has to go back — the overlay's
-      // Reload is a second mount and it must be allowed to make one. A later mount may already
-      // hold the page, which `release` answers for.
-      release()
-      throw error
-    }
-  )
+  // Adopted by the build itself, in the same turn as the start sequence and the listener it adds,
+  // rather than when this promise settles. A `.then` runs a microtask later, and a dispose in
+  // between would find nothing started, skip the teardown and hand the page back with the
+  // document still running on it.
+  const ready = buildTerminalWebDocument(host, receive, token, (built) => {
+    started = built
+  }).catch((error: unknown) => {
+    // The import failed, so nothing was started and the page has to go back — the overlay's
+    // Reload is a second mount and it must be allowed to make one. A later mount may already
+    // hold the page, which `release` answers for.
+    release()
+    throw error
+  })
 
   return {
     send: (command) => {
@@ -230,7 +226,7 @@ function teardownStartedDocument({ modules, onWindowResize }: StartedDocument) {
 }
 
 /**
- * The document, built and started — or `null` if the page stopped being this mount's.
+ * Builds and starts the document, and hands it to `adopt` — or returns having done neither.
  *
  * The token is read again the instant the import lands, before anything below it runs. Every
  * statement after this point writes shared state: the six seams are fields on a module-singleton
@@ -239,15 +235,19 @@ function teardownStartedDocument({ modules, onWindowResize }: StartedDocument) {
  * running the body anyway would plant its elements' listeners into a page a later mount is using
  * and reset that mount's scope out from under it. Checking only when this resolves is too late:
  * by then the writes have happened and the caller can do nothing but discard the result.
+ *
+ * `adopt` rather than a return value for the same reason: what it hands over is what undoes all of
+ * that, and the caller has to be holding it before this function's turn ends.
  */
 async function buildTerminalWebDocument(
   host: HTMLElement,
   receive: (message: Record<string, unknown>) => void,
-  token: symbol
-): Promise<StartedDocument | null> {
+  token: symbol,
+  adopt: (built: StartedDocument) => void
+): Promise<void> {
   const documentModules = await import('./document/page-document-modules')
   if (liveDocument !== token) {
-    return null
+    return
   }
   const { scope } = documentModules
 
@@ -300,5 +300,5 @@ async function buildTerminalWebDocument(
   }
   window.addEventListener('resize', onWindowResize)
 
-  return { modules: documentModules, onWindowResize }
+  adopt({ modules: documentModules, onWindowResize })
 }
