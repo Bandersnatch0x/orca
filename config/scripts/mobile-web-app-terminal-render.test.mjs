@@ -312,8 +312,9 @@ describeRender(
   'the terminal on the page',
   () => {
     it('records what the page refuses before any terminal is on it', async () => {
-      // Run first, and the two cases below subtract it. A control that mounted nothing would
-      // report nothing for the wrong reason, so the route's own marker is the precondition.
+      // Run first, and the two cases below subtract it, so their zero is the terminal's own
+      // account rather than the bundle's. A control that mounted nothing would report nothing for
+      // the wrong reason, so the route's own marker is the precondition.
       const { page } = await openPage(CONTROL_ROUTE)
       await page.waitForFunction(() => globalThis.__orcaTerminalControlMounted === true, {
         timeout: 60_000,
@@ -321,10 +322,12 @@ describeRender(
       })
       controlCspViolations = await page.evaluate(() => globalThis.__orcaCspViolations)
       console.log('[c7.5][csp-control]', JSON.stringify(controlCspViolations.map(stripAssetPath)))
-      // Zod's `new Function` probe, swallowed by its own catch, so it is not a page error and no
-      // console line reports it. Pre-existing on every page route; named here so the cases below
-      // subtract a known thing rather than a list.
-      expect(controlCspViolations.map(stripAssetPath)).toEqual(['script-src: eval'])
+      // Nothing, which is a stronger fact than this case was built for. It first read
+      // `script-src: eval` — Zod probing for a JIT with `new Function` and swallowing the throw,
+      // so no page error and no console line reported it — and main's jitless banner closed that
+      // before this branch merged it. The subtraction stays: it is what makes the cases below say
+      // "the terminal added none" rather than "none were seen".
+      expect(controlCspViolations.map(stripAssetPath)).toEqual([])
       await page.close()
     }, 300_000)
 

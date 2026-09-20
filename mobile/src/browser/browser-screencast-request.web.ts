@@ -19,12 +19,32 @@ export type {
 /**
  * The bytes one pixel of this pane's JPEG costs at its worst.
  *
- * Measured on this lane's fixtures at quality 72: uniform random noise, which is the image JPEG
- * compresses least and the ceiling every real page sits under, encoded at 0.545 bytes per pixel.
- * Photographic content measured near a tenth of that. The number is the worst case rather than a
- * typical one because it is the one a budget has to survive.
+ * Uniform random noise at quality 72, which is the image JPEG compresses least and the ceiling
+ * every real page sits under; photographic content measures near a tenth of it.
+ *
+ * Swept 2026-09-20 over 143 viewports — widths 320 to 1400 and heights 480 to 1600 — each frame
+ * encoded at the scale `budgetedMobileViewDeviceScaleFactor` picks for it. Across the 111 the
+ * budget fits, `Page.startScreencast` measured 0.543986 to 0.552964 bytes per pixel. This is that
+ * maximum plus a margin of 0.007036, about 1.3%, for the encoder version it was not swept on.
+ *
+ * Re-measured on the real encoder, which was the point of the exercise: the first sweep used
+ * `canvas.toDataURL` and read 0.54470 to 0.55351, while the product's frames come from
+ * `Page.startScreencast`. The two agree to within a thousandth of a byte per pixel, and the
+ * screencast is the marginally cheaper of them, so the encoder is not what makes a budgeted frame
+ * miss. `mobile-web-app-frame-budget-sweep.test.ts` now drives the screencast, so the number and
+ * the product share one encoder, and re-running it is how this number is changed.
+ *
+ * It was 0.545 before any sweep, taken from one 2400x2160 frame. A single large frame is the
+ * cheapest per pixel in the whole range, so the number it gave was under 90 of those 143 viewports
+ * and the budget it produced posted a frame over the cap on a phone. A worst case measured at one
+ * point is not a worst case.
+ *
+ * What this margin does not cover: the C6.6 device proof, with the budget on, dropped 1 frame in
+ * 41 at 402x593, which needs about 0.5649 bytes per pixel — above everything either sweep has
+ * seen. Nothing here reproduces it, so it is not folded into this constant; a frame that still
+ * does not fit is C6 ruling 1's to drop.
  */
-export const WORST_CASE_JPEG_BYTES_PER_PIXEL = 0.545
+export const WORST_CASE_JPEG_BYTES_PER_PIXEL = 0.56
 
 /** Base64 carries three bytes in four characters, and a character is one UTF-8 byte here. */
 export const BASE64_BYTES_PER_CHARACTER = 3 / 4
@@ -62,8 +82,9 @@ const NARROWEST_JSON_DOUBLE_CHARS = 1
  * predict: the metadata object is a loose one, so a shell may send keys this list has never heard
  * of, and web view mode's frame is a letterboxed desktop viewport the page cannot size.
  *
- * Pinning this against C6.1's real encoder belongs to C6.5, once the encoder and this are both on
- * main; until then the bound is checked against a serialized envelope of the same shape.
+ * `browser-screencast-budget-at-the-shell.test.ts` is what makes this evidence rather than an
+ * assumption checked against a copy of itself: it reconstructs this number, to the byte, from a
+ * frame the real encoder produced and the real host serialized.
  */
 export function binaryEventEnvelopeBytes(): number {
   const skeleton = JSON.stringify({
