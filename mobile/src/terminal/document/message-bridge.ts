@@ -1,11 +1,6 @@
 import { adjustRowsForViewport, applyFitScale, clampPan } from './fit-scale'
-import {
-  handleMsg,
-  notify,
-  reportEngineError,
-  repositionOverlay,
-  updateTransform
-} from './document-externals'
+import { handleMsg, notify, reportEngineError, repositionOverlay } from './document-externals'
+import { updateTransform } from './viewport-transform'
 import { scope } from './document-scope'
 
 declare global {

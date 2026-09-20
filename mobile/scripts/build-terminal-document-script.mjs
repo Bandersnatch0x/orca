@@ -34,11 +34,12 @@ const constantsPath = path.join(
 let substitutions = null
 
 /**
- * `document-constants.ts` as esbuild `define` entries.
+ * `document-constants.ts` as the literal text each name stands for.
  *
- * Substitution happens after the import lines are dropped, when the names are free again; while the
- * import is still there esbuild sees a bound name and leaves it alone, which is the correct thing
- * for the page and the wrong thing for the document.
+ * Substitution happens after the import lines are dropped, when the names are free again, and it is
+ * textual rather than an esbuild `define` because a `define` whose value is an object or an array
+ * is injected as a helper binding instead of being inlined, which is not what the document carries.
+ * The names are exported for this purpose only and none of them appears inside a string.
  */
 async function documentConstantSubstitutions() {
   if (substitutions === null) {
@@ -114,13 +115,15 @@ export async function emitTerminalDocumentModule(modulePath) {
     }
     kept.push(line.startsWith('export ') ? line.slice('export '.length) : line)
   }
-  const define = await documentConstantSubstitutions()
-  const substituted = await esbuild.transform(kept.join('\n'), {
+  let text = kept.join('\n')
+  for (const [name, literal] of Object.entries(await documentConstantSubstitutions())) {
+    text = text.replaceAll(new RegExp(`\\b${name}\\b`, 'g'), literal)
+  }
+  const substituted = await esbuild.transform(text, {
     loader: 'js',
     format: 'esm',
     target: 'chrome74',
-    minify: false,
-    define
+    minify: false
   })
   const body = substituted.code.trim()
   return body

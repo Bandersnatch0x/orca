@@ -121,6 +121,13 @@ describe('terminal document script equivalence', () => {
     ).toEqual({ ...NONE, shorthandProperties: 1 })
   })
 
+  it('counts each declarator of one var that moved onto the scope', () => {
+    expect(normalisationsOf('var a = 1, b = 2;', 'scope.a = 1; scope.b = 2;')).toEqual({
+      ...NONE,
+      scopeFieldDeclarations: 2
+    })
+  })
+
   it('refuses a changed literal', () => {
     expect(normalisationsOf('var a = 1;', 'var a = 2')).toBe(
       'token 3: expected num 1, generated num 2'

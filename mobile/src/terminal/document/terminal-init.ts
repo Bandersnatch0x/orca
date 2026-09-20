@@ -5,7 +5,8 @@ import {
   terminalCursorStyle,
   terminalShowCursorImmediately
 } from './document-constants'
-import { fontPxForScale, notify } from './document-externals'
+import { notify } from './document-externals'
+import { fontPxForScale } from './text-scaling'
 import {
   scope,
   type TerminalDocumentTerminal,

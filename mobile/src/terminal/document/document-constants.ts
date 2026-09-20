@@ -1,4 +1,6 @@
 import { colors } from '../../theme/mobile-theme'
+import { TERMINAL_TEXT_SCALES } from '../../storage/preferences'
+import { DEFAULT_TERMINAL_THEME } from '../terminal-webview-html/theme'
 import { MOBILE_TERMINAL_CARET_OPTIONS } from '../terminal-webview-html/theme'
 import {
   TERMINAL_FILE_URL_REGEX_SOURCE,
@@ -34,3 +36,9 @@ export const terminalCursorBlink = MOBILE_TERMINAL_CARET_OPTIONS.cursorBlink
 export const terminalCursorStyle = MOBILE_TERMINAL_CARET_OPTIONS.cursorStyle
 export const terminalShowCursorImmediately = MOBILE_TERMINAL_CARET_OPTIONS.showCursorImmediately
 export const terminalCursorInactiveStyle = MOBILE_TERMINAL_CARET_OPTIONS.cursorInactiveStyle
+
+/** The text-scale presets, as the document's own array literal. */
+export const terminalTextScalePresets = [...TERMINAL_TEXT_SCALES]
+
+/** The built-in theme, as the document's own object literal. */
+export const terminalDefaultTheme = DEFAULT_TERMINAL_THEME

@@ -35,7 +35,10 @@ import { transformSync } from 'esbuild'
 export type TerminalDocumentNormalisations = {
   /** `name` became `<qualifier>.name`; the declaration stayed where it was. */
   readonly qualifiedReferences: number
-  /** `var name` became `<qualifier>.name`; the declaration moved onto the scope object. */
+  /**
+   * `var name` became `<qualifier>.name`; the declaration moved onto the scope object. A `var`
+   * with several declarators counts once per declarator, because each becomes its own assignment.
+   */
   readonly scopeFieldDeclarations: number
   /** `var` became `const` or `let`, the binding staying local to the emitted script. */
   readonly rebindings: number
@@ -209,6 +212,18 @@ export function compareTerminalDocumentScripts(
     // `var name` -> `<qualifier>.name`: the declaration itself moved onto the scope object.
     if (
       expected.label === 'var' &&
+      before[left + 1] !== undefined &&
+      isQualified(after, right, before[left + 1], qualifier)
+    ) {
+      scopeFieldDeclarations += 1
+      left += 2
+      right += 3
+      continue
+    }
+    // `var a = 1, b = 2` where both moved onto the scope: the comma introduces the second
+    // declaration, which is written as its own assignment.
+    if (
+      expected.label === ',' &&
       before[left + 1] !== undefined &&
       isQualified(after, right, before[left + 1], qualifier)
     ) {

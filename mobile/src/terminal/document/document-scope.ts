@@ -1,3 +1,4 @@
+import { terminalTextScalePresets } from './document-constants'
 import { DEFAULT_TERMINAL_THEME } from '../terminal-webview-html/theme'
 import type { TerminalDocumentThemeMessage } from './terminal-theme'
 /**
@@ -29,7 +30,7 @@ export type TerminalOscLinkService = { getLinkData?: (id: number) => { uri?: str
 
 /** The xterm internals the OSC 8 lookup walks. */
 export type TerminalDocumentCore = {
-  _renderService?: { dimensions?: { css: { cell: { height?: number } } } }
+  _renderService?: { dimensions?: { css: { cell: { height?: number; width?: number } } } }
   _oscLinkService?: TerminalOscLinkService
   _inputHandler?: { _oscLinkService?: TerminalOscLinkService }
 }
@@ -77,13 +78,14 @@ export type TerminalDocumentTheme = Record<string, string>
 export type TerminalDocumentTerminalOptions = {
   theme: TerminalDocumentTheme
   minimumContrastRatio: number
+  fontSize: number
 }
 
 export type TerminalDocumentTerminal = {
   readonly cols: number
   readonly rows: number
   readonly buffer: { readonly active: TerminalDocumentBuffer }
-  readonly options: TerminalDocumentTerminalOptions
+  options: TerminalDocumentTerminalOptions
   write: (data: string, callback?: () => void) => void
   open: (element: HTMLElement) => void
   scrollToLine: (line: number) => void
@@ -155,6 +157,16 @@ export type TerminalDocumentScope = {
   sgrMouseMode: boolean
   /** `runtime-state`: whether the TUI asked for SGR pixel (1016) mouse reports. */
   sgrMousePixelsMode: boolean
+  /** `text-scaling`: the scroll indicator's hide timer. */
+  scrollIndicatorHideTimer: ReturnType<typeof setTimeout> | null
+  /** `text-scaling`: the narrowest grid a text-scale change will fit to. */
+  MIN_FIT_COLS: number
+  /** `text-scaling`: the smallest text-scale preset. */
+  MIN_TEXT_SCALE: number
+  /** `text-scaling`: the largest text-scale preset. */
+  MAX_TEXT_SCALE: number
+  /** `viewport-transform`: host message ids already handled, to drop repeats. */
+  handledMessageIds: string[]
   /** `runtime-state`: the text scale the user picked, as a preset index. */
   currentTextScale: number
   /** `runtime-state`: the font stack xterm renders with. */
@@ -288,6 +300,7 @@ export type TerminalDocumentWebglAddon = {
  * A factory rather than a shared literal so a second document — a test, or a page that remounts —
  * starts from its own state instead of inheriting what the last one left.
  */
+const textScalePresets = terminalTextScalePresets
 const statusDot = String.fromCharCode(0x23fa)
 const textPresentationSelector = String.fromCharCode(0xfe0e)
 const emojiPresentationSelector = String.fromCharCode(0xfe0f)
@@ -322,6 +335,11 @@ export function createTerminalDocumentScope(): TerminalDocumentScope {
     trackedMouseTrackingMode: 'none',
     sgrMouseMode: false,
     sgrMousePixelsMode: false,
+    scrollIndicatorHideTimer: null,
+    MIN_FIT_COLS: 20,
+    MIN_TEXT_SCALE: textScalePresets[0],
+    MAX_TEXT_SCALE: textScalePresets[textScalePresets.length - 1],
+    handledMessageIds: [],
     currentTextScale: 1,
     terminalFontFamily: '',
     firstDataPending: true,

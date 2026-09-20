@@ -1,5 +1,5 @@
 import { getCellHeight } from './fit-scale'
-import { getCellWidth, getTotalScale } from './document-externals'
+import { getCellWidth, getTotalScale } from './viewport-transform'
 import { scope } from './document-scope'
 
 /** Where a viewport point lands in the terminal's cell grid, for an xterm mouse report. */

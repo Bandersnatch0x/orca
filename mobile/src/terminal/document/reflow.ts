@@ -1,5 +1,6 @@
 import { applyFitScale } from './fit-scale'
-import { isAlternateBufferActive, updateScrollIndicator } from './document-externals'
+import { isAlternateBufferActive } from './document-externals'
+import { updateScrollIndicator } from './viewport-transform'
 import { emitKeyboardAvoidanceMetrics } from './keyboard-avoidance-metrics'
 import { scope } from './document-scope'
 

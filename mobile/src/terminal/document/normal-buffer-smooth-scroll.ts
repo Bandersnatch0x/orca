@@ -1,5 +1,5 @@
 import { getCellHeight } from './fit-scale'
-import { getTotalScale, updateScrollIndicator } from './document-externals'
+import { getTotalScale, updateScrollIndicator } from './viewport-transform'
 import { scope } from './document-scope'
 
 export function clampNormalScrollLines(lines: number) {

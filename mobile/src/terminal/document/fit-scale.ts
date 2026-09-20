@@ -1,11 +1,11 @@
+import { repositionOverlay } from './document-externals'
 import {
   computeFitScale,
   flog,
   getCellWidth,
   getTotalScale,
-  repositionOverlay,
   updateTransform
-} from './document-externals'
+} from './viewport-transform'
 import { scope } from './document-scope'
 
 export function getCellHeight() {

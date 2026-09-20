@@ -1,4 +1,4 @@
-import { flog } from './document-externals'
+import { flog } from './viewport-transform'
 import { applyTerminalTheme } from './terminal-theme'
 import { scope, type TerminalDocumentWebglAddon } from './document-scope'
 

@@ -1,9 +1,6 @@
 import { getCellHeight } from './fit-scale'
-import {
-  getTotalScale,
-  routeScrollLines,
-  shouldRouteScrollToTerminalInput
-} from './document-externals'
+import { routeScrollLines, shouldRouteScrollToTerminalInput } from './document-externals'
+import { getTotalScale } from './viewport-transform'
 import { dispatcherShouldBlockSurface } from './tap-dispatch'
 import {
   enqueueNormalBufferScrollDelta,
