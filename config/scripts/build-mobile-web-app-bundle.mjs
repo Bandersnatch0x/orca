@@ -353,12 +353,17 @@ const isScriptOutput = (path) => path.endsWith('.js')
  * C5.2 and C3.2 generate, derive theirs by the C1.6 method inside the mobile suite. The two are
  * not the same computation, and a divergence between them is a finding rather than noise.
  */
-export async function mobileWebAppEntryClosure(entryPoints, { absWorkingDir } = {}) {
+export async function mobileWebAppModuleClosure(entryModules, { absWorkingDir } = {}) {
   const base = mobileWebAppBuildOptions(MOBILE_WEB_PAGE_ROUTES)
   const result = await esbuild.build({
     ...base,
+    // A census that plants a module to show the walk would report it needs a tree of its own; the
+    // real ones never pass this and keep measuring `mobile/`.
     ...(absWorkingDir ? { absWorkingDir } : {}),
-    entryPoints,
+    // Extensionless, so `resolveExtensions` picks the same file the bundle ships: a route with a
+    // `.web.tsx` sibling resolves to that one, and naming the `.tsx` path explicitly would measure
+    // the native switch no browser ever loads.
+    entryPoints: entryModules.map((entry) => entry.replace(/\.tsx?$/, '')),
     splitting: false,
     entryNames: '[name]',
     plugins: base.plugins.filter((plugin) => plugin.name !== ROUTE_MANIFEST_PLUGIN_NAME),
@@ -375,10 +380,7 @@ export async function mobileWebAppEntryClosure(entryPoints, { absWorkingDir } = 
 }
 
 export async function mobileWebAppRouteClosure(routeModule) {
-  // Extensionless, so `resolveExtensions` picks the same file the bundle ships: a route with a
-  // `.web.tsx` sibling resolves to that one, and naming the `.tsx` path explicitly would measure
-  // the native switch no browser ever loads.
-  return mobileWebAppEntryClosure(['app/h/_layout', routeModule.replace(/\.tsx?$/, '')])
+  return await mobileWebAppModuleClosure(['app/h/_layout', routeModule])
 }
 
 export async function bundleMobileWebApp({ appDir = defaultAppDir } = {}) {

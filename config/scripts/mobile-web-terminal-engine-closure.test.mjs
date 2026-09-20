@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { mobileWebAppEntryClosure } from './build-mobile-web-app-bundle.mjs'
+import { mobileWebAppModuleClosure } from './build-mobile-web-app-bundle.mjs'
 import { mobileWebAppDependenciesPresent } from './mobile-web-app-bundle-dependencies.mjs'
 
 /**
@@ -52,7 +52,7 @@ describeClosure(
   'the terminal engine string against the page',
   () => {
     it('is in no closure of the document modules the page imports', async () => {
-      const { local } = await mobileWebAppEntryClosure(await documentEntryPoints())
+      const { local } = await mobileWebAppModuleClosure(await documentEntryPoints())
       expect(local).not.toContain(ENGINE_MODULE)
       // The precondition: a walk that resolved nothing would also contain nothing.
       expect(local).toContain('src/terminal/document/document-scope.ts')
@@ -60,7 +60,7 @@ describeClosure(
     }, 180_000)
 
     it('is in no closure of the page terminal component either', async () => {
-      const { local } = await mobileWebAppEntryClosure(['src/terminal/TerminalWebView'])
+      const { local } = await mobileWebAppModuleClosure(['src/terminal/TerminalWebView'])
       expect(local).not.toContain(ENGINE_MODULE)
       // The extensionless specifier is what the bundle ships, so this is the page's component and
       // its `.web.ts` half of the HTML — naming the `.tsx` would measure the WebView no browser
@@ -73,10 +73,13 @@ describeClosure(
     }, 180_000)
 
     it('is still what the native document reads its CSS beside', async () => {
-      // Named with its extension, because extensionless would resolve the `.web.ts` sibling and
-      // measure the page's half — the opposite of the claim. The native document holds both
-      // generated modules, so the cases above cannot pass by the CSS having gone missing.
-      const { local } = await mobileWebAppEntryClosure(['src/terminal/terminal-webview-html.ts'])
+      // The shell rather than `terminal-webview-html`, which now has a `.web.ts` sibling the walk
+      // would resolve instead and so measure the page's half — the opposite of the claim. The
+      // shell is the module that reads both generated ones, so the cases above cannot pass by the
+      // CSS having quietly gone missing.
+      const { local } = await mobileWebAppModuleClosure([
+        'src/terminal/terminal-webview-html/document-shell'
+      ])
       expect(local).toContain(ENGINE_MODULE)
       expect(local).toContain(ENGINE_CSS_MODULE)
     }, 180_000)
@@ -98,7 +101,7 @@ describeClosure(
           join(scratch, 'src', 'terminal', 'terminal-webview-engine.generated.ts'),
           "export const XTERM_ENGINE_JS = 'planted'\n"
         )
-        const { local } = await mobileWebAppEntryClosure(['./src/terminal/document/planted'], {
+        const { local } = await mobileWebAppModuleClosure(['./src/terminal/document/planted'], {
           absWorkingDir: scratch
         })
         expect(local).toContain(ENGINE_MODULE)
