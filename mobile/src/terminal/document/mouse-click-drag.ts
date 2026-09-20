@@ -1,14 +1,13 @@
 import {
   applyXtermSelection,
   cancelSelect,
-  getMouseTrackingMode,
   handleDragMove,
-  isSafeSgrMouseCoordinate,
   notify,
   repositionOverlay,
-  stopEdgeScroll,
-  viewportToCell
+  stopEdgeScroll
 } from './document-externals'
+import { getMouseTrackingMode, isSafeSgrMouseCoordinate } from './mouse-input-encoding'
+import { viewportToCell } from './viewport-cell'
 import { scope } from './document-scope'
 import { notifyTerminalSurfaceTap } from './surface-tap'
 import { viewportToMouseReportCell } from './mouse-report-cell'

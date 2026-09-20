@@ -1,5 +1,6 @@
 import { terminalDefaultTheme } from './document-constants'
-import { repositionOverlay, shouldRouteScrollToTerminalInput } from './document-externals'
+import { repositionOverlay } from './document-externals'
+import { shouldRouteScrollToTerminalInput } from './mouse-input-encoding'
 import { scope } from './document-scope'
 import { scrollIndicator, scrollThumb } from './text-scaling'
 

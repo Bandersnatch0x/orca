@@ -1,4 +1,5 @@
-import { getMouseTrackingMode, notify } from './document-externals'
+import { notify } from './document-externals'
+import { getMouseTrackingMode } from './mouse-input-encoding'
 import { scope } from './document-scope'
 
 export function emitModesIfChanged() {

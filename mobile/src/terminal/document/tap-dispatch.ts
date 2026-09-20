@@ -3,9 +3,9 @@ import {
   enterSelect,
   handleDragMove,
   notify,
-  stopEdgeScroll,
-  viewportToCell
+  stopEdgeScroll
 } from './document-externals'
+import { viewportToCell } from './viewport-cell'
 import { scope } from './document-scope'
 import { notifyTerminalSurfaceTap } from './surface-tap'
 

@@ -1,5 +1,5 @@
 import { applyFitScale } from './fit-scale'
-import { isAlternateBufferActive } from './document-externals'
+import { isAlternateBufferActive } from './mouse-input-encoding'
 import { updateScrollIndicator } from './viewport-transform'
 import { emitKeyboardAvoidanceMetrics } from './keyboard-avoidance-metrics'
 import { scope } from './document-scope'

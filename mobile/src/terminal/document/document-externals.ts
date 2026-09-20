@@ -12,23 +12,8 @@
 /** `runtime-state-and-text-scaling`: posts one message to the native host. */
 export declare function notify(message: Record<string, unknown>): void
 
-/** `terminal-init-and-write`: whether xterm is showing the alternate screen buffer. */
-export declare function isAlternateBufferActive(): boolean
-
-/** `mouse-report-and-scroll-routing`: whether scrolling should reach the TUI as input. */
-export declare function shouldRouteScrollToTerminalInput(): boolean
-
-/** `mouse-report-and-scroll-routing`: sends a line scroll to the terminal at a point. */
-export declare function routeScrollLines(lines: number, clientX: number, clientY: number): void
-
 /** `surface-touch-gestures`: binds touch, wheel and tap handlers to a surface element. */
 export declare function attachSurfaceEventHandlers(target: HTMLElement): void
-
-/** `mouse-report-and-scroll-routing`: the terminal cell under a viewport point, or null. */
-export declare function viewportToCell(
-  originX: number,
-  originY: number
-): { row: number; col: number } | null
 
 /** `selection-overlay`: starts a selection at a cell. */
 export declare function enterSelect(col: number, row: number): void
@@ -42,23 +27,11 @@ export declare function handleDragMove(handle: string, clientX: number, clientY:
 /** `selection-overlay`: stops the edge-scroll a handle drag may have started. */
 export declare function stopEdgeScroll(): void
 
-/** `mouse-report-and-scroll-routing`: the tracking mode the TUI last asked for. */
-export declare function getMouseTrackingMode(): string
-
-/** `mouse-report-and-scroll-routing`: whether a coordinate fits an SGR report. */
-export declare function isSafeSgrMouseCoordinate(value: number): boolean
-
 /** `selection-overlay`: mirrors the document selection into xterm's own selection. */
 export declare function applyXtermSelection(): void
 
 /** `selection-overlay`: moves the handles and the menu pill to the current selection. */
 export declare function repositionOverlay(): void
-
-/** `mouse-report-and-scroll-routing`: the bytes a plain click sends, or '' when it sends none. */
-export declare function buildMouseClickInput(originX: number, originY: number): string
-
-/** `mouse-report-and-scroll-routing`: whether a tracking mode consumes plain clicks. */
-export declare function isClickMouseTrackingMode(mode: string): boolean
 
 /** `host-message-router`: routes one decoded host message. */
 export declare function handleMsg(msg: unknown): void

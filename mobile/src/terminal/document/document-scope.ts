@@ -99,7 +99,11 @@ export type TerminalDocumentTerminal = {
   }
   readonly element?: HTMLElement
   readonly _core?: TerminalDocumentCore
-  readonly modes?: { bracketedPasteMode?: boolean }
+  readonly modes?: {
+    bracketedPasteMode?: boolean
+    mouseTrackingMode?: string
+    applicationCursorKeysMode?: boolean
+  }
   onLineFeed?: (listener: () => void) => TerminalDocumentDisposable
   onScroll?: (listener: () => void) => TerminalDocumentDisposable
   onWriteParsed?: (listener: () => void) => TerminalDocumentDisposable

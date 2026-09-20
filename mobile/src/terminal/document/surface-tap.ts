@@ -1,9 +1,9 @@
+import { notify } from './document-externals'
 import {
   buildMouseClickInput,
   getMouseTrackingMode,
-  isClickMouseTrackingMode,
-  notify
-} from './document-externals'
+  isClickMouseTrackingMode
+} from './mouse-input-encoding'
 import { oscLinkAtViewportPoint, resolveTerminalFileUrlTap } from './osc-link-tap'
 import { filePathAtViewportPoint } from './path-tap'
 import { fileUrlAtViewportPoint, urlAtViewportPoint } from './url-tap'

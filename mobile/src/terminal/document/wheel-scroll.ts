@@ -1,5 +1,5 @@
 import { getCellHeight } from './fit-scale'
-import { routeScrollLines, shouldRouteScrollToTerminalInput } from './document-externals'
+import { routeScrollLines, shouldRouteScrollToTerminalInput } from './mouse-input-encoding'
 import { getTotalScale } from './viewport-transform'
 import { dispatcherShouldBlockSurface } from './tap-dispatch'
 import {

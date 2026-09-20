@@ -1,5 +1,5 @@
 import { cellColToStringIndex, getLineText } from './cell-geometry'
-import { viewportToCell } from './document-externals'
+import { viewportToCell } from './viewport-cell'
 
 /**
  * File-path-under-tap detection.
