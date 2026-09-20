@@ -14,6 +14,9 @@ import type {
   TerminalDocumentWebglAddon,
   TerminalInitialOscLink
 } from './document-terminal-shape'
+import type { TerminalMouseGesture } from './mouse-click-drag'
+import type { TerminalTouchState } from './surface-touch-gestures'
+import type { TerminalTouchDispatch } from './tap-dispatch'
 import type { TerminalDocumentThemeMessage } from './terminal-theme'
 
 // Re-exported so every module that reads the scope keeps naming one import for both: the split is
@@ -42,8 +45,8 @@ export type * from './document-terminal-shape'
  * The table grows one group at a time as C7.1 extracts them; a field arrives with its group.
  */
 
-export type TerminalDocumentScope = {
-  /** `terminal-handle`: the live xterm terminal, or null before the first init. */
+export type TerminalDocumentState = {
+  /** `terminal-init`: the live xterm terminal, or null before the first init. */
   term: TerminalDocumentTerminal | null
   /** `viewport-transform`: the surface's pan offset, in viewport pixels. */
   panX: number
@@ -188,6 +191,40 @@ export type TerminalDocumentScope = {
   surface: HTMLElement | null
   /** `surface-swap`: the terminal of a hidden replacement surface that has not committed. */
   pendingTerm: TerminalDocumentTerminal | null
+  /** `surface-swap`: the terminal the committed surface is showing. */
+  committedTerm: TerminalDocumentTerminal | null
+  /** `surface-swap`: the surface the committed terminal is mounted on. */
+  committedSurface: HTMLElement | null
+  /** `surface-swap`: the hidden replacement surface, until it commits. */
+  pendingSurface: HTMLElement | null
+  /** `text-scaling`: the scroll indicator's track and its thumb. */
+  scrollIndicator: HTMLElement | null
+  scrollThumb: HTMLElement | null
+  /** `query-reply`: whether the host asked for terminal data replies. */
+  terminalDataRepliesEnabled: boolean
+  /** `selection-state-and-eviction`: rows written since the terminal opened. */
+  linesEverWritten: number
+  /** `host-notify`: non-fatal reports already sent, against the flood cap. */
+  nonFatalErrorNotifies: number
+  /** `host-notify`: undoes the host's reporter install, or null before one. */
+  uninstallErrorReporter: (() => void) | null
+  /** `fit-scale`: the generation of the retry loop; a bump abandons the one in flight. */
+  fitRetryToken: number
+  /** `mouse-click-drag`: the mouse gesture in progress, or null. */
+  mouseGesture: TerminalMouseGesture | null
+  /** `tap-dispatch`: what the document-level dispatcher has latched onto. */
+  touchDispatch: TerminalTouchDispatch
+  /** `surface-touch-gestures`: the surface touch, its velocity and its momentum frame. */
+  touchGesture: TerminalTouchState
+  /** Every animation frame the document has asked for and not yet run. */
+  scheduledFrames: number[]
+}
+
+/**
+ * The five host seams, kept out of the state above because they are the one thing a reset must
+ * not touch: the page sets them once per mount, before the start sequence runs.
+ */
+export type TerminalDocumentHostSeams = {
   /** `host-notify`, `viewport-transform`: where a message for the host goes. */
   postToHost: (message: Record<string, unknown>) => void
   /** `terminal-init`: builds the xterm terminal. */
@@ -199,6 +236,9 @@ export type TerminalDocumentScope = {
   /** `host-notify`: installs the document's runtime error reporter with the host. */
   installErrorReporter: (report: TerminalDocumentErrorReporter) => () => void
 }
+
+/** The document's whole scope: its state, and the seams to whatever is hosting it. */
+export type TerminalDocumentScope = TerminalDocumentState & TerminalDocumentHostSeams
 
 /** The live selection; only the dragged handle is read outside the overlay slice. */
 export type TerminalDocumentSelection = {
@@ -236,7 +276,7 @@ const statusDot = String.fromCharCode(0x23fa)
 const textPresentationSelector = String.fromCharCode(0xfe0e)
 const emojiPresentationSelector = String.fromCharCode(0xfe0f)
 
-export function createTerminalDocumentScope(): TerminalDocumentScope {
+function createTerminalDocumentState(): TerminalDocumentState {
   return {
     term: null,
     panX: 0,
@@ -273,7 +313,7 @@ export function createTerminalDocumentScope(): TerminalDocumentScope {
     handledMessageIds: [],
     currentTextScale: 1,
     terminalFontFamily: '',
-    firstDataPending: true,
+    firstDataPending: false,
     activeAltScreenSnapshot: false,
     currentScale: 1,
     userScale: 1,
@@ -320,6 +360,43 @@ export function createTerminalDocumentScope(): TerminalDocumentScope {
     wheelAccumDeltaY: 0,
     surface: null,
     pendingTerm: null,
+    committedTerm: null,
+    committedSurface: null,
+    pendingSurface: null,
+    scrollIndicator: null,
+    scrollThumb: null,
+    terminalDataRepliesEnabled: false,
+    linesEverWritten: 0,
+    nonFatalErrorNotifies: 0,
+    uninstallErrorReporter: null,
+    fitRetryToken: 0,
+    mouseGesture: null,
+    touchDispatch: {
+      mode: 'idle',
+      touchId: null,
+      touchIds: null,
+      longPressFingerInsideOverlay: false
+    },
+    scheduledFrames: [],
+    touchGesture: {
+      lastX: 0,
+      lastY: 0,
+      lastTime: 0,
+      velY: 0,
+      accumDelta: 0,
+      momentumId: null,
+      isPinching: false,
+      pinchDist: 0,
+      pinchScale: 0,
+      pinchSurfX: 0,
+      pinchSurfY: 0
+    }
+  }
+}
+
+/** The seams' defaults: the window reads and writes the document already did. */
+function createTerminalDocumentHostSeams(): TerminalDocumentHostSeams {
+  return {
     postToHost: postToReactNativeWebView,
     createTerminal: createEngineTerminal,
     createUnicode11Addon: createEngineUnicode11Addon,
@@ -328,5 +405,59 @@ export function createTerminalDocumentScope(): TerminalDocumentScope {
   }
 }
 
+export function createTerminalDocumentScope(): TerminalDocumentScope {
+  return { ...createTerminalDocumentState(), ...createTerminalDocumentHostSeams() }
+}
+
+/**
+ * The scope back at the state a freshly parsed document has (ruling 21).
+ *
+ * The page mounts these modules more than once and an ES module body runs once per page, so this
+ * is what makes a second mount a second document: the start sequence calls it first, and on the
+ * WebView it runs once at parse, where it changes nothing. The seams are left alone — the page
+ * sets them before the sequence runs, and they belong to the host rather than to the terminal.
+ *
+ * Two counters carry forward instead of resetting, because they are what a stale callback is
+ * tested against: a frame scheduled by the mount that just went away compares its captured number
+ * with the one here, and a reset to zero would make the old number match again.
+ */
+export function resetTerminalDocumentScope() {
+  const generations = {
+    terminalGeneration: scope.terminalGeneration + 1,
+    fitRetryToken: scope.fitRetryToken + 1
+  }
+  Object.assign(scope, createTerminalDocumentState(), generations)
+}
+
 /** The document's own scope. The generator emits this declaration at the top of the script. */
 export const scope: TerminalDocumentScope = createTerminalDocumentScope()
+
+/**
+ * An animation frame the document can take back (ruling 21).
+ *
+ * A generation guard makes a stale frame *do* nothing; it still runs, and inside a WebView that
+ * is the same thing. On the page it is not: the mount that scheduled the frame may be gone and
+ * the next one already up, and a callback that reads the scope reads the new mount's. Every frame
+ * the document asks for is registered here so `cancelDocumentFrames` can take the pending ones
+ * back, which is what the page's dispose does. The id is dropped as the frame runs, so the list
+ * holds only what is still owed.
+ */
+export function scheduleDocumentFrame(callback: FrameRequestCallback) {
+  const id = requestAnimationFrame(function (time) {
+    const at = scope.scheduledFrames.indexOf(id)
+    if (at !== -1) {
+      scope.scheduledFrames.splice(at, 1)
+    }
+    callback(time)
+  })
+  scope.scheduledFrames.push(id)
+  return id
+}
+
+/** Takes back every frame the document is still owed. */
+export function cancelDocumentFrames() {
+  for (const id of scope.scheduledFrames) {
+    cancelAnimationFrame(id)
+  }
+  scope.scheduledFrames = []
+}

@@ -5,8 +5,10 @@ import { importTypeScriptModule } from './import-typescript-module.mjs'
 import {
   TERMINAL_DOCUMENT_HOST_SEAMS_MODULE,
   TERMINAL_DOCUMENT_MODULE_ORDER,
+  TERMINAL_DOCUMENT_RESET_CALL,
   TERMINAL_DOCUMENT_SCOPE_MODULE,
-  terminalDocumentStartFunctionName
+  terminalDocumentStartFunctionName,
+  terminalDocumentStopFunctionName
 } from './terminal-document-module-order.mjs'
 
 /**
@@ -169,15 +171,24 @@ export const TERMINAL_DOCUMENT_SCRIPT_PATH = path.join(
  * how every module in this directory writes it.
  */
 export async function terminalDocumentStartCalls(moduleNames) {
-  const calls = []
+  return await declaredFunctions(moduleNames, terminalDocumentStartFunctionName)
+}
+
+/** The stop functions, in module order. The page runs them in reverse; the WebView never stops. */
+export async function terminalDocumentStopCalls(moduleNames) {
+  return await declaredFunctions(moduleNames, terminalDocumentStopFunctionName)
+}
+
+async function declaredFunctions(moduleNames, nameFor) {
+  const found = []
   for (const name of moduleNames) {
     const source = await readFile(path.join(documentDirectory, `${name}.ts`), 'utf8')
-    const startName = terminalDocumentStartFunctionName(name)
-    if (new RegExp(`^export function ${startName}\\(\\) \\{$`, 'm').test(source)) {
-      calls.push(startName)
+    const declared = nameFor(name)
+    if (new RegExp(`^export function ${declared}\\(\\) \\{$`, 'm').test(source)) {
+      found.push(declared)
     }
   }
-  return calls
+  return found
 }
 
 /**
@@ -198,10 +209,12 @@ export async function buildTerminalDocumentScript() {
   for (const name of order) {
     emitted.push(await emitTerminalDocumentModule(path.join(documentDirectory, `${name}.ts`)))
   }
-  // Ruling 20: the modules above only declare. Every element read, listener and reporter install
-  // they used to do at parse time is in a start function, and this is where they run — once here,
-  // per mount on the page, in the one order both hosts share.
-  const calls = (await terminalDocumentStartCalls(order)).map((name) => `${INDENT}${name}();`)
+  // Rulings 20 and 21: the modules above only declare. The scope's reset comes first, so the
+  // state every module reads is the state a fresh parse has; then every element read, listener
+  // and reporter install runs, once here and per mount on the page, in the order both hosts share.
+  const calls = [TERMINAL_DOCUMENT_RESET_CALL, ...(await terminalDocumentStartCalls(order))].map(
+    (name) => `${INDENT}${name}();`
+  )
   return `(function() {\n${emitted.join('\n')}\n${calls.join('\n')}\n})();`
 }
 

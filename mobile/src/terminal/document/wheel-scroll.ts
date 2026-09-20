@@ -71,7 +71,3 @@ export function attachSurfaceWheelHandler(targetSurface: HTMLElement) {
     { capture: true, passive: false }
   )
 }
-
-export function startWheelScroll() {
-  scope.wheelAccumDeltaY = 0
-}

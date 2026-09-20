@@ -7,7 +7,7 @@ import {
 } from './document-constants'
 import { notify } from './host-notify'
 import { fontPxForScale } from './text-scaling'
-import { scope } from './document-scope'
+import { scope, scheduleDocumentFrame } from './document-scope'
 import { applyFitScale } from './fit-scale'
 import {
   isAltScreenActive,
@@ -128,7 +128,7 @@ export function init(
   attachTermObservers()
   attachTerminalQueryReplyBridge(scope.term, gen)
 
-  requestAnimationFrame(function () {
+  scheduleDocumentFrame(function () {
     if (gen !== scope.terminalGeneration) {
       return
     }
@@ -189,3 +189,11 @@ export function resize(cols: number, rows: number) {
 }
 
 // reflow(): see reflow.ts.
+
+/**
+ * Ruling 21: init's own frames carry the generation they were scheduled under, so bumping it is
+ * what abandons them — the same guard a re-init already uses against its predecessor.
+ */
+export function stopTerminalInit() {
+  scope.terminalGeneration++
+}

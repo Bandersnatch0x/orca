@@ -1,7 +1,10 @@
 import { readdirSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { emitTerminalDocumentModule } from '../../../scripts/build-terminal-document-script.mjs'
+import {
+  buildTerminalDocumentScript,
+  emitTerminalDocumentModule
+} from '../../../scripts/build-terminal-document-script.mjs'
 import {
   TERMINAL_DOCUMENT_HOST_SEAMS_MODULE,
   TERMINAL_DOCUMENT_MODULE_ORDER,
@@ -71,11 +74,25 @@ describe('the document module order', () => {
     expect(emitted).toBe('')
   })
 
-  it('emits the host seams ahead of the scope, whose defaults are those five functions', () => {
-    // Order, not just membership: `createTerminalDocumentScope()` runs as the script is parsed and
-    // reads the five by name, so a seams module emitted after it would throw on the first line of
-    // the document. The generator's own list is asserted in its test; this is the reason.
+  it('emits the host seams ahead of the scope, whose defaults are those five functions', async () => {
+    // Order in the emitted document, not membership in a list: `createTerminalDocumentScope()`
+    // runs as the script is parsed and reads the five by name, so a seams module emitted after it
+    // would throw on the document's first line. Non-membership cannot see that — it is satisfied
+    // by any arrangement — so the two texts are located in the document the generator produces.
     expect(TERMINAL_DOCUMENT_MODULE_ORDER).not.toContain(TERMINAL_DOCUMENT_HOST_SEAMS_MODULE)
     expect(TERMINAL_DOCUMENT_HOST_SEAMS_MODULE).not.toBe(TERMINAL_DOCUMENT_SCOPE_MODULE)
+
+    const script = await buildTerminalDocumentScript()
+    const emittedAt = async (name: string) => {
+      const text = await emitTerminalDocumentModule(
+        fileURLToPath(new URL(`./${name}.ts`, import.meta.url))
+      )
+      const at = script.indexOf(text)
+      expect(at, `${name} is not in the emitted document`).toBeGreaterThanOrEqual(0)
+      return at
+    }
+    expect(await emittedAt(TERMINAL_DOCUMENT_HOST_SEAMS_MODULE)).toBeLessThan(
+      await emittedAt(TERMINAL_DOCUMENT_SCOPE_MODULE)
+    )
   })
 })

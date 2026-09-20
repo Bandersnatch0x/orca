@@ -20,13 +20,6 @@ export type TerminalTouchDispatch = {
 /** An element a target can be tested against; a method so a real element satisfies it. */
 type TerminalDocumentTargetContainer = { contains(other: EventTarget | null): boolean }
 
-const dispatch: TerminalTouchDispatch = {
-  mode: 'idle',
-  touchId: null,
-  touchIds: null,
-  longPressFingerInsideOverlay: false
-}
-
 export function touchById(touches: TouchList, id: number | null) {
   for (let i = 0; i < touches.length; i++) {
     if (touches[i].identifier === id) {
@@ -81,7 +74,7 @@ export function touchSlopExceeded(t: Touch) {
 // Why: existing surface handlers stay attached to surface but we wrap
 // their entry to no-op when the dispatcher latches into select-drag.
 export function dispatcherShouldBlockSurface() {
-  return dispatch.mode === 'select-drag'
+  return scope.touchDispatch.mode === 'select-drag'
 }
 
 /**
@@ -108,8 +101,8 @@ function onDocumentTouchStart(e: TouchEvent) {
       notify({ type: 'mobile-clip-cancel-by-pinch' })
       cancelSelect()
     }
-    dispatch.mode = 'pinch'
-    dispatch.touchIds = [e.touches[0].identifier, e.touches[1].identifier]
+    scope.touchDispatch.mode = 'pinch'
+    scope.touchDispatch.touchIds = [e.touches[0].identifier, e.touches[1].identifier]
     clearLongPress()
     return
   }
@@ -118,8 +111,8 @@ function onDocumentTouchStart(e: TouchEvent) {
     // start handle drag
     const handleName = target === scope.handleStart ? 'start' : 'end'
     scope.sel!.activeHandle = handleName
-    dispatch.mode = 'select-drag'
-    dispatch.touchId = t.identifier
+    scope.touchDispatch.mode = 'select-drag'
+    scope.touchDispatch.touchId = t.identifier
     e.preventDefault()
     return
   }
@@ -134,22 +127,22 @@ function onDocumentTouchStart(e: TouchEvent) {
     // selection clears it. We cancel immediately and latch to 'surface' so
     // the same gesture still drives scroll/pan without a second touch.
     cancelSelect()
-    dispatch.mode = 'surface'
-    dispatch.touchId = t.identifier
+    scope.touchDispatch.mode = 'surface'
+    scope.touchDispatch.touchId = t.identifier
     return
   }
 
   if (inSurface) {
-    dispatch.mode = 'surface'
-    dispatch.touchId = t.identifier
+    scope.touchDispatch.mode = 'surface'
+    scope.touchDispatch.touchId = t.identifier
     scope.tapCandidate = { x: t.clientX, y: t.clientY, t: Date.now(), identifier: t.identifier }
     armLongPress(t)
   }
 }
 
 function onDocumentTouchMove(e: TouchEvent) {
-  if (dispatch.mode === 'select-drag') {
-    const t = touchById(e.touches, dispatch.touchId)
+  if (scope.touchDispatch.mode === 'select-drag') {
+    const t = touchById(e.touches, scope.touchDispatch.touchId)
     if (!t || !scope.sel || !scope.sel.activeHandle) {
       return
     }
@@ -157,7 +150,7 @@ function onDocumentTouchMove(e: TouchEvent) {
     handleDragMove(scope.sel.activeHandle, t.clientX, t.clientY)
     return
   }
-  if (dispatch.mode === 'surface' || dispatch.mode === 'pinch') {
+  if (scope.touchDispatch.mode === 'surface' || scope.touchDispatch.mode === 'pinch') {
     // long-press slop check
     if (scope.longPressTimer && e.touches.length === 1) {
       if (touchSlopExceeded(e.touches[0])) {
@@ -184,26 +177,26 @@ function onDocumentTouchMove(e: TouchEvent) {
 }
 
 function onDocumentTouchEnd(e: TouchEvent) {
-  if (dispatch.mode === 'select-drag') {
+  if (scope.touchDispatch.mode === 'select-drag') {
     if (scope.sel) {
       scope.sel.activeHandle = null
     }
     stopEdgeScroll()
-    dispatch.mode = 'idle'
-    dispatch.touchId = null
+    scope.touchDispatch.mode = 'idle'
+    scope.touchDispatch.touchId = null
     return
   }
-  if (dispatch.mode === 'pinch') {
+  if (scope.touchDispatch.mode === 'pinch') {
     if (e.touches.length < 2) {
-      dispatch.mode = e.touches.length === 1 ? 'surface' : 'idle'
-      dispatch.touchIds = null
+      scope.touchDispatch.mode = e.touches.length === 1 ? 'surface' : 'idle'
+      scope.touchDispatch.touchIds = null
       if (e.touches.length === 1) {
-        dispatch.touchId = e.touches[0].identifier
+        scope.touchDispatch.touchId = e.touches[0].identifier
       }
     }
     return
   }
-  if (dispatch.mode === 'surface') {
+  if (scope.touchDispatch.mode === 'surface') {
     // Why: fire the tap from the tap-candidate origin (survives jitter under
     // TAP_SLOP) rather than longPressOrigin, which the press-to-select slop
     // can null mid-tap — that was dropping URL/file taps that moved a few px.
@@ -218,8 +211,8 @@ function onDocumentTouchEnd(e: TouchEvent) {
     clearLongPress()
     scope.tapCandidate = null
     if (e.touches.length === 0) {
-      dispatch.mode = 'idle'
-      dispatch.touchId = null
+      scope.touchDispatch.mode = 'idle'
+      scope.touchDispatch.touchId = null
     }
   }
 }
@@ -228,14 +221,14 @@ function onDocumentTouchCancel() {
   clearLongPress()
   scope.tapCandidate = null
   stopEdgeScroll()
-  if (dispatch.mode === 'select-drag') {
+  if (scope.touchDispatch.mode === 'select-drag') {
     if (scope.sel) {
       scope.sel.activeHandle = null
     }
   }
-  dispatch.mode = 'idle'
-  dispatch.touchId = null
-  dispatch.touchIds = null
+  scope.touchDispatch.mode = 'idle'
+  scope.touchDispatch.touchId = null
+  scope.touchDispatch.touchIds = null
 }
 
 /**
@@ -256,4 +249,5 @@ export function stopTapDispatch() {
   document.removeEventListener('touchmove', onDocumentTouchMove, CAPTURE_ACTIVE)
   document.removeEventListener('touchend', onDocumentTouchEnd, CAPTURE_PASSIVE)
   document.removeEventListener('touchcancel', onDocumentTouchCancel, CAPTURE_PASSIVE)
+  clearLongPress()
 }

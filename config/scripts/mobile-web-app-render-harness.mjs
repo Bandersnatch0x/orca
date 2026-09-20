@@ -384,3 +384,76 @@ export async function createBundleServer({ outDir, cspHeader, transformChunk }) 
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
   return { server, origin: `http://127.0.0.1:${String(server.address().port)}` }
 }
+
+/**
+ * A handler of the page's own, installed before the bundle so the terminal meets a `window.onerror`
+ * that belongs to someone else.
+ *
+ * Reading `null` three times would pass on a terminal that assigned `null` over a real handler,
+ * which is the failure this seam exists to prevent. The sentinel is identity-checked in the page
+ * rather than marshalled out of it — a function does not survive `evaluate` — and it returns
+ * false so the browser still reports the error normally.
+ */
+export function installPageErrorSentinel() {
+  globalThis.__orcaSentinelCalls = []
+  const sentinel = (message) => {
+    globalThis.__orcaSentinelCalls.push(String(message))
+    return false
+  }
+  globalThis.__orcaSentinel = sentinel
+  window.onerror = sentinel
+}
+
+/**
+ * Every animation frame and timer, tagged with the mount that scheduled it.
+ *
+ * Installed before the bundle loads, so the document's own scheduling goes through it. The test
+ * bumps `mount` at dispose; a callback that was scheduled under the previous number and still runs
+ * is a frame or timer of the first mount firing into the second, which is the whole finding. React
+ * schedules its work on the microtask queue rather than on frames, and xterm's frames belong to the
+ * terminal being disposed, so what this records is the document's.
+ */
+export function installSchedulerRecorder() {
+  globalThis.__orcaScheduler = { mount: 0, watching: false, pending: [], leaked: [] }
+  const state = globalThis.__orcaScheduler
+  const wrap = (schedule, kind) =>
+    function (callback, ...rest) {
+      if (!state.watching || typeof callback !== 'function') {
+        return schedule(callback, ...rest)
+      }
+      // The line that called this, which is the script the work belongs to. Line 0 is the error's
+      // own header and line 1 is this wrapper.
+      const caller = ((new Error('scheduled').stack ?? '').split('\n')[2] ?? '').trim()
+      const entry = { kind, caller, mount: state.mount }
+      state.pending.push(entry)
+      return schedule(
+        (...args) => {
+          const at = state.pending.indexOf(entry)
+          if (at !== -1) {
+            state.pending.splice(at, 1)
+          }
+          if (entry.mount !== state.mount) {
+            state.leaked.push(`${kind} from ${caller}`)
+          }
+          return callback(...args)
+        },
+        ...rest
+      )
+    }
+  globalThis.requestAnimationFrame = wrap(
+    globalThis.requestAnimationFrame.bind(globalThis),
+    'frame'
+  )
+  globalThis.setTimeout = wrap(globalThis.setTimeout.bind(globalThis), 'timer')
+  globalThis.setInterval = wrap(globalThis.setInterval.bind(globalThis), 'interval')
+}
+
+/** Recorded before anything else runs, so a refusal during the page's own boot is counted. */
+export function installCspViolationRecorder() {
+  globalThis.__orcaCspViolations = []
+  document.addEventListener('securitypolicyviolation', (event) => {
+    globalThis.__orcaCspViolations.push(
+      `${event.violatedDirective}: ${event.blockedURI || 'inline'} @ ${event.sourceFile ?? '?'}:${String(event.lineNumber ?? 0)}`
+    )
+  })
+}

@@ -106,4 +106,5 @@ export function startWebglRecovery() {
 
 export function stopWebglRecovery() {
   document.removeEventListener('visibilitychange', onDocumentVisibilityChange)
+  cancelWebglContextRecovery()
 }

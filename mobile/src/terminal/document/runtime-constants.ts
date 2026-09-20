@@ -9,18 +9,4 @@ import { scope } from './document-scope'
 
 export function startRuntimeConstants() {
   scope.surface = document.getElementById('terminal-surface')
-  scope.ESC = String.fromCharCode(27)
-  scope.C1_CSI = String.fromCharCode(155)
-  scope.CLAUDE_STATUS_DOT = String.fromCharCode(0x23fa)
-  scope.TEXT_PRESENTATION_SELECTOR = String.fromCharCode(0xfe0e)
-  scope.EMOJI_PRESENTATION_SELECTOR = String.fromCharCode(0xfe0f)
-  scope.CLAUDE_STATUS_DOT_PATTERN = new RegExp(
-    scope.CLAUDE_STATUS_DOT +
-      '[' +
-      scope.TEXT_PRESENTATION_SELECTOR +
-      scope.EMOJI_PRESENTATION_SELECTOR +
-      ']*',
-    'g'
-  )
-  scope.statusDotPendingSelector = false
 }

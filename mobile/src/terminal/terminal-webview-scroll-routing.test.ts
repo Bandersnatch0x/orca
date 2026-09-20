@@ -33,7 +33,7 @@ describe('TerminalWebView scroll routing', () => {
   })
 
   it('maps a downward pull at the bottom to older scrollback rows', () => {
-    expect(source).toContain('const deltaY = ts.lastY - y;')
+    expect(source).toContain('const deltaY = scope.touchGesture.lastY - y;')
     expect(source).toContain('scope.smoothScrollOffsetY -= deltaY;')
     expect(source).toContain(
       'const lines = Math.trunc(-scope.smoothScrollOffsetY / effectiveCellH);'
@@ -71,7 +71,9 @@ describe('TerminalWebView scroll routing', () => {
     expect(momentumBlock.indexOf('if (shouldRouteScrollToTerminalInput())')).toBeLessThan(
       momentumBlock.indexOf('if (!applyNormalBufferScrollDelta(delta))')
     )
-    expect(momentumBlock).toContain('routeScrollLines(lines, ts.lastX, ts.lastY);')
+    expect(momentumBlock).toContain(
+      'routeScrollLines(lines, scope.touchGesture.lastX, scope.touchGesture.lastY);'
+    )
   })
 
   it('does not rubber-band normal scroll at scrollback edges', () => {
@@ -90,14 +92,14 @@ describe('TerminalWebView scroll routing', () => {
       '{ capture: true, passive: false }'
     )
     expect(touchMoveBlock).toContain('if (enqueueNormalBufferScrollDelta(deltaY))')
-    expect(touchMoveBlock).toContain('ts.velY = 0;')
+    expect(touchMoveBlock).toContain('scope.touchGesture.velY = 0;')
 
     const momentumBlock = sliceBetween(
       'let momentumStep = function()',
       'if (Math.abs(vel) > MIN_VEL)'
     )
     expect(momentumBlock).toContain('if (!applyNormalBufferScrollDelta(delta))')
-    expect(momentumBlock).toContain('ts.momentumId = null;')
+    expect(momentumBlock).toContain('scope.touchGesture.momentumId = null;')
   })
 
   it('coalesces normal touch scroll row commits onto animation frames', () => {
@@ -107,7 +109,9 @@ describe('TerminalWebView scroll routing', () => {
     )
     expect(enqueueBlock).toContain('scope.pendingNormalScrollDeltaY += deltaY;')
     expect(enqueueBlock).toContain('if (scope.normalScrollFrameId !== null) {')
-    expect(enqueueBlock).toContain('scope.normalScrollFrameId = requestAnimationFrame(function()')
+    // Ruling 21: every document frame goes through the scope's registry so dispose can take it
+    // back; the id is still held here, which is what the reset below cancels.
+    expect(enqueueBlock).toContain('scope.normalScrollFrameId = scheduleDocumentFrame(function()')
     expect(enqueueBlock).toContain('applyNormalBufferScrollDelta(delta)')
 
     const resetBlock = sliceBetween(
@@ -179,7 +183,7 @@ describe('TerminalWebView scroll routing', () => {
 
   it('smooths velocity samples and uses lower friction for mobile momentum', () => {
     expect(source).toContain('function updateTouchVelocity(deltaY, dt)')
-    expect(source).toContain('ts.velY * 0.55 + instantVelocity * 0.45')
+    expect(source).toContain('scope.touchGesture.velY * 0.55 + instantVelocity * 0.45')
     expect(source).toContain('const FRICTION = 0.972;')
     expect(source).toContain('const MIN_VEL = 0.012;')
   })

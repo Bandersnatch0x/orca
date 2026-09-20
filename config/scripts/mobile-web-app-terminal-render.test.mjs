@@ -9,6 +9,9 @@ import { MOBILE_WEB_APP_ROUTE_ROOT } from './mobile-web-app-route-manifest.mjs'
 import { mobileWebAppDependenciesPresent } from './mobile-web-app-bundle-dependencies.mjs'
 import {
   createBundleServer,
+  installCspViolationRecorder,
+  installPageErrorSentinel,
+  installSchedulerRecorder,
   installShellDouble,
   readBridgeFaultGrant,
   readBridgeProtocolVersion,
@@ -172,35 +175,6 @@ export default function ProbeLayout() {
 }
 `
 
-/**
- * A handler of the page's own, installed before the bundle so the terminal meets a `window.onerror`
- * that belongs to someone else.
- *
- * Reading `null` three times would pass on a terminal that assigned `null` over a real handler,
- * which is the failure this seam exists to prevent. The sentinel is identity-checked in the page
- * rather than marshalled out of it — a function does not survive `evaluate` — and it returns
- * false so the browser still reports the error normally.
- */
-function installPageErrorSentinel() {
-  globalThis.__orcaSentinelCalls = []
-  const sentinel = (message) => {
-    globalThis.__orcaSentinelCalls.push(String(message))
-    return false
-  }
-  globalThis.__orcaSentinel = sentinel
-  window.onerror = sentinel
-}
-
-/** Recorded before anything else runs, so a refusal during the page's own boot is counted. */
-function installCspViolationRecorder() {
-  globalThis.__orcaCspViolations = []
-  document.addEventListener('securitypolicyviolation', (event) => {
-    globalThis.__orcaCspViolations.push(
-      `${event.violatedDirective}: ${event.blockedURI || 'inline'} @ ${event.sourceFile ?? '?'}:${String(event.lineNumber ?? 0)}`
-    )
-  })
-}
-
 const bundles = mobileWebAppDependenciesPresent()
 const describeRender = bundles ? describe : describe.skip
 
@@ -256,9 +230,15 @@ afterAll(async () => {
   }
 })
 
-async function openPage(pathname, { errorSentinel = false, beforeNavigate } = {}) {
+async function openPage(
+  pathname,
+  { errorSentinel = false, scheduler = false, beforeNavigate } = {}
+) {
   const page = await browser.newPage({ viewport: { width: 390, height: 844 } })
   await beforeNavigate?.(page)
+  if (scheduler) {
+    await page.addInitScript(installSchedulerRecorder)
+  }
   await page.addInitScript(installCspViolationRecorder)
   if (errorSentinel) {
     await page.addInitScript(installPageErrorSentinel)
@@ -596,6 +576,115 @@ describeRender(
       )
       // And the user-visible half: the overlay, with its Reload, rather than a blank frame.
       await page.getByText('Reload').waitFor({ timeout: 30_000 })
+      await page.unrouteAll({ behavior: 'ignoreErrors' })
+      await page.close()
+    }, 300_000)
+
+    it('still reports runtime errors after a first mount spent the non-fatal budget', async () => {
+      // Ruling 21's finding, end to end. `reportEngineError` caps non-fatal notifies at five so a
+      // per-frame thrower cannot flood the host. That counter is the document's, not the mount's:
+      // a first terminal that spends it leaves the second one mute, reporting nothing however it
+      // fails, while every other signal — readiness, paint, selection — says the terminal is fine.
+      const { page } = await openTerminal()
+      await openProbeTerminal(page)
+      await page.evaluate(() => {
+        for (let index = 0; index < 6; index++) {
+          setTimeout(() => {
+            throw new Error(`orca-budget-burn-${String(index)}`)
+          }, 0)
+        }
+      })
+      await page.waitForFunction(
+        () =>
+          globalThis.__orcaTerminalEngineErrors.filter((entry) =>
+            entry.includes('orca-budget-burn')
+          ).length >= 5,
+        { timeout: 30_000, polling: 100 }
+      )
+
+      await page.evaluate(() => globalThis.__orcaTerminalProbe.setMounted(false))
+      await page.locator('#terminal-container').waitFor({ state: 'detached', timeout: 30_000 })
+      await page.evaluate(() => {
+        globalThis.__orcaTerminalReady = false
+        globalThis.__orcaTerminalProbe.setMounted(true)
+      })
+      await page.waitForFunction(() => globalThis.__orcaTerminalReady === true, {
+        timeout: 60_000,
+        polling: 100
+      })
+      await openProbeTerminal(page)
+
+      await page.evaluate(() => {
+        globalThis.__orcaTerminalEngineErrors = []
+        setTimeout(() => {
+          throw new Error('orca-second-mount-error')
+        }, 0)
+      })
+      await page.waitForFunction(
+        () =>
+          globalThis.__orcaTerminalEngineErrors.some((entry) =>
+            entry.includes('orca-second-mount-error')
+          ),
+        { timeout: 30_000, polling: 100 }
+      )
+      await page.close()
+    }, 300_000)
+
+    it('cancels its frames and timers, so none of the first mount runs into the second', async () => {
+      // The other half of the same rule. A frame or timer the first terminal scheduled has no
+      // owner after dispose, and on the second mount it acts on the terminal that replaced it —
+      // refitting a grid nobody resized, scrolling a buffer nobody touched.
+      // The document is its own chunk, and the point is what *it* scheduled: xterm's renderer
+      // schedules frames of its own that a disposed terminal simply ignores, and the browser
+      // cannot unschedule those. So the chunk is identified on the wire, by a literal only
+      // `host-notify` carries, and a leak is a callback that chunk scheduled.
+      let documentChunk = null
+      const { page } = await openPage(PROBE_ROUTE, {
+        scheduler: true,
+        beforeNavigate: async (opened) => {
+          await opened.route('**/*.js', async (route) => {
+            const response = await route.fetch()
+            const body = await response.text()
+            if (body.includes('terminal runtime error')) {
+              documentChunk = new URL(route.request().url()).pathname
+            }
+            await route.fulfill({ response, body })
+          })
+        }
+      })
+      await page.waitForFunction(() => globalThis.__orcaTerminalReady === true, {
+        timeout: 60_000,
+        polling: 100
+      })
+      await openProbeTerminal(page)
+      expect(documentChunk, 'the document was served as its own chunk').not.toBe(null)
+      // One task, so the frame cannot run before the dispose that should take it back. A resize
+      // refits synchronously — the mount arms that listener itself — and the refit asks for a
+      // frame on the spot. React unmounts after this task, so at dispose the frame is owed.
+      await page.evaluate(() => {
+        globalThis.__orcaScheduler.watching = true
+        globalThis.dispatchEvent(new Event('resize'))
+        globalThis.__orcaScheduler.pendingAtDispose = globalThis.__orcaScheduler.pending.length
+        globalThis.__orcaScheduler.mount += 1
+        globalThis.__orcaTerminalProbe.setMounted(false)
+      })
+      await page.locator('#terminal-container').waitFor({ state: 'detached', timeout: 30_000 })
+      await page.evaluate(() => {
+        globalThis.__orcaTerminalReady = false
+        globalThis.__orcaTerminalProbe.setMounted(true)
+      })
+      await page.waitForFunction(() => globalThis.__orcaTerminalReady === true, {
+        timeout: 60_000,
+        polling: 100
+      })
+      await openProbeTerminal(page)
+      // Long enough for any frame or timer of the first mount to have fired if it survived.
+      await page.evaluate(() => new Promise((resolve) => globalThis.setTimeout(resolve, 3000)))
+      const scheduler = await page.evaluate(() => globalThis.__orcaScheduler)
+      // The precondition: there was something to leak. A run where the refit asked for no frame
+      // would agree with the empty list below for the wrong reason.
+      expect(scheduler.pendingAtDispose).toBeGreaterThan(0)
+      expect(scheduler.leaked.filter((entry) => entry.includes(documentChunk))).toEqual([])
       await page.unrouteAll({ behavior: 'ignoreErrors' })
       await page.close()
     }, 300_000)

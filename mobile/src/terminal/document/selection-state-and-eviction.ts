@@ -23,20 +23,19 @@ import { scope } from './document-scope'
 // the tap (which opens links/paths). {x,y,t,identifier} or null once the
 // gesture is disqualified as a tap (moved too far or held too long).
 
-// Eviction watchdog: linesEverWritten counts onLineFeed since last init.
+// Eviction watchdog: linesEverWritten counts onLineFeed since the last init.
 // Once buffer is full, every onLineFeed evicts the top row in xterm and
 // we mirror that by decrementing stored absolute rows.
-let linesEverWritten = 0
 
 export function resetEvictionCounter() {
-  linesEverWritten = 0
+  scope.linesEverWritten = 0
 }
 
 export function isBufferFull() {
   if (!scope.term) {
     return false
   }
-  return linesEverWritten >= 5000 + (scope.term.rows || 0)
+  return scope.linesEverWritten >= 5000 + (scope.term.rows || 0)
 }
 
 export function checkEviction() {
@@ -51,7 +50,7 @@ export function checkEviction() {
 }
 
 export function logFeedAndEvict() {
-  linesEverWritten++
+  scope.linesEverWritten++
   if (scope.initialOscLinkEvictionReady && isBufferFull()) {
     scope.initialOscLinkRowOffset += 1
   }
@@ -64,26 +63,10 @@ export function logFeedAndEvict() {
 }
 
 export function startSelectionStateAndEviction() {
-  scope.WORD_RE = /[\p{L}\p{N}_./:@~+=?&#%-]/u
-  scope.LONG_PRESS_MS = 500
-  scope.LONG_PRESS_SLOP = 10
-  scope.TAP_SLOP = 24
-  scope.TAP_MAX_MS = 700
-  scope.EDGE_SCROLL_PX = 40
-  scope.EDGE_SCROLL_INTERVAL = 60
   scope.selectionOverlay = document.getElementById('selection-overlay')
   scope.handleStart = document.getElementById('sel-handle-start')
   scope.handleEnd = document.getElementById('sel-handle-end')
   scope.selMenu = document.getElementById('sel-menu')
   scope.btnCopy = document.getElementById('sel-menu-copy')
   scope.btnSelAll = document.getElementById('sel-menu-all')
-  scope.selMode = 'navigate'
-  scope.sel = null
-  scope.longPressTimer = null
-  scope.longPressOrigin = null
-  scope.tapCandidate = null
-  scope.edgeScrollTimer = null
-  scope.edgeScrollDir = 0
-  scope.edgeScrollClientX = 0
-  scope.edgeScrollClientY = 0
 }

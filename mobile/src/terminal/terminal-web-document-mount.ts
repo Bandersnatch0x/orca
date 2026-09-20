@@ -36,8 +36,11 @@ const STYLE_ELEMENT_ID = 'orca-terminal-document-style'
  *
  * `<style>` rather than a constructed sheet or inline attributes: the document's own rules and
  * xterm's are written against ids and classes, and this is the same text the WebView's `<head>`
- * carries. It stays in the head after unmount, because a second terminal on the same page would
- * want it and re-parsing 6 KiB per mount is the only thing removing it would buy.
+ * carries. It stays in the head after unmount, because the *next* mount wants it — the page
+ * remounts the same terminal on navigation and on the error overlay's reload — and re-parsing
+ * 6 KiB each time is the only thing removing it would buy. Two terminals at once is not the
+ * case: `document-scope` is a module singleton, so there is one scope per page and `mount`
+ * refuses a second live document rather than letting the two share it.
  */
 function ensureDocumentStyle() {
   if (document.getElementById(STYLE_ELEMENT_ID)) {
@@ -67,7 +70,36 @@ function createPageWebglAddon(onFallback: (reason: string) => void) {
   }
 }
 
+/**
+ * One live document per page, because there is one scope per page.
+ *
+ * `document-scope` is a module singleton and every module reads it, so a second mount while the
+ * first is up would not be a second terminal: both would drive the same fields, the same elements
+ * and the same start sequence. The component mounts and disposes in one effect and cannot reach
+ * this state, which is exactly why the refusal is named rather than left to surface as two
+ * terminals writing over each other.
+ */
+let liveDocumentHost: HTMLElement | null = null
+
 export async function mountTerminalWebDocument(
+  host: HTMLElement,
+  receive: (message: Record<string, unknown>) => void
+): Promise<TerminalWebDocument> {
+  if (liveDocumentHost) {
+    throw new Error('the terminal document is already mounted on this page')
+  }
+  liveDocumentHost = host
+  try {
+    return await buildTerminalWebDocument(host, receive)
+  } catch (error) {
+    // A mount that never completed holds nothing, and the overlay's Reload has to be able to try
+    // again — the dynamic import below is exactly the step that can fail.
+    liveDocumentHost = null
+    throw error
+  }
+}
+
+async function buildTerminalWebDocument(
   host: HTMLElement,
   receive: (message: Record<string, unknown>) => void
 ): Promise<TerminalWebDocument> {
@@ -126,6 +158,7 @@ export async function mountTerminalWebDocument(
       documentModules.handleMsg(command)
     },
     dispose: () => {
+      liveDocumentHost = null
       window.removeEventListener('resize', onWindowResize)
       documentModules.stopPageDocumentModules()
       try {

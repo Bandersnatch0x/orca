@@ -26,30 +26,19 @@ const terminalHtmlSource = XTERM_HTML
 const terminalWebglRecoverySource = await generatedDocumentModule('webgl-recovery')
 
 function extractStatusDotNormalizer() {
-  // Ruling 20 put the dot constants inside `startRuntimeConstants`, so the block is taken whole
-  // and called rather than sliced statement by statement.
-  const declarationStart = terminalHtmlSource.indexOf('  function startRuntimeConstants() {')
-  const declarationEnd = terminalHtmlSource.indexOf(
-    '\n  function startTerminalHandle',
-    declarationStart
-  )
+  // Ruling 21 put the dot constants in the scope factory, which the preamble already carries, so
+  // what is sliced here is the normalizer itself and nothing else.
+  const declarationAt = terminalHtmlSource.indexOf('  const statusDot = String.fromCharCode(9210);')
   const functionStart = terminalHtmlSource.indexOf('  function isStatusDotPresentationSelector')
   const functionEnd = terminalHtmlSource.indexOf('\n  function enqueueWrite', functionStart)
-  expect(declarationStart).toBeGreaterThanOrEqual(0)
-  expect(declarationEnd).toBeGreaterThan(declarationStart)
-  expect(functionStart).toBeGreaterThan(declarationEnd)
+  expect(declarationAt).toBeGreaterThanOrEqual(0)
+  expect(functionStart).toBeGreaterThan(declarationAt)
   expect(functionEnd).toBeGreaterThan(functionStart)
-  return `${documentScopePreamble()}${terminalHtmlSource.slice(declarationStart, declarationEnd)}\nstartRuntimeConstants();\n${terminalHtmlSource.slice(functionStart, functionEnd)}`
+  return `${documentScopePreamble()}${terminalHtmlSource.slice(functionStart, functionEnd)}`
 }
 
 function normalizeStatusDotChunks(chunks: string[]) {
-  // `startRuntimeConstants` opens with the surface read; the dot constants below it need no
-  // element, so an element-less document is enough to reach them.
-  const context: {
-    chunks: string[]
-    document: { getElementById: () => null }
-    output?: string
-  } = { chunks, document: { getElementById: () => null } }
+  const context: { chunks: string[]; output?: string } = { chunks }
   new Script(`
 ${extractStatusDotNormalizer()}
 output = chunks.map(function(chunk) { return normalizeStatusDotPresentation(chunk); }).join('');
@@ -114,12 +103,13 @@ describe('TerminalWebView text zoom', () => {
 
   it('forces the Claude status dot to text presentation before xterm writes', () => {
     expect(terminalHtmlSource).toContain('font-variant-emoji: text')
-    expect(terminalHtmlSource).toContain('scope.CLAUDE_STATUS_DOT = String.fromCharCode(9210)')
+    // Ruling 21: the dot's value is in the scope factory, not in a parse-time write.
+    expect(terminalHtmlSource).toContain('const statusDot = String.fromCharCode(9210);')
     expect(terminalHtmlSource).toContain(
-      'scope.TEXT_PRESENTATION_SELECTOR = String.fromCharCode(65038)'
+      'const textPresentationSelector = String.fromCharCode(65038);'
     )
     expect(terminalHtmlSource).toContain(
-      'scope.EMOJI_PRESENTATION_SELECTOR = String.fromCharCode(65039)'
+      'const emojiPresentationSelector = String.fromCharCode(65039);'
     )
     expect(terminalHtmlSource).toContain('function normalizeStatusDotPresentation(data)')
     expect(terminalHtmlSource).toContain(

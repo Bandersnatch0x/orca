@@ -44,15 +44,13 @@ export function chromeVersionText() {
   return match ? 'Chrome ' + match[1] : 'Chrome version unknown'
 }
 
-let nonFatalErrorNotifies = 0
-
 export function reportEngineError(context: string, err: TerminalEngineError, fatal?: unknown) {
   const isFatal = fatal === undefined ? !scope.everReady : !!fatal
   if (!isFatal) {
     // Why: a constructed-but-degraded engine can throw per frame; cap
     // non-fatal notifies so RN isn't flooded. Fatal reports always emit.
-    nonFatalErrorNotifies++
-    if (nonFatalErrorNotifies > 5) {
+    scope.nonFatalErrorNotifies++
+    if (scope.nonFatalErrorNotifies > 5) {
       return
     }
   }
@@ -72,10 +70,8 @@ export function reportEngineError(context: string, err: TerminalEngineError, fat
   })
 }
 
-let uninstallErrorReporter: (() => void) | null = null
-
 export function startHostNotify() {
-  uninstallErrorReporter = scope.installErrorReporter(function (
+  scope.uninstallErrorReporter = scope.installErrorReporter(function (
     msg: string | (Event & { message?: unknown }),
     source,
     line,
@@ -90,8 +86,8 @@ export function startHostNotify() {
 }
 
 export function stopHostNotify() {
-  if (uninstallErrorReporter) {
-    uninstallErrorReporter()
-    uninstallErrorReporter = null
+  if (scope.uninstallErrorReporter) {
+    scope.uninstallErrorReporter()
+    scope.uninstallErrorReporter = null
   }
 }

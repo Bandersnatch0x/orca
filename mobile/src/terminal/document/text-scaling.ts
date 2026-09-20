@@ -1,11 +1,8 @@
 import { terminalTextScalePresets } from './document-constants'
-import { scope } from './document-scope'
+import { scope, scheduleDocumentFrame } from './document-scope'
 import { applyFitScale, getCellHeight } from './fit-scale'
 import { getCellWidth } from './viewport-transform'
 import { emitKeyboardAvoidanceMetrics } from './keyboard-avoidance-metrics'
-
-export let scrollIndicator: HTMLElement | null = null
-export let scrollThumb: HTMLElement | null = null
 
 // Why: init() flips ready false on every re-init (live width reflow included)
 // while the old surface stays visible; a document-scoped latch drives the
@@ -64,8 +61,11 @@ export function applyTextScale(scale: number) {
     return
   }
   scope.term.options.fontSize = px
-  requestAnimationFrame(function () {
-    if (!scope.term) {
+  // Ruling 21: the generation this frame was scheduled under. `scope.term` alone is not enough —
+  // a mount that came and went leaves a live terminal here, and this would resize that one.
+  const gen = scope.terminalGeneration
+  scheduleDocumentFrame(function () {
+    if (!scope.term || gen !== scope.terminalGeneration) {
       return
     }
     const cellW = getCellWidth()
@@ -84,22 +84,8 @@ export function applyTextScale(scale: number) {
 }
 
 export function startTextScaling() {
-  scrollIndicator = document.getElementById('scroll-indicator')
-  scrollThumb = document.getElementById('scroll-thumb')
-  scope.scrollIndicatorHideTimer = null
-  scope.writeQueue = []
-  scope.writeQueueHead = 0
-  scope.writesDraining = false
-  scope.afterDrainCallbacks = []
-  scope.termObserverDisposables = []
-  scope.ready = false
-  scope.everReady = false
-  scope.currentScale = 1
-  scope.userScale = 1
-  scope.MIN_FIT_COLS = 20
-  scope.currentTextScale = 1
-  scope.MIN_TEXT_SCALE = TEXT_SCALE_PRESETS[0]
-  scope.MAX_TEXT_SCALE = TEXT_SCALE_PRESETS[TEXT_SCALE_PRESETS.length - 1]
+  scope.scrollIndicator = document.getElementById('scroll-indicator')
+  scope.scrollThumb = document.getElementById('scroll-thumb')
   scope.terminalFontFamily =
     (isIOSWebView() ? 'ui-monospace, ' : '"SF Mono", ') + TERMINAL_FONT_FALLBACKS
 }

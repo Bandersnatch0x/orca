@@ -37,13 +37,3 @@ export function emitModesIfChanged() {
     })
   }
 }
-
-export function startModeMirroring() {
-  scope.lastEmittedModes = {
-    bracketedPasteMode: false,
-    altScreen: false,
-    mouseTrackingMode: 'none',
-    sgrMouseMode: false,
-    sgrMousePixelsMode: false
-  }
-}
