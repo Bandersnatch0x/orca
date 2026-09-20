@@ -35,6 +35,11 @@ export type TerminalWebDocument = {
    * caller that had to await the import to get a handle would have nothing to dispose while the
    * import was in flight. That is not a corner — a slow chunk is what the readiness watchdog is
    * for, and the overlay's Reload is what ruling 20 names as the way out of it.
+   *
+   * A mount disposed before its import landed resolves rather than rejecting. Nothing failed:
+   * the caller asked for the terminal and then asked for it to go away, and the chunk arriving
+   * afterwards is not an error to report. The caller learns which it got from `dispose` being
+   * the thing it called, not from this.
    */
   ready: Promise<void>
 }
@@ -155,19 +160,23 @@ export function mountTerminalWebDocument(
     throw error
   }
 
-  const ready = buildTerminalWebDocument(host, receive).then(
+  const ready = buildTerminalWebDocument(host, receive, token).then(
     (built) => {
-      if (liveDocument !== token) {
-        // Disposed while the import was in flight. The page is already someone else's, so this
-        // releases nothing and starts nothing; the modules it resolved are inert until started.
+      if (built === null) {
+        // Disposed while the import was in flight, and the build stopped at the await without
+        // touching anything. Nothing to keep and nothing to give back.
         return
       }
       started = built
     },
     (error: unknown) => {
       // The import failed, so nothing was started and the page has to go back — the overlay's
-      // Reload is a second mount and it must be allowed to make one.
-      release()
+      // Reload is a second mount and it must be allowed to make one. Only if the page is still
+      // this mount's: a later mount may already hold it, and emptying its host would take the
+      // terminal that is on the screen.
+      if (liveDocument === token) {
+        release()
+      }
       throw error
     }
   )
@@ -214,11 +223,26 @@ function teardownStartedDocument({ modules, onWindowResize }: StartedDocument) {
   scope.committedTerm = null
 }
 
+/**
+ * The document, built and started — or `null` if the page stopped being this mount's.
+ *
+ * The token is read again the instant the import lands, before anything below it runs. Every
+ * statement after this point writes shared state: the six seams are fields on a module-singleton
+ * scope, `startPageDocumentModules` resets that scope and installs listeners, and the resize
+ * listener outlives the host. A mount disposed while its chunk was in flight owns none of it, and
+ * running the body anyway would plant its elements' listeners into a page a later mount is using
+ * and reset that mount's scope out from under it. Checking only when this resolves is too late:
+ * by then the writes have happened and the caller can do nothing but discard the result.
+ */
 async function buildTerminalWebDocument(
   host: HTMLElement,
-  receive: (message: Record<string, unknown>) => void
-): Promise<StartedDocument> {
+  receive: (message: Record<string, unknown>) => void,
+  token: symbol
+): Promise<StartedDocument | null> {
   const documentModules = await import('./document/page-document-modules')
+  if (liveDocument !== token) {
+    return null
+  }
   const { scope } = documentModules
 
   // Ruling 19 reaches `window.onerror` too: the WebView's document owns its page and may take

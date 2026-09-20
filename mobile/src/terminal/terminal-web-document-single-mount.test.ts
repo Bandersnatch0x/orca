@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { mountTerminalWebDocument } from './terminal-web-document-mount'
 
 /**
@@ -163,6 +163,63 @@ describe('the page terminal document', () => {
       'the terminal document is already mounted on this page'
     )
     live.dispose()
+  })
+
+  it('touches nothing when it is disposed before its chunk lands', async () => {
+    // The window the synchronous handle opened. `dispose` can now run while the import is still
+    // unresolved, so the build resumes on a page it no longer owns — and everything after its
+    // await writes shared state: the six seams are fields on one module scope, and
+    // `startPageDocumentModules` resets that scope and installs the document's listeners. A mount
+    // that checked only when it resolved would have done all of that first and then discarded the
+    // result, leaving the listeners behind and a later mount's scope reset out from under it.
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const { scope } = await import('./document/page-document-modules')
+    const seamsBefore = {
+      postToHost: scope.postToHost,
+      installErrorReporter: scope.installErrorReporter,
+      paintDocumentBackground: scope.paintDocumentBackground,
+      createTerminal: scope.createTerminal,
+      createUnicode11Addon: scope.createUnicode11Addon,
+      createWebglAddon: scope.createWebglAddon
+    }
+    const generationBefore = scope.terminalGeneration
+
+    const mounted = mountTerminalWebDocument(host, () => {})
+    mounted.dispose()
+    // Armed after the dispose, so anything they catch is the resuming build and nothing else.
+    const listeners = vi.spyOn(EventTarget.prototype, 'addEventListener')
+    const timers = vi.spyOn(globalThis, 'setTimeout')
+    const frames = vi.spyOn(globalThis, 'requestAnimationFrame')
+    try {
+      // Resolves: the caller asked for the terminal and then asked for it to go away, so the
+      // chunk landing afterwards is not a failure to report to the error overlay.
+      await expect(mounted.ready).resolves.toBeUndefined()
+    } finally {
+      listeners.mockRestore()
+      timers.mockRestore()
+      frames.mockRestore()
+    }
+
+    expect(listeners).not.toHaveBeenCalled()
+    expect(timers).not.toHaveBeenCalled()
+    expect(frames).not.toHaveBeenCalled()
+    expect({
+      postToHost: scope.postToHost,
+      installErrorReporter: scope.installErrorReporter,
+      paintDocumentBackground: scope.paintDocumentBackground,
+      createTerminal: scope.createTerminal,
+      createUnicode11Addon: scope.createUnicode11Addon,
+      createWebglAddon: scope.createWebglAddon
+    }).toEqual(seamsBefore)
+    // `startPageDocumentModules` resets the scope, which carries this forward by one. Unchanged
+    // is the start sequence never having run.
+    expect(scope.terminalGeneration).toBe(generationBefore)
+    // And the page is free, which is what the overlay's Reload needs.
+    const remounted = mountTerminalWebDocument(host, () => {})
+    await remounted.ready
+    expect(host.querySelector('#terminal-container')).not.toBe(null)
+    remounted.dispose()
   })
 
   it('gives the page back when the mount itself fails, so Reload can try again', async () => {

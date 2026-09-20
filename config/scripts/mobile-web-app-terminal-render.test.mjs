@@ -201,6 +201,13 @@ describeRender(
      *
      * So the assertions are about the live DOM and the live paths, not about readiness.
      */
+    /** The listeners the page holds with no terminal on it, which is what two mounts can differ by. */
+    async function listenersWithNoTerminal(page) {
+      await page.evaluate(() => globalThis.__orcaTerminalProbe.setMounted(false))
+      await page.locator('#terminal-container').waitFor({ state: 'detached', timeout: 30_000 })
+      return page.evaluate(() => globalThis.__orcaListeners.snapshot())
+    }
+
     async function assertLiveTerminal(page, label) {
       await page.locator('#terminal-surface .xterm').waitFor({ state: 'attached', timeout: 30_000 })
       expect(
@@ -348,6 +355,7 @@ describeRender(
       const HOLD_MS = 20_000
       let held = null
       const { page } = await openPage(PROBE_ROUTE, {
+        listeners: true,
         beforeNavigate: async (opened) => {
           await opened.route('**/*.js', async (route) => {
             const response = await route.fetch()
@@ -385,6 +393,18 @@ describeRender(
       })
       await openProbeTerminal(page)
       await assertLiveTerminal(page, 'reload-during-import')
+
+      // And the mount the Reload abandoned has to have come to nothing. Its chunk arrives while
+      // the second mount is running on the same scope, so a build that resumed without re-reading
+      // the claim would install its listeners into this page and reset the live mount's scope,
+      // nulling the undo that takes the error reporter off. Read against a page that mounted once
+      // and disposed once: the abandoned mount is the only difference between them, so zero
+      // difference is the abandoned mount having touched nothing.
+      const afterAbandoned = await listenersWithNoTerminal(page)
+      const control = await openTerminal({ listeners: true })
+      await openProbeTerminal(control.page)
+      expect(afterAbandoned).toEqual(await listenersWithNoTerminal(control.page))
+      await control.page.close()
       await page.unrouteAll({ behavior: 'ignoreErrors' })
       await page.close()
     }, 300_000)
@@ -402,12 +422,7 @@ describeRender(
       // once leaks again and the two disagree.
       const { page } = await openTerminal({ listeners: true })
       await openProbeTerminal(page)
-      const withNoTerminal = async () => {
-        await page.evaluate(() => globalThis.__orcaTerminalProbe.setMounted(false))
-        await page.locator('#terminal-container').waitFor({ state: 'detached', timeout: 30_000 })
-        return page.evaluate(() => globalThis.__orcaListeners.snapshot())
-      }
-      const before = await withNoTerminal()
+      const before = await listenersWithNoTerminal(page)
       await page.evaluate(() => {
         globalThis.__orcaTerminalReady = false
         globalThis.__orcaTerminalProbe.setMounted(true)
@@ -418,7 +433,7 @@ describeRender(
       })
       await openProbeTerminal(page)
       const whileLive = await page.evaluate(() => globalThis.__orcaListeners.snapshot())
-      const after = await withNoTerminal()
+      const after = await listenersWithNoTerminal(page)
 
       // The precondition: a mount that installed nothing would satisfy the equality below for
       // exactly the reason the case exists to refuse.
