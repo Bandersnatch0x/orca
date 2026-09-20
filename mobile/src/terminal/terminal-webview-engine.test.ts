@@ -1,7 +1,8 @@
 import { Script } from 'node:vm'
 import { parse } from 'acorn'
 import { describe, expect, it, vi } from 'vitest'
-import { XTERM_ENGINE_CSS, XTERM_ENGINE_JS } from './terminal-webview-engine.generated'
+import { XTERM_ENGINE_CSS } from './terminal-webview-engine-css.generated'
+import { XTERM_ENGINE_JS } from './terminal-webview-engine.generated'
 import { documentScopePreamble } from './document/generated-document-region.test-support'
 import { XTERM_HTML } from './terminal-webview-html'
 

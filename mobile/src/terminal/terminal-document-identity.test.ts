@@ -6,7 +6,8 @@ import {
   TERMINAL_DOCUMENT_FIXTURE_PATH,
   terminalDocumentFixture
 } from '../../scripts/build-terminal-document-fixture.mjs'
-import { XTERM_ENGINE_CSS, XTERM_ENGINE_JS } from './terminal-webview-engine.generated'
+import { XTERM_ENGINE_CSS } from './terminal-webview-engine-css.generated'
+import { XTERM_ENGINE_JS } from './terminal-webview-engine.generated'
 import { XTERM_HTML } from './terminal-webview-html'
 
 /**
