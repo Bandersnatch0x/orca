@@ -1,4 +1,5 @@
 import { TERMINAL_HTML_DOCUMENT_SHELL } from './terminal-webview-html/document-shell'
+import { TERMINAL_HTML_RUNTIME_CONSTANTS } from './terminal-webview-html/runtime-constants'
 import { TERMINAL_HTML_RUNTIME_STATE_AND_TEXT_SCALING } from './terminal-webview-html/runtime-state-and-text-scaling'
 import { TERMINAL_HTML_FIT_SCALE } from './terminal-webview-html/terminal-fit-scale'
 import { TERMINAL_HTML_MOUSE_MODE_DECSET_SCAN } from './terminal-webview-html/mouse-mode-decset-scan'
@@ -21,6 +22,7 @@ export { MOBILE_TERMINAL_CARET_OPTIONS } from './terminal-webview-html/theme'
 // carry a second concern noted at the top of the file.
 export const XTERM_HTML = [
   TERMINAL_HTML_DOCUMENT_SHELL,
+  TERMINAL_HTML_RUNTIME_CONSTANTS,
   TERMINAL_HTML_RUNTIME_STATE_AND_TEXT_SCALING,
   TERMINAL_HTML_FIT_SCALE,
   TERMINAL_HTML_MOUSE_MODE_DECSET_SCAN,
