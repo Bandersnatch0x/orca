@@ -97,8 +97,18 @@ function readDocumentToken(token: unknown): DocumentToken | null {
  * one printer removes that whole class by construction rather than by a rule per symptom, and
  * leaves only what the four normalisations and the qualifier cover.
  */
+const STRICT_DIRECTIVE = 'use strict'
+
 function significantTokens(source: string): DocumentToken[] {
-  const printed = transformSync(source, { loader: 'js', target: 'chrome74', minify: false }).code
+  // Read strict on both sides. A loose script has to defend Annex B's block-scoped function
+  // declarations, and the printer does that by hoisting a `var` and renaming the function; a module
+  // does not, so one side would carry a rename the other cannot. Neither name escapes its block, so
+  // the two readings agree on behaviour and only the strict one can be compared.
+  const printed = transformSync(`'${STRICT_DIRECTIVE}';\n${source}`, {
+    loader: 'js',
+    target: 'chrome74',
+    minify: false
+  }).code
   const kept: DocumentToken[] = []
   for (const raw of tokenizer(printed, { ecmaVersion: 2020 })) {
     const token = readDocumentToken(raw)
@@ -110,7 +120,10 @@ function significantTokens(source: string): DocumentToken[] {
     }
     kept.push(token)
   }
-  return kept
+  if (kept[0]?.text !== STRICT_DIRECTIVE) {
+    throw new Error('the strict directive this comparison prepends did not survive printing')
+  }
+  return kept.slice(1)
 }
 
 /**

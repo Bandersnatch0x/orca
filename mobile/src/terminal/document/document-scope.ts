@@ -93,6 +93,7 @@ export type TerminalDocumentTerminal = {
   clear: () => void
   reset: () => void
   selectAll: () => void
+  getSelection?: () => string
   select: (col: number, row: number, length: number) => void
   clearSelection: () => void
   readonly unicode: { activeVersion: string }

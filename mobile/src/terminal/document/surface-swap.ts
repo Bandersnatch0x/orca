@@ -1,5 +1,5 @@
 import { disposeTermObservers } from './write-queue'
-import { attachSurfaceEventHandlers } from './document-externals'
+import { attachSurfaceEventHandlers } from './surface-touch-gestures'
 import { scope, type TerminalDocumentTerminal } from './document-scope'
 
 /** The surfaces and terminal a swap is replacing, handed back to whoever commits it. */

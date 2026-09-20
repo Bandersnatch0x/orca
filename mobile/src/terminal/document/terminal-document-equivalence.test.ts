@@ -128,6 +128,11 @@ describe('terminal document script equivalence', () => {
     })
   })
 
+  it('reads a block-scoped function declaration the same way on both sides', () => {
+    const script = 'function f() { if (a) { function g() { return 1; } return g(); } }'
+    expect(normalisationsOf(script, script)).toEqual(NONE)
+  })
+
   it('refuses a changed literal', () => {
     expect(normalisationsOf('var a = 1;', 'var a = 2')).toBe(
       'token 3: expected num 1, generated num 2'
