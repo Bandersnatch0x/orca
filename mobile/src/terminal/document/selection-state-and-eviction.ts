@@ -1,4 +1,5 @@
-import { cancelSelect, notify, repositionOverlay } from './document-externals'
+import { cancelSelect, repositionOverlay } from './document-externals'
+import { notify } from './host-notify'
 import { scope } from './document-scope'
 
 // ============================================================

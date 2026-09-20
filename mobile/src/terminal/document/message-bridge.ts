@@ -1,5 +1,7 @@
 import { adjustRowsForViewport, applyFitScale, clampPan } from './fit-scale'
-import { handleMsg, notify, reportEngineError, repositionOverlay } from './document-externals'
+import { repositionOverlay } from './document-externals'
+import { handleMsg, type TerminalHostMessage } from './host-message-router'
+import { notify, reportEngineError, type TerminalEngineError } from './host-notify'
 import { updateTransform } from './viewport-transform'
 import { scope } from './document-scope'
 
@@ -9,9 +11,6 @@ declare global {
   }
 }
 
-/** The decoded host message; only its type is read here, by the error reporter. */
-type TerminalHostMessage = { type?: unknown } | undefined
-
 export function handleIncomingMessage(e: Event & { data?: TerminalHostMessage | string }) {
   let msg: TerminalHostMessage
   try {
@@ -20,11 +19,12 @@ export function handleIncomingMessage(e: Event & { data?: TerminalHostMessage | 
     return
   }
   try {
-    handleMsg(msg)
+    handleMsg(msg!)
   } catch (ex) {
     reportEngineError(
       msg && msg.type === 'init' ? 'terminal init failed' : 'terminal message failed',
-      ex,
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: a catch binding is `unknown`; the reporter reads only `message` and falls back to String().
+      ex as TerminalEngineError,
       msg && msg.type === 'init' && !scope.everReady
     )
   }

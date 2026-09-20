@@ -1,10 +1,5 @@
-import {
-  cancelSelect,
-  enterSelect,
-  handleDragMove,
-  notify,
-  stopEdgeScroll
-} from './document-externals'
+import { cancelSelect, enterSelect, handleDragMove, stopEdgeScroll } from './document-externals'
+import { notify } from './host-notify'
 import { viewportToCell } from './viewport-cell'
 import { scope } from './document-scope'
 import { notifyTerminalSurfaceTap } from './surface-tap'

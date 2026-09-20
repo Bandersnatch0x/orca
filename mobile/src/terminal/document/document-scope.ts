@@ -30,7 +30,7 @@ export type TerminalOscLinkService = { getLinkData?: (id: number) => { uri?: str
 
 /** The xterm internals the OSC 8 lookup walks. */
 export type TerminalDocumentCore = {
-  _renderService?: { dimensions?: { css: { cell: { height?: number; width?: number } } } }
+  _renderService?: { dimensions?: { css: { cell: { height: number; width: number } } } }
   _oscLinkService?: TerminalOscLinkService
   _inputHandler?: { _oscLinkService?: TerminalOscLinkService }
 }
@@ -62,6 +62,7 @@ export type TerminalDocumentLine = {
 
 /** One side of xterm's buffer, as the document reads it. */
 export type TerminalDocumentBuffer = {
+  readonly length: number
   readonly viewportY: number
   readonly baseY: number
   readonly cursorY: number
@@ -89,6 +90,9 @@ export type TerminalDocumentTerminal = {
   write: (data: string, callback?: () => void) => void
   open: (element: HTMLElement) => void
   scrollToLine: (line: number) => void
+  clear: () => void
+  reset: () => void
+  selectAll: () => void
   readonly unicode: { activeVersion: string }
   attachCustomKeyEventHandler: (handler: () => boolean) => void
   onData: (listener: (data: string) => void) => TerminalDocumentDisposable
@@ -170,7 +174,7 @@ export type TerminalDocumentScope = {
   /** `text-scaling`: the largest text-scale preset. */
   MAX_TEXT_SCALE: number
   /** `viewport-transform`: host message ids already handled, to drop repeats. */
-  handledMessageIds: string[]
+  handledMessageIds: number[]
   /** `runtime-state`: the text scale the user picked, as a preset index. */
   currentTextScale: number
   /** `runtime-state`: the font stack xterm renders with. */

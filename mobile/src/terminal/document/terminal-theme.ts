@@ -8,10 +8,10 @@ export type TerminalDocumentRgb = { r: number; g: number; b: number }
 export type TerminalDocumentRgba = TerminalDocumentRgb & { a: number }
 
 /** The theme payload the host publishes; an older host omits the contrast floor. */
-export type TerminalDocumentThemeMessage = {
-  theme?: Record<string, string>
-  minimumContrastRatio?: number
-} | null
+export type TerminalDocumentThemeMessage =
+  | { theme?: Record<string, string>; minimumContrastRatio?: number }
+  | null
+  | undefined
 
 const DARK_BG_MIN_CONTRAST = 3
 const LIGHT_BG_MIN_CONTRAST = 4.5

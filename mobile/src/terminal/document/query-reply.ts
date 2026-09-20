@@ -1,5 +1,5 @@
 import { enqueueWriteBoundary } from './write-queue'
-import { notify } from './document-externals'
+import { notify } from './host-notify'
 import { scope, type TerminalDocumentDisposable } from './document-scope'
 
 /**

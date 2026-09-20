@@ -2,10 +2,10 @@ import {
   applyXtermSelection,
   cancelSelect,
   handleDragMove,
-  notify,
   repositionOverlay,
   stopEdgeScroll
 } from './document-externals'
+import { notify } from './host-notify'
 import { getMouseTrackingMode, isSafeSgrMouseCoordinate } from './mouse-input-encoding'
 import { viewportToCell } from './viewport-cell'
 import { scope } from './document-scope'

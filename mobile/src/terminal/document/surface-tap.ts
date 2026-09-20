@@ -1,4 +1,4 @@
-import { notify } from './document-externals'
+import { notify } from './host-notify'
 import {
   buildMouseClickInput,
   getMouseTrackingMode,

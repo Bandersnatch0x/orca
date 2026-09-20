@@ -9,9 +9,6 @@
  * This file only shrinks. When the last group moves it is deleted.
  */
 
-/** `runtime-state-and-text-scaling`: posts one message to the native host. */
-export declare function notify(message: Record<string, unknown>): void
-
 /** `surface-touch-gestures`: binds touch, wheel and tap handlers to a surface element. */
 export declare function attachSurfaceEventHandlers(target: HTMLElement): void
 
@@ -32,9 +29,3 @@ export declare function applyXtermSelection(): void
 
 /** `selection-overlay`: moves the handles and the menu pill to the current selection. */
 export declare function repositionOverlay(): void
-
-/** `host-message-router`: routes one decoded host message. */
-export declare function handleMsg(msg: unknown): void
-
-/** `terminal-init-and-write`: reports an engine failure to the host. */
-export declare function reportEngineError(summary: string, cause: unknown, fatal: unknown): void
