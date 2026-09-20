@@ -1,3 +1,5 @@
+import { DEFAULT_TERMINAL_THEME } from '../terminal-webview-html/theme'
+import type { TerminalDocumentThemeMessage } from './terminal-theme'
 /**
  * The state the in-WebView terminal document shares across its parts.
  *
@@ -48,10 +50,20 @@ export type TerminalDocumentBuffer = {
 }
 
 /** As much of xterm's terminal as the document's own code touches. */
+/** A terminal colour theme: xterm reads it as a flat map of slot to CSS colour. */
+export type TerminalDocumentTheme = Record<string, string>
+
+/** The xterm options the document writes; each field is owned by the group that sets it. */
+export type TerminalDocumentTerminalOptions = {
+  theme: TerminalDocumentTheme
+  minimumContrastRatio: number
+}
+
 export type TerminalDocumentTerminal = {
   readonly cols: number
   readonly rows: number
   readonly buffer: { readonly active: TerminalDocumentBuffer }
+  readonly options: TerminalDocumentTerminalOptions
   resize: (cols: number, rows: number) => void
   refresh: (start: number, end: number) => void
   dispose: () => void
@@ -77,9 +89,15 @@ export type TerminalDocumentScope = {
   /** `webgl-recovery`: the pending single retry after a context loss. */
   webglRecoveryTimer: ReturnType<typeof setTimeout> | null
   /** `runtime-state-and-text-scaling`: the theme the host last sent, replayed on visibility. */
-  terminalThemeInput: unknown
+  terminalThemeInput: TerminalDocumentThemeMessage
   /** `wheel-scroll`: sub-line wheel travel carried between events; reset by a touch scroll. */
   wheelAccumDeltaY: number
+  /** `runtime-state`: the built-in theme, and the fallback for every slot a host theme omits. */
+  defaultTheme: TerminalDocumentTheme
+  /** `terminal-theme`: the host theme normalised against the built-in one. */
+  terminalTheme: TerminalDocumentTheme
+  /** `terminal-theme`: the contrast floor in force, published or derived from the background. */
+  terminalMinimumContrastRatio: number
   /** `surface-swap`: the element xterm is currently mounted on. */
   surface: HTMLElement | null
   /** `surface-swap`: the terminal of a hidden replacement surface that has not committed. */
@@ -113,6 +131,9 @@ export function createTerminalDocumentScope(): TerminalDocumentScope {
     webglAddon: null,
     webglRecoveryTimer: null,
     terminalThemeInput: null,
+    defaultTheme: DEFAULT_TERMINAL_THEME,
+    terminalTheme: DEFAULT_TERMINAL_THEME,
+    terminalMinimumContrastRatio: 3,
     wheelAccumDeltaY: 0,
     surface: null,
     pendingTerm: null

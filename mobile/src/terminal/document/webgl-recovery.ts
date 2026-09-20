@@ -1,4 +1,5 @@
-import { applyTerminalTheme, flog } from './document-externals'
+import { flog } from './document-externals'
+import { applyTerminalTheme } from './terminal-theme'
 import { scope, type TerminalDocumentWebglAddon } from './document-scope'
 
 /** xterm's WebGL addon constructor, as the engine bundle puts it on `window`. */
