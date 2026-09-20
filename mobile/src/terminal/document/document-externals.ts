@@ -95,3 +95,6 @@ export declare function buildMouseClickInput(originX: number, originY: number): 
 
 /** `mouse-report-and-scroll-routing`: whether a tracking mode consumes plain clicks. */
 export declare function isClickMouseTrackingMode(mode: string): boolean
+
+/** `write-queue`: the trailing bytes a DECSET scan must carry into the next chunk. */
+export declare function extractMouseModeScanTail(input: string): string

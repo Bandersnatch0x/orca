@@ -124,6 +124,12 @@ export type TerminalDocumentScope = {
   initialOscLinkRowOffset: number
   /** `runtime-state`: the escape byte every report is prefixed with. */
   ESC: string
+  /** `runtime-state`: the C1 form of the control sequence introducer. */
+  C1_CSI: string
+  /** `runtime-state`: the tail of the last chunk, in case a DECSET straddles two writes. */
+  mouseModeScanTail: string
+  /** `runtime-state`: the mouse tracking mode the TUI last asked for. */
+  trackedMouseTrackingMode: string
   /** `runtime-state`: whether the TUI asked for SGR (1006) mouse reports. */
   sgrMouseMode: boolean
   /** `runtime-state`: whether the TUI asked for SGR pixel (1016) mouse reports. */
@@ -204,6 +210,9 @@ export function createTerminalDocumentScope(): TerminalDocumentScope {
     initialOscLinks: [],
     initialOscLinkRowOffset: 0,
     ESC: String.fromCharCode(27),
+    C1_CSI: String.fromCharCode(155),
+    mouseModeScanTail: '',
+    trackedMouseTrackingMode: 'none',
     sgrMouseMode: false,
     sgrMousePixelsMode: false,
     LONG_PRESS_MS: 500,
