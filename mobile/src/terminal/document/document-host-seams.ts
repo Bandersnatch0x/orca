@@ -56,6 +56,18 @@ export type TerminalDocumentHostSeams = {
  */
 export type TerminalDocumentHost = Partial<TerminalDocumentHostSeams>
 
+/**
+ * A running document: the two things a host can do to one it has started.
+ *
+ * `send` is the router the WebView already reached through its message listener, which the page
+ * calls directly. `stop` runs every module's stop and takes back the frames the document is owed;
+ * the page's dispose calls it, and the WebView never does.
+ */
+export type TerminalDocument = {
+  send: (message: Record<string, unknown>) => void
+  stop: () => void
+}
+
 declare global {
   interface Window {
     ReactNativeWebView?: { postMessage: (message: string) => void }
