@@ -7,8 +7,11 @@
  * import — assigning an imported binding is a syntax error. So the written ones become fields here,
  * and the group that owns each is named beside it.
  *
- * Only the written ones move. A `var` the script never assigns again is an ordinary local and stays
- * one, which is what keeps the qualifier off most of the program.
+ * Two things keep a variable out of this table. One the script never assigns again is an ordinary
+ * local. One assigned only inside the group that declares it is that module's own state, however
+ * often it is written — `terminalDataRepliesEnabled` is written from four places and all four are
+ * in `query-reply`, so it stays a `let` there. Only what crosses a module boundary is shared
+ * state, which is what keeps the qualifier off most of the program.
  *
  * The table grows one group at a time as C7.1 extracts them; a field arrives with its group.
  */
@@ -25,7 +28,14 @@ export type TerminalDocumentScope = {
   /** `smooth-scroll-and-cell-geometry`: the surface's pan offset, in viewport pixels. */
   panX: number
   panY: number
+  /** `terminal-init-and-write`: bumped on every re-init, so a late callback can tell it is stale. */
+  terminalGeneration: number
+  /** `term-observers`: xterm listener handles to dispose when the terminal is replaced. */
+  termObserverDisposables: TerminalDocumentDisposable[]
 }
+
+/** An xterm listener handle, as the document disposes of one. */
+export type TerminalDocumentDisposable = { dispose?: () => void }
 
 /**
  * The initial values, which are the ones the document's own declarations carried.
@@ -34,7 +44,13 @@ export type TerminalDocumentScope = {
  * starts from its own state instead of inheriting what the last one left.
  */
 export function createTerminalDocumentScope(): TerminalDocumentScope {
-  return { term: null, panX: 0, panY: 0 }
+  return {
+    term: null,
+    panX: 0,
+    panY: 0,
+    terminalGeneration: 0,
+    termObserverDisposables: []
+  }
 }
 
 /** The document's own scope. The generator emits this declaration at the top of the script. */

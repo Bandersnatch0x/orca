@@ -17,3 +17,9 @@ export declare function getCellHeight(): number
 
 /** `terminal-fit-scale`: the fit scale times the user's pinch scale. */
 export declare function getTotalScale(): number
+
+/** `runtime-state-and-text-scaling`: posts one message to the native host. */
+export declare function notify(message: Record<string, unknown>): void
+
+/** `write-queue`: runs a callback when the replay queue reaches the point it was enqueued at. */
+export declare function enqueueWriteBoundary(callback: () => void): void
