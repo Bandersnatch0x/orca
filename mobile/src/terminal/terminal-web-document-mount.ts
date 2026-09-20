@@ -55,6 +55,7 @@ function ensureDocumentStyle() {
  */
 function createPageWebglAddon(onFallback: (reason: string) => void) {
   try {
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the addon's public surface is `dispose`, which the document's shape names; the two optional members it also reads are absent here and guarded at every call.
     return new WebglAddon() as unknown as TerminalDocumentWebglAddon
   } catch (error) {
     onFallback(error instanceof Error ? error.message : String(error))
@@ -77,8 +78,8 @@ export async function mountTerminalWebDocument(
   const { scope } = documentModules
 
   scope.postToHost = receive
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: xterm's own Terminal is the engine the document was written against; its options are declared optional where the document's shape declares them present, which is the only difference.
   scope.createTerminal = (options) =>
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: xterm's own Terminal is the engine the document was written against; its options are declared optional where the document's shape declares them present, which is the only difference.
     new Terminal(options) as unknown as ReturnType<typeof scope.createTerminal>
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the addon's public surface is `dispose`, which the document's shape names; the two optional members it also reads are absent here and guarded there.
   scope.createUnicode11Addon = () => new Unicode11Addon() as unknown as TerminalDocumentWebglAddon

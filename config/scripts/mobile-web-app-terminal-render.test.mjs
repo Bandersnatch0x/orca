@@ -316,7 +316,6 @@ describeRender(
         polling: 100
       })
       controlCspViolations = await page.evaluate(() => globalThis.__orcaCspViolations)
-      // eslint-disable-next-line no-console
       console.log('[c7.5][csp-control]', JSON.stringify(controlCspViolations.map(stripAssetPath)))
       // Zod's `new Function` probe, swallowed by its own catch, so it is not a page error and no
       // console line reports it. Pre-existing on every page route; named here so the cases below
@@ -347,7 +346,6 @@ describeRender(
         polling: 100
       })
       const copied = await page.evaluate(() => globalThis.__orcaTerminalCopied)
-      // eslint-disable-next-line no-console
       console.log(
         '[c7.5][stream]',
         JSON.stringify({ appliedBytes: applied, readBackChars: copied.length })
@@ -402,7 +400,6 @@ describeRender(
         polling: 100
       })
       const beforeInput = await page.evaluate(() => globalThis.__orcaTerminalBeforeInput)
-      // eslint-disable-next-line no-console
       console.log('[c7.5][beforeinput]', JSON.stringify(beforeInput.slice(0, 4)))
       expect(beforeInput.map((entry) => entry.inputType)).toContain('insertText')
       expect(beforeInput.map((entry) => entry.data)).toContain('a')

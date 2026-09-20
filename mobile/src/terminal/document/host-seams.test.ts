@@ -55,19 +55,22 @@ beforeAll(async () => {
 
 function terminalDouble() {
   const loaded: unknown[] = []
+  let opened: HTMLElement | undefined
   const terminal = {
     cols: 80,
     rows: 24,
     options: { theme: {}, minimumContrastRatio: 3, fontSize: 13 },
     buffer: { active: { baseY: 0, viewportY: 0, cursorY: 0, length: 1, type: 'normal' } },
-    element: null as HTMLElement | null,
+    get element() {
+      return opened
+    },
     unicode: { activeVersion: '6' },
     loaded,
     write(_data: string, callback?: () => void) {
       callback?.()
     },
     open(element: HTMLElement) {
-      terminal.element = element
+      opened = element
     },
     loadAddon: (addon: unknown) => loaded.push(addon),
     attachCustomKeyEventHandler() {},
@@ -92,7 +95,10 @@ function terminalDouble() {
 
 /** Restores every field a case assigns, so one of them cannot leave the singleton scope moved. */
 function withSeams(seams: Partial<TerminalDocumentScope>, run: () => void) {
-  const previous = Object.fromEntries(Object.keys(seams).map((key) => [key, scope[key as never]]))
+  const previous: Record<string, unknown> = {}
+  for (const key of Object.keys(seams)) {
+    previous[key] = Object.getOwnPropertyDescriptor(scope, key)?.value
+  }
   Object.assign(scope, seams)
   try {
     run()

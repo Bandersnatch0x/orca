@@ -88,7 +88,7 @@ export const TerminalWebView = forwardRef<TerminalWebViewHandle, Props>(
       }
       // Mounted once per generation: re-running this would throw away a live terminal and its
       // scrollback, and the controller's identity changes with every callback prop.
-      // oxlint-disable-next-line react-hooks/exhaustive-deps -- SAFETY: the document outlives every prop change; `confirmWebReady` is read on the mount path only.
+      // `confirmWebReady` is read on the mount path only, which is why it is not a dependency.
     }, [generation])
 
     const handleReload = useCallback(() => {
