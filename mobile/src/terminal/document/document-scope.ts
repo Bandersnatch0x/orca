@@ -8,18 +8,43 @@
  * and the group that owns each is named beside it.
  *
  * Two things keep a variable out of this table. One the script never assigns again is an ordinary
- * local. One assigned only inside the group that declares it is that module's own state, however
+ * local. One both declared and assigned inside a single group is that module's own state, however
  * often it is written — `terminalDataRepliesEnabled` is written from four places and all four are
- * in `query-reply`, so it stays a `let` there. Only what crosses a module boundary is shared
- * state, which is what keeps the qualifier off most of the program.
+ * in `query-reply`, so it stays a `let` there.
+ *
+ * Declared, not merely written: while the rest of the document is still strings, a variable the
+ * main slice declares is shared even when every use of it is in one group, because the declaration
+ * has nowhere else to live yet. `webglRecoveryTimer` is that case. Those can migrate out of this
+ * table when the flip makes the main slice modules too, and doing it before then would emit a
+ * second declaration beside the one the slice still carries.
  *
  * The table grows one group at a time as C7.1 extracts them; a field arrives with its group.
  */
+
+/** One cell of a buffer line, as the document inspects it. */
+export type TerminalDocumentCell = {
+  isBgDefault: () => boolean
+  isInverse: () => boolean
+  isUnderline?: () => boolean
+  isStrikethrough?: () => boolean
+  isOverline?: () => boolean
+}
+
+/** One buffer line, as the document inspects it. */
+export type TerminalDocumentLine = {
+  readonly length: number
+  translateToString: (trimRight: boolean) => string
+  getCell?: (x: number, cell: TerminalDocumentCell | null) => TerminalDocumentCell | null
+}
 
 /** One side of xterm's buffer, as the document reads it. */
 export type TerminalDocumentBuffer = {
   readonly viewportY: number
   readonly baseY: number
+  readonly cursorY: number
+  readonly type: string
+  getNullCell?: () => TerminalDocumentCell
+  getLine: (index: number) => TerminalDocumentLine | undefined
 }
 
 /** As much of xterm's terminal as the document's own code touches. */

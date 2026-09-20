@@ -1,9 +1,5 @@
-import {
-  applyFitScale,
-  emitKeyboardAvoidanceMetrics,
-  isAlternateBufferActive,
-  updateScrollIndicator
-} from './document-externals'
+import { applyFitScale, isAlternateBufferActive, updateScrollIndicator } from './document-externals'
+import { emitKeyboardAvoidanceMetrics } from './keyboard-avoidance-metrics'
 import { scope } from './document-scope'
 
 // Why: rewrap the local xterm buffer (scrollback included) to a new width

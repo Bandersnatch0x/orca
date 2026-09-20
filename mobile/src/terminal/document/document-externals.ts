@@ -32,6 +32,3 @@ export declare function applyFitScale(reason: string): void
 
 /** `smooth-scroll-and-cell-geometry`: shows or hides the scroll indicator. */
 export declare function updateScrollIndicator(visible: boolean): void
-
-/** `term-observers-and-mode-mirroring`: posts the keyboard-avoidance geometry to the host. */
-export declare function emitKeyboardAvoidanceMetrics(): void
