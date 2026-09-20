@@ -24,8 +24,27 @@ import type { TerminalDocumentThemeMessage } from './terminal-theme'
  */
 
 /** One cell of a buffer line, as the document inspects it. */
+/** xterm's OSC 8 link service, reached through internals and always guarded. */
+export type TerminalOscLinkService = { getLinkData?: (id: number) => { uri?: string } | undefined }
+
+/** The xterm internals the OSC 8 lookup walks. */
+export type TerminalDocumentCore = {
+  _oscLinkService?: TerminalOscLinkService
+  _inputHandler?: { _oscLinkService?: TerminalOscLinkService }
+}
+
+/** An OSC 8 link the host captured from scrollback before xterm replayed it. */
+export type TerminalInitialOscLink = {
+  uri?: string
+  row: number
+  startCol: number
+  endCol: number
+  text?: string
+}
+
 export type TerminalDocumentCell = {
   isBgDefault: () => boolean
+  extended?: { urlId?: number }
   isInverse: () => boolean
   isUnderline?: () => boolean
   isStrikethrough?: () => boolean
@@ -36,7 +55,7 @@ export type TerminalDocumentCell = {
 export type TerminalDocumentLine = {
   readonly length: number
   translateToString: (trimRight: boolean) => string
-  getCell?: (x: number, cell: TerminalDocumentCell | null) => TerminalDocumentCell | null
+  getCell?: (x: number, cell?: TerminalDocumentCell | null) => TerminalDocumentCell | null
 }
 
 /** One side of xterm's buffer, as the document reads it. */
@@ -64,6 +83,7 @@ export type TerminalDocumentTerminal = {
   readonly rows: number
   readonly buffer: { readonly active: TerminalDocumentBuffer }
   readonly options: TerminalDocumentTerminalOptions
+  readonly _core?: TerminalDocumentCore
   resize: (cols: number, rows: number) => void
   refresh: (start: number, end: number) => void
   dispose: () => void
@@ -98,6 +118,10 @@ export type TerminalDocumentScope = {
   terminalTheme: TerminalDocumentTheme
   /** `terminal-theme`: the contrast floor in force, published or derived from the background. */
   terminalMinimumContrastRatio: number
+  /** `selection-overlay`: OSC 8 links captured from scrollback before xterm replayed it. */
+  initialOscLinks: TerminalInitialOscLink[]
+  /** `selection-overlay`: how far the captured rows have scrolled out of the buffer. */
+  initialOscLinkRowOffset: number
   /** `runtime-state`: the escape byte every report is prefixed with. */
   ESC: string
   /** `runtime-state`: whether the TUI asked for SGR (1006) mouse reports. */
@@ -177,6 +201,8 @@ export function createTerminalDocumentScope(): TerminalDocumentScope {
     defaultTheme: DEFAULT_TERMINAL_THEME,
     terminalTheme: DEFAULT_TERMINAL_THEME,
     terminalMinimumContrastRatio: 3,
+    initialOscLinks: [],
+    initialOscLinkRowOffset: 0,
     ESC: String.fromCharCode(27),
     sgrMouseMode: false,
     sgrMousePixelsMode: false,

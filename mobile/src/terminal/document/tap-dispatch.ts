@@ -3,11 +3,11 @@ import {
   enterSelect,
   handleDragMove,
   notify,
-  notifyTerminalSurfaceTap,
   stopEdgeScroll,
   viewportToCell
 } from './document-externals'
 import { scope } from './document-scope'
+import { notifyTerminalSurfaceTap } from './surface-tap'
 
 // ============================================================
 // LATCHING TOUCH DISPATCHER (document-level)

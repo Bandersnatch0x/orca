@@ -78,13 +78,6 @@ export declare function handleDragMove(handle: string, clientX: number, clientY:
 /** `selection-overlay`: stops the edge-scroll a handle drag may have started. */
 export declare function stopEdgeScroll(): void
 
-/** `surface-touch-gestures`: reports a surface tap to the host. */
-export declare function notifyTerminalSurfaceTap(
-  clientX: number,
-  clientY: number,
-  fromTouch: boolean
-): void
-
 /** `mouse-report-and-scroll-routing`: the tracking mode the TUI last asked for. */
 export declare function getMouseTrackingMode(): string
 
@@ -96,3 +89,9 @@ export declare function applyXtermSelection(): void
 
 /** `selection-overlay`: moves the handles and the menu pill to the current selection. */
 export declare function repositionOverlay(): void
+
+/** `mouse-report-and-scroll-routing`: the bytes a plain click sends, or '' when it sends none. */
+export declare function buildMouseClickInput(originX: number, originY: number): string
+
+/** `mouse-report-and-scroll-routing`: whether a tracking mode consumes plain clicks. */
+export declare function isClickMouseTrackingMode(mode: string): boolean

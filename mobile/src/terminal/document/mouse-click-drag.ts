@@ -5,12 +5,12 @@ import {
   handleDragMove,
   isSafeSgrMouseCoordinate,
   notify,
-  notifyTerminalSurfaceTap,
   repositionOverlay,
   stopEdgeScroll,
   viewportToCell
 } from './document-externals'
 import { scope } from './document-scope'
+import { notifyTerminalSurfaceTap } from './surface-tap'
 import { viewportToMouseReportCell } from './mouse-report-cell'
 import { dispatcherShouldBlockSurface } from './tap-dispatch'
 

@@ -1,4 +1,9 @@
 import { colors } from '../../theme/mobile-theme'
+import {
+  TERMINAL_FILE_URL_REGEX_SOURCE,
+  TERMINAL_HTTP_URL_MAX_LENGTH,
+  TERMINAL_HTTP_URL_REGEX_SOURCE
+} from '../terminal-webview-url-tap'
 
 /**
  * The build-time values the document's script text carries as literals.
@@ -13,3 +18,12 @@ import { colors } from '../../theme/mobile-theme'
 
 /** The page background before a theme arrives, and the fallback when a theme omits one. */
 export const terminalBackgroundFallback = colors.terminalBg
+
+/** The http(s) candidate pattern, as a string because the document builds the RegExp per call. */
+export const terminalHttpUrlRegexSource = TERMINAL_HTTP_URL_REGEX_SOURCE
+
+/** The file:// candidate pattern, same shape. */
+export const terminalFileUrlRegexSource = TERMINAL_FILE_URL_REGEX_SOURCE
+
+/** The longest candidate a tap will open, matching desktop. */
+export const terminalHttpUrlMaxLength = TERMINAL_HTTP_URL_MAX_LENGTH
