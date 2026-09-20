@@ -191,9 +191,52 @@ async function declaredFunctions(moduleNames, nameFor) {
   return found
 }
 
+/** The name the emitted factory is declared under, and the one the native document calls. */
+export const TERMINAL_DOCUMENT_FACTORY_NAME = 'createTerminalDocument'
+
+/** The name the factory's host argument is bound to, which is the scope's only input. */
+const HOST_PARAMETER = 'host'
+
 /**
- * The document's whole script: every module in the order the document had, inside the one function
- * scope it has always been, and then the one call sequence that starts them.
+ * The emitted scope construction, which is the one line the host argument reaches.
+ *
+ * The module declares `scope` for its own consumers, who have no host to pass; the document has
+ * one, and it is the factory's parameter. So the emitted declaration is rewritten rather than
+ * written twice, and the rewrite refuses if the line it expects is not there — a rename that
+ * silently dropped the host would give every call the window defaults.
+ */
+export function bindScopeToHost(text) {
+  const declaration = 'const scope = createTerminalDocumentScope();'
+  const occurrences = text.split(declaration).length - 1
+  if (occurrences !== 1) {
+    throw new Error(
+      `expected exactly one \`${declaration}\` in the emitted scope module, found ${String(occurrences)}`
+    )
+  }
+  return text.replace(declaration, `const scope = createTerminalDocumentScope(${HOST_PARAMETER});`)
+}
+
+/**
+ * One module's text exactly as the emitted document carries it.
+ *
+ * The scope module is the only one the document rewrites, so a reader that compared a raw emit
+ * against the document would miss by that one line. Exported so every reader applies the same
+ * rewrite rather than restating it and agreeing with a document that was built differently.
+ */
+export async function emitDocumentedTerminalModule(moduleName) {
+  const text = await emitTerminalDocumentModule(path.join(documentDirectory, `${moduleName}.ts`))
+  return moduleName === TERMINAL_DOCUMENT_SCOPE_MODULE ? bindScopeToHost(text) : text
+}
+
+/**
+ * The document's whole script: one factory whose body is every module in the order the document
+ * had, the call sequence that starts them, and the handle that stops them again.
+ *
+ * Ruling 22. The concatenation already gave the modules one function scope with one local `scope`;
+ * naming that scope a function is what makes it the shape both hosts run. Every call gets its own
+ * state by construction, so the page needs no module singleton, no reset between mounts and no
+ * claim on the page — a second terminal is a second call. The native document is this function and
+ * one call with no argument, which is what it has always been.
  */
 export async function buildTerminalDocumentScript() {
   const emitted = []
@@ -207,7 +250,7 @@ export async function buildTerminalDocumentScript() {
     ...TERMINAL_DOCUMENT_MODULE_ORDER
   ]
   for (const name of order) {
-    emitted.push(await emitTerminalDocumentModule(path.join(documentDirectory, `${name}.ts`)))
+    emitted.push(await emitDocumentedTerminalModule(name))
   }
   // Rulings 20 and 21: the modules above only declare. The scope's reset comes first, so the
   // state every module reads is the state a fresh parse has; then every element read, listener
@@ -215,7 +258,27 @@ export async function buildTerminalDocumentScript() {
   const calls = [TERMINAL_DOCUMENT_RESET_CALL, ...(await terminalDocumentStartCalls(order))].map(
     (name) => `${INDENT}${name}();`
   )
-  return `(function() {\n${emitted.join('\n')}\n${calls.join('\n')}\n})();`
+  // Ruling 21's cancellation, in reverse module order: a stop undoes what its own start did, and
+  // the frames the document is still owed go last because the stops above may schedule nothing
+  // more. `stop` is what the page's dispose calls; the WebView never calls it.
+  const stops = (await terminalDocumentStopCalls(order))
+    .toReversed()
+    .map((name) => `${INDENT}${INDENT}${name}();`)
+  const stopBody = [
+    `${INDENT}function stop() {`,
+    ...stops,
+    `${INDENT}${INDENT}cancelDocumentFrames();`,
+    `${INDENT}}`
+  ]
+  return [
+    `function ${TERMINAL_DOCUMENT_FACTORY_NAME}(${HOST_PARAMETER}) {`,
+    ...emitted,
+    ...calls,
+    ...stopBody,
+    `${INDENT}return { send: handleMsg, stop: stop };`,
+    `}`,
+    `${TERMINAL_DOCUMENT_FACTORY_NAME}();`
+  ].join('\n')
 }
 
 async function main() {

@@ -158,7 +158,7 @@ window.onerror = function(msg) {
 </div>
 <script>__ORCA_TERMINAL_ENGINE_JS__</script>
 <script>
-(function() {
+function createTerminalDocument(host) {
   function postToReactNativeWebView(message) {
     if (window.ReactNativeWebView) {
       window.ReactNativeWebView.postMessage(JSON.stringify(message));
@@ -315,8 +315,9 @@ window.onerror = function(msg) {
       paintDocumentBackground: paintWindowDocumentBackground
     };
   }
-  function createTerminalDocumentScope() {
-    return { ...createTerminalDocumentState(), ...createTerminalDocumentHostSeams() };
+  function createTerminalDocumentScope(host = {}) {
+    const named = Object.fromEntries(Object.entries(host).filter(([, hook]) => hook !== void 0));
+    return { ...createTerminalDocumentState(), ...createTerminalDocumentHostSeams(), ...named };
   }
   function resetTerminalDocumentScope() {
     const generations = {
@@ -325,7 +326,7 @@ window.onerror = function(msg) {
     };
     Object.assign(scope, createTerminalDocumentState(), generations);
   }
-  const scope = createTerminalDocumentScope();
+  const scope = createTerminalDocumentScope(host);
   function scheduleDocumentFrame(callback) {
     if (scope.framesStopped) {
       return -1;
@@ -3349,7 +3350,21 @@ window.onerror = function(msg) {
   startSelectionMenuButtons();
   startSurfaceTouchGestures();
   startMessageBridge();
-})();
+  function stop() {
+    stopSurfaceTouchGestures();
+    stopTapDispatch();
+    stopSelectionOverlay();
+    stopNormalBufferSmoothScroll();
+    stopHostNotify();
+    stopTerminalInit();
+    stopWebglRecovery();
+    stopFitScale();
+    stopViewportTransform();
+    cancelDocumentFrames();
+  }
+  return { send: handleMsg, stop: stop };
+}
+createTerminalDocument();
 </script>
 </body>
 </html>

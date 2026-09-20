@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import {
   buildTerminalDocumentScript,
+  emitDocumentedTerminalModule,
   emitTerminalDocumentModule
 } from '../../../scripts/build-terminal-document-script.mjs'
 import {
@@ -84,9 +85,9 @@ describe('the document module order', () => {
 
     const script = await buildTerminalDocumentScript()
     const emittedAt = async (name: string) => {
-      const text = await emitTerminalDocumentModule(
-        fileURLToPath(new URL(`./${name}.ts`, import.meta.url))
-      )
+      // As the document carries it: the scope module is the one the generator rewrites, so a raw
+      // emit would be absent from the script for a reason that has nothing to do with order.
+      const text = await emitDocumentedTerminalModule(name)
       const at = script.indexOf(text)
       expect(at, `${name} is not in the emitted document`).toBeGreaterThanOrEqual(0)
       return at

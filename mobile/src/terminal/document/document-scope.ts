@@ -6,7 +6,8 @@ import {
   installWindowErrorReporter,
   paintWindowDocumentBackground,
   postToReactNativeWebView,
-  type TerminalDocumentErrorReporter
+  type TerminalDocumentHost,
+  type TerminalDocumentHostSeams
 } from './document-host-seams'
 import type {
   TerminalDocumentDisposable,
@@ -23,6 +24,7 @@ import type { TerminalDocumentThemeMessage } from './terminal-theme'
 // Re-exported so every module that reads the scope keeps naming one import for both: the split is
 // about this file's length, not about a second place to look for the engine's shape.
 export type * from './document-terminal-shape'
+export type { TerminalDocumentHost, TerminalDocumentHostSeams } from './document-host-seams'
 /**
  * The state the in-WebView terminal document shares across its parts.
  *
@@ -223,25 +225,6 @@ export type TerminalDocumentState = {
   framesStopped: boolean
 }
 
-/**
- * The six host seams, kept out of the state above because they are the one thing a reset must
- * not touch: the page sets them once per mount, before the start sequence runs.
- */
-export type TerminalDocumentHostSeams = {
-  /** `host-notify`, `viewport-transform`: where a message for the host goes. */
-  postToHost: (message: Record<string, unknown>) => void
-  /** `terminal-init`: builds the xterm terminal. */
-  createTerminal: (options: Record<string, unknown>) => TerminalDocumentTerminal
-  /** `terminal-init`: builds the unicode11 addon, or answers null when the host has none. */
-  createUnicode11Addon: () => TerminalDocumentWebglAddon | null
-  /** `webgl-recovery`: builds the WebGL addon, or answers null when the host has none. */
-  createWebglAddon: () => TerminalDocumentWebglAddon | null
-  /** `host-notify`: installs the document's runtime error reporter with the host. */
-  installErrorReporter: (report: TerminalDocumentErrorReporter) => () => void
-  /** `terminal-theme`: paints the terminal's background behind the grid. */
-  paintDocumentBackground: (background: string) => void
-}
-
 /** The document's whole scope: its state, and the seams to whatever is hosting it. */
 export type TerminalDocumentScope = TerminalDocumentState & TerminalDocumentHostSeams
 
@@ -412,8 +395,11 @@ function createTerminalDocumentHostSeams(): TerminalDocumentHostSeams {
   }
 }
 
-export function createTerminalDocumentScope(): TerminalDocumentScope {
-  return { ...createTerminalDocumentState(), ...createTerminalDocumentHostSeams() }
+export function createTerminalDocumentScope(
+  host: TerminalDocumentHost = {}
+): TerminalDocumentScope {
+  const named = Object.fromEntries(Object.entries(host).filter(([, hook]) => hook !== undefined))
+  return { ...createTerminalDocumentState(), ...createTerminalDocumentHostSeams(), ...named }
 }
 
 /**

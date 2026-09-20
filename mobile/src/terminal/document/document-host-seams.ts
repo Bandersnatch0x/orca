@@ -28,6 +28,34 @@ export type TerminalDocumentErrorReporter = (
   error?: TerminalEngineError
 ) => void
 
+/**
+ * The six host seams, kept out of the state above because they are the one thing a reset must
+ * not touch: the page sets them once per mount, before the start sequence runs.
+ */
+export type TerminalDocumentHostSeams = {
+  /** `host-notify`, `viewport-transform`: where a message for the host goes. */
+  postToHost: (message: Record<string, unknown>) => void
+  /** `terminal-init`: builds the xterm terminal. */
+  createTerminal: (options: Record<string, unknown>) => TerminalDocumentTerminal
+  /** `terminal-init`: builds the unicode11 addon, or answers null when the host has none. */
+  createUnicode11Addon: () => TerminalDocumentWebglAddon | null
+  /** `webgl-recovery`: builds the WebGL addon, or answers null when the host has none. */
+  createWebglAddon: () => TerminalDocumentWebglAddon | null
+  /** `host-notify`: installs the document's runtime error reporter with the host. */
+  installErrorReporter: (report: TerminalDocumentErrorReporter) => () => void
+  /** `terminal-theme`: paints the terminal's background behind the grid. */
+  paintDocumentBackground: (background: string) => void
+}
+
+/**
+ * What a host may hand the document instead of a window read.
+ *
+ * Every seam has a default, so a host names only the ones it owns differently: inside the WebView
+ * that is none of them, and the page names all six. Absent and present-but-undefined mean the same
+ * thing, which is why the scope's spread filters rather than trusting key order.
+ */
+export type TerminalDocumentHost = Partial<TerminalDocumentHostSeams>
+
 declare global {
   interface Window {
     ReactNativeWebView?: { postMessage: (message: string) => void }

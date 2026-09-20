@@ -1,8 +1,24 @@
-import { fileURLToPath } from 'node:url'
-import { emitTerminalDocumentModule } from '../../../scripts/build-terminal-document-script.mjs'
+import { emitDocumentedTerminalModule } from '../../../scripts/build-terminal-document-script.mjs'
 import { XTERM_HTML } from '../terminal-webview-html'
 
-const SCOPE_OPEN = '(function() {\n'
+const SCOPE_OPEN = 'function createTerminalDocument(host) {\n'
+const DOCUMENT_CALL = 'createTerminalDocument();'
+
+/**
+ * The document's whole program: the factory the script declares and the one call that runs it.
+ *
+ * Ruling 22 made the document a function, so a test that evaluates the program gets a declaration
+ * and a call rather than an IIFE. Held here rather than in each test file, which is where four
+ * copies of the old slice lived.
+ */
+export function generatedDocumentProgram(): string {
+  const start = XTERM_HTML.indexOf(SCOPE_OPEN)
+  const end = XTERM_HTML.lastIndexOf(DOCUMENT_CALL)
+  if (start === -1 || end <= start) {
+    throw new Error('the document does not carry the factory and its call')
+  }
+  return XTERM_HTML.slice(start, end + DOCUMENT_CALL.length)
+}
 // The first declaration the document makes once the scope object exists. Ruling 20 left the
 // modules below with no top-level statements at all, so the anchor is a declaration rather than
 // the surface read that used to open them.
@@ -11,14 +27,18 @@ const FIRST_STATEMENT_AFTER_SCOPE = '  function startRuntimeConstants() {'
 /**
  * The scope object the document opens with. Every block below it reads and writes document state
  * through this one object, so a test that evaluates a block has to build it first.
+ *
+ * Ruling 22 made the document a factory, so the text below reads the `host` argument the factory
+ * was called with. A block evaluated on its own has no factory around it, so the preamble declares
+ * the argument the WebView's own call passes: none, which is every seam on its window default.
  */
 export function documentScopePreamble(): string {
   const start = XTERM_HTML.indexOf(SCOPE_OPEN)
   const end = XTERM_HTML.indexOf(FIRST_STATEMENT_AFTER_SCOPE, start)
   if (start === -1 || end <= start) {
-    throw new Error('the document does not open with the scope object')
+    throw new Error('the document does not open as the factory')
   }
-  return XTERM_HTML.slice(start + SCOPE_OPEN.length, end)
+  return `const host = undefined;\n${XTERM_HTML.slice(start + SCOPE_OPEN.length, end)}`
 }
 
 /**
@@ -27,9 +47,7 @@ export function documentScopePreamble(): string {
  * parallel copy of them.
  */
 export async function generatedDocumentModule(name: string): Promise<string> {
-  const emitted = await emitTerminalDocumentModule(
-    fileURLToPath(new URL(`./${name}.ts`, import.meta.url))
-  )
+  const emitted = await emitDocumentedTerminalModule(name)
   if (!XTERM_HTML.includes(emitted)) {
     throw new Error(`the document does not carry the ${name} module; rebuild the document script`)
   }
