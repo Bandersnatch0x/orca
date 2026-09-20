@@ -27,7 +27,8 @@ describe('the mouse-report cell module', () => {
           rebindings: 9,
           // Thirteen one-statement `if` bodies the linter braces.
           bracedBodies: 13,
-          unboundCatches: 0
+          unboundCatches: 0,
+          numberProperties: 0
         }
       }
     )

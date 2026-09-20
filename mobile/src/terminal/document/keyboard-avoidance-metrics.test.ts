@@ -21,7 +21,8 @@ describe('the keyboard-avoidance metrics module', () => {
         rebindings: 9,
         bracedBodies: 10,
         // The row scan and the alternate-screen probe.
-        unboundCatches: 2
+        unboundCatches: 2,
+        numberProperties: 0
       }
     })
   })

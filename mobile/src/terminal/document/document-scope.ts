@@ -77,6 +77,8 @@ export type TerminalDocumentScope = {
   webglRecoveryTimer: ReturnType<typeof setTimeout> | null
   /** `runtime-state-and-text-scaling`: the theme the host last sent, replayed on visibility. */
   terminalThemeInput: unknown
+  /** `wheel-scroll`: sub-line wheel travel carried between events; reset by a touch scroll. */
+  wheelAccumDeltaY: number
 }
 
 /** An xterm listener handle, as the document disposes of one. */
@@ -105,7 +107,8 @@ export function createTerminalDocumentScope(): TerminalDocumentScope {
     initRows: 24,
     webglAddon: null,
     webglRecoveryTimer: null,
-    terminalThemeInput: null
+    terminalThemeInput: null,
+    wheelAccumDeltaY: 0
   }
 }
 

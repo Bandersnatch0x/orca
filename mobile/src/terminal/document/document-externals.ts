@@ -38,3 +38,18 @@ export declare function flog(name: string, detail: Record<string, unknown>): voi
 
 /** `terminal-fit-scale`: applies a theme the host sent to the live terminal. */
 export declare function applyTerminalTheme(input: unknown): void
+
+/** `surface-touch-gestures`: whether a dispatcher above the surface is swallowing input. */
+export declare function dispatcherShouldBlockSurface(): boolean
+
+/** `mouse-report-and-scroll-routing`: whether scrolling should reach the TUI as input. */
+export declare function shouldRouteScrollToTerminalInput(): boolean
+
+/** `mouse-report-and-scroll-routing`: sends a line scroll to the terminal at a point. */
+export declare function routeScrollLines(lines: number, clientX: number, clientY: number): void
+
+/** `smooth-scroll-and-cell-geometry`: queues a pixel scroll of the normal buffer. */
+export declare function enqueueNormalBufferScrollDelta(deltaY: number): void
+
+/** `smooth-scroll-and-cell-geometry`: drops any sub-line smooth-scroll travel. */
+export declare function resetSmoothScrollOffset(): void

@@ -43,7 +43,19 @@ export type TerminalDocumentNormalisations = {
   readonly bracedBodies: number
   /** `catch (e)` became `catch`, the unused binding dropped. */
   readonly unboundCatches: number
+  /** A global numeric function became its `Number` property. */
+  readonly numberProperties: number
 }
+
+/**
+ * The globals `unicorn/prefer-number-properties` moves onto `Number`.
+ *
+ * Measured over the whole script: seventeen sites, and the rule is the only one of its kind that
+ * appears often enough to be worth matching. Each is equivalent here because every call is already
+ * behind a `typeof … === 'number'` check or is parsing a string, which is what the `Number` form
+ * does with no coercion of its own.
+ */
+const NUMBER_GLOBALS = new Set(['isFinite', 'isNaN', 'parseInt', 'parseFloat'])
 
 export type TerminalDocumentEquivalence =
   | { readonly equivalent: true; readonly normalisations: TerminalDocumentNormalisations }
@@ -147,6 +159,7 @@ export function compareTerminalDocumentScripts(
   let rebindings = 0
   let bracedBodies = 0
   let unboundCatches = 0
+  let numberProperties = 0
   // Braces arrive in pairs around one statement, so a counter is enough: a close is only ever
   // absorbed while an inserted open is outstanding, which bounds how far this can mask a real one.
   let openInsertedBraces = 0
@@ -165,6 +178,13 @@ export function compareTerminalDocumentScripts(
     // `name` -> `<qualifier>.name`, three tokens for one.
     if (isQualified(after, right, expected, qualifier)) {
       qualifiedReferences += 1
+      left += 1
+      right += 3
+      continue
+    }
+    // `parseInt` -> `Number.parseInt`, the same shape under a different object.
+    if (NUMBER_GLOBALS.has(expected.text) && isQualified(after, right, expected, 'Number')) {
+      numberProperties += 1
       left += 1
       right += 3
       continue
@@ -236,7 +256,8 @@ export function compareTerminalDocumentScripts(
       scopeFieldDeclarations,
       rebindings,
       bracedBodies,
-      unboundCatches
+      unboundCatches,
+      numberProperties
     }
   }
 }

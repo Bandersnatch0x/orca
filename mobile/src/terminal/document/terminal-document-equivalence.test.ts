@@ -22,7 +22,8 @@ const NONE: TerminalDocumentNormalisations = {
   scopeFieldDeclarations: 0,
   rebindings: 0,
   bracedBodies: 0,
-  unboundCatches: 0
+  unboundCatches: 0,
+  numberProperties: 0
 }
 
 function normalisationsOf(before: string, after: string): TerminalDocumentNormalisations | string {
@@ -88,8 +89,24 @@ describe('terminal document script equivalence', () => {
   it('counts a catch clause the linter unbound', () => {
     expect(normalisationsOf('try { a(); } catch (e) {}', 'try {\n  a()\n} catch {}')).toEqual({
       ...NONE,
-      unboundCatches: 1
+      unboundCatches: 1,
+      numberProperties: 0
     })
+  })
+
+  it('counts a global numeric function the linter moved onto Number', () => {
+    expect(
+      normalisationsOf('if (isFinite(a)) b();', 'if (Number.isFinite(a)) {\n  b()\n}')
+    ).toEqual({
+      ...NONE,
+      numberProperties: 1,
+      bracedBodies: 1
+    })
+  })
+
+  it('refuses a global the linter does not move, qualified as if it did', () => {
+    // Only the four numeric globals are this rewrite; anything else under `Number` is a change.
+    expect(normalisationsOf('a = setTimeout(f);', 'a = Number.setTimeout(f)')).toContain('token 2')
   })
 
   it('refuses a qualifier under a name it was not told to expect', () => {

@@ -21,7 +21,8 @@ describe('the query-reply module', () => {
         // The two one-statement `if` bodies.
         bracedBodies: 2,
         // Both `catch (e) {}` clauses, whose binding was never read.
-        unboundCatches: 2
+        unboundCatches: 2,
+        numberProperties: 0
       }
     })
   })
