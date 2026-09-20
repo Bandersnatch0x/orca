@@ -47,37 +47,69 @@ const SHELL_HOST = {
   lastConnected: 1
 }
 
-/** Builds the bundle, serves it under the shell's own policy, and launches the browser. */
+/**
+ * Everything the fixture allocated, in the reverse of the order it took it.
+ *
+ * Shared by the normal close and the rollback, because a setup that fell over halfway has exactly
+ * the same things to give back as one that ran to the end — it just has fewer of them. The server
+ * close is awaited rather than fired: it holds a listening socket, and a socket still open when
+ * the file finishes keeps the vitest worker alive after its last test has reported.
+ */
+async function closeTerminalRenderFixture({ browser, scratch, server }) {
+  await browser?.close()
+  if (server) {
+    await new Promise((resolve) => server.close(resolve))
+  }
+  await rm(scratch, { recursive: true, force: true })
+}
+
+/**
+ * Builds the bundle, serves it under the shell's own policy, and launches the browser.
+ *
+ * Nothing survives a setup that throws. The browser is launched last and is the step most likely
+ * to fail — no Chromium on the machine, an `ORCA_MOBILE_WEB_RENDER_BROWSER` that points nowhere —
+ * and by then the server is listening and the scratch tree is on disk. A caller that never got a
+ * handle back has nothing to close, so this closes them itself and rethrows what actually went
+ * wrong rather than whatever the cleanup might say.
+ */
 export async function startTerminalRenderFixture() {
   const cspHeader = await readShellCsp()
   const bridgeVersion = await readBridgeProtocolVersion()
   const faultGrant = await readBridgeFaultGrant()
   const scratch = await mkdtemp(join(tmpdir(), 'orca-c75-terminal-render-'))
-  const appDir = join(scratch, 'app')
-  const routeDir = join(appDir, MOBILE_WEB_APP_ROUTE_ROOT)
-  await mkdir(routeDir, { recursive: true })
-  await writeFile(join(routeDir, '_layout.tsx'), LAYOUT_SOURCE)
-  // Extensionless, so the bundler resolves the `.web.tsx` sibling exactly as it would for a real
-  // route. Naming the `.tsx` would mount the WebView wrapper no browser can render.
-  await writeFile(
-    join(routeDir, 'terminal-probe.tsx'),
-    probeRouteSource(join(mobileDir, 'src', 'terminal', 'TerminalWebView'))
-  )
-  await writeFile(join(routeDir, 'terminal-control.tsx'), CONTROL_SOURCE)
-  const built = await buildMobileWebAppBundle({
-    appDir,
-    outDir: join(scratch, 'bundle'),
-    pageRoutes: [
-      { pathname: PROBE_ROUTE, grants: [] },
-      { pathname: CONTROL_ROUTE, grants: [] }
-    ]
-  })
-  const { origin, server } = await createBundleServer({ outDir: built.outDir, cspHeader })
-  const executablePath = process.env.ORCA_MOBILE_WEB_RENDER_BROWSER
-  const browser = await chromium.launch({
-    headless: true,
-    ...(executablePath ? { executablePath } : {})
-  })
+  let browser = null
+  let served = null
+  try {
+    const appDir = join(scratch, 'app')
+    const routeDir = join(appDir, MOBILE_WEB_APP_ROUTE_ROOT)
+    await mkdir(routeDir, { recursive: true })
+    await writeFile(join(routeDir, '_layout.tsx'), LAYOUT_SOURCE)
+    // Extensionless, so the bundler resolves the `.web.tsx` sibling exactly as it would for a
+    // real route. Naming the `.tsx` would mount the WebView wrapper no browser can render.
+    await writeFile(
+      join(routeDir, 'terminal-probe.tsx'),
+      probeRouteSource(join(mobileDir, 'src', 'terminal', 'TerminalWebView'))
+    )
+    await writeFile(join(routeDir, 'terminal-control.tsx'), CONTROL_SOURCE)
+    const built = await buildMobileWebAppBundle({
+      appDir,
+      outDir: join(scratch, 'bundle'),
+      pageRoutes: [
+        { pathname: PROBE_ROUTE, grants: [] },
+        { pathname: CONTROL_ROUTE, grants: [] }
+      ]
+    })
+    served = await createBundleServer({ outDir: built.outDir, cspHeader })
+    const executablePath = process.env.ORCA_MOBILE_WEB_RENDER_BROWSER
+    browser = await chromium.launch({
+      headless: true,
+      ...(executablePath ? { executablePath } : {})
+    })
+  } catch (error) {
+    await closeTerminalRenderFixture({ browser, scratch, server: served?.server })
+    throw error
+  }
+  const { origin } = served
 
   async function openPage(
     pathname,
@@ -134,11 +166,7 @@ export async function startTerminalRenderFixture() {
   return {
     openPage,
     openTerminal,
-    close: async () => {
-      await browser.close()
-      server.close()
-      await rm(scratch, { recursive: true, force: true })
-    }
+    close: () => closeTerminalRenderFixture({ browser, scratch, server: served.server })
   }
 }
 

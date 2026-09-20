@@ -137,10 +137,19 @@ export function mountTerminalWebDocument(
   const token = Symbol('orca terminal document')
   liveDocument = token
   let started: StartedDocument | null = null
+  /**
+   * Gives the page back, and only if it is still this mount's to give.
+   *
+   * The check covers the element too, not just the claim. Emptying a host and taking its class
+   * off are what make the terminal disappear, so a release that skipped the claim but did those
+   * anyway would blank the terminal a later mount has on the screen. One rule, inside the thing
+   * it governs, rather than at each caller.
+   */
   const release = () => {
-    if (liveDocument === token) {
-      liveDocument = null
+    if (liveDocument !== token) {
+      return
     }
+    liveDocument = null
     host.innerHTML = ''
     // The sheet stays in the head; the class does not, so every rule in it matches nothing
     // again the moment the terminal is gone.
@@ -171,12 +180,9 @@ export function mountTerminalWebDocument(
     },
     (error: unknown) => {
       // The import failed, so nothing was started and the page has to go back — the overlay's
-      // Reload is a second mount and it must be allowed to make one. Only if the page is still
-      // this mount's: a later mount may already hold it, and emptying its host would take the
-      // terminal that is on the screen.
-      if (liveDocument === token) {
-        release()
-      }
+      // Reload is a second mount and it must be allowed to make one. A later mount may already
+      // hold the page, which `release` answers for.
+      release()
       throw error
     }
   )
