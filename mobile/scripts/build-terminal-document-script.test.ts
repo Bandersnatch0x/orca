@@ -73,4 +73,14 @@ describe('emitting one terminal document module', () => {
     expect(emitted).toContain(JSON.stringify(terminalBackgroundFallback))
     expect(emitted).not.toContain('terminalBackgroundFallback')
   })
+
+  it('drops a lint directive rather than let it parenthesise the expression it guards', async () => {
+    expect(
+      await emit(
+        'export const R =\n' +
+          '  // oxlint-disable-next-line no-useless-escape\n' +
+          '  /a/g\n'
+      )
+    ).toBe('  const R = /a/g;')
+  })
 })

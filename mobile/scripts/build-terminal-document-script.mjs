@@ -50,6 +50,18 @@ async function documentConstantSubstitutions() {
   return substitutions
 }
 
+/**
+ * Whether a line is a lint directive.
+ *
+ * These are removed before the transform, not after it: a directive inside an expression makes
+ * esbuild wrap that expression in parentheses to keep the comment where it was, and those
+ * parentheses are tokens the document does not have. They are tooling metadata about the source,
+ * not part of the program the WebView runs.
+ */
+function isLintDirectiveLine(line) {
+  return /^\s*\/\/\s*oxlint-disable/.test(line)
+}
+
 /** Whether a line opens an import the document does not need. */
 function isImportLine(line) {
   return /^import[\s{'"]/.test(line)
@@ -68,7 +80,11 @@ function closesOnSameLine(line, closer) {
  */
 export async function emitTerminalDocumentModule(modulePath) {
   const source = await readFile(modulePath, 'utf8')
-  const { code } = await esbuild.transform(source, {
+  const program = source
+    .split('\n')
+    .filter((line) => !isLintDirectiveLine(line))
+    .join('\n')
+  const { code } = await esbuild.transform(program, {
     loader: 'ts',
     format: 'esm',
     target: 'chrome74',

@@ -56,3 +56,15 @@ export declare function disposeTermObservers(): void
 
 /** `surface-touch-gestures`: binds touch, wheel and tap handlers to a surface element. */
 export declare function attachSurfaceEventHandlers(target: HTMLElement): void
+
+/** `mouse-report-and-scroll-routing`: the terminal cell under a viewport point, or null. */
+export declare function viewportToCell(
+  originX: number,
+  originY: number
+): { row: number; col: number } | null
+
+/** `selection-overlay`: the text of one viewport row. */
+export declare function getLineText(row: number): string
+
+/** `selection-overlay`: the string index a cell column lands on, wide characters included. */
+export declare function cellColToStringIndex(row: number, col: number): number
