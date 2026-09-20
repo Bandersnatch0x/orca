@@ -14,9 +14,11 @@ import type { TerminalWebViewCommand } from './terminal-webview-messages'
  * by id, the engine on `window` and a `postMessage` back to React Native — this supplies instead,
  * through the four scope seams and the host's own element.
  *
- * The modules are reached by one dynamic import on purpose. They read their elements as they are
- * parsed, so the markup has to be in the document first, and a static import would hoist above
- * the planting and leave every one of them holding null.
+ * The modules are reached by dynamic imports on purpose, and in two steps. They read their
+ * elements as they are parsed, so the markup has to be in the document first and a static import
+ * would hoist above the planting and leave every one of them holding null. And one seam —
+ * the error reporter — is *called* as they are parsed rather than later, so the scope is reached
+ * on its own first and every field is set before a single module runs.
  */
 
 export type TerminalWebDocument = {
@@ -72,10 +74,23 @@ export async function mountTerminalWebDocument(
   // The WebView's `<head>` declares this before anything runs, and the document's error reporter
   // reads it unguarded. Without it the first report throws inside `window.onerror`.
   window.__engineErrors = []
-  const previousOnError = window.onerror
 
-  const documentModules = await import('./document/page-document-modules')
-  const { scope } = documentModules
+  // The scope alone, before the modules that read it: `host-notify` installs the error reporter
+  // as it is parsed, so a field set after the whole document had loaded would be set after the
+  // default had already run.
+  const { scope } = await import('./document/document-scope')
+
+  // Ruling 19 reaches `window.onerror` too: the WebView's document owns its page and may take
+  // that handler, but this one is a guest. An `error` listener reports the same failures without
+  // displacing whatever the page installed, and it is removed on dispose. Held here so the
+  // listener can be taken off again.
+  let errorListener: ((event: ErrorEvent) => void) | null = null
+  scope.installErrorReporter = (report) => {
+    errorListener = (event) => {
+      report(event.message, event.filename, event.lineno, event.colno, event.error)
+    }
+    window.addEventListener('error', errorListener)
+  }
 
   scope.postToHost = receive
   scope.createTerminal = (options) =>
@@ -91,6 +106,9 @@ export async function mountTerminalWebDocument(
         payload: { renderer: 'dom', message: reason }
       })
     )
+
+  // Now the document itself, with every seam already in place.
+  const documentModules = await import('./document/page-document-modules')
 
   // `message-bridge` is not imported (ruling 19), so its one non-bridge duty is re-armed here:
   // a viewport change has to re-fit, or opening the keyboard leaves the terminal at the old scale.
@@ -109,10 +127,10 @@ export async function mountTerminalWebDocument(
     },
     dispose: () => {
       window.removeEventListener('resize', onWindowResize)
-      // The document assigns `window.onerror` as it is parsed, which on the page takes over a
-      // handler the page may own. Restored here so the takeover lasts exactly as long as the
-      // terminal does.
-      window.onerror = previousOnError
+      if (errorListener) {
+        window.removeEventListener('error', errorListener)
+        errorListener = null
+      }
       try {
         scope.term?.dispose()
       } catch {}

@@ -94,12 +94,13 @@ function escapeDenseStream() {
  * keyboard to the device step it cannot answer.
  */
 function probeRouteSource(componentPath) {
-  return `import { useCallback, useEffect, useRef } from 'react'
+  return `import { useCallback, useEffect, useRef, useState } from 'react'
 import { TextInput, View } from 'react-native'
 import { TerminalWebView } from ${JSON.stringify(componentPath)}
 
 export default function TerminalProbeRoute() {
   const handleRef = useRef(null)
+  const [mounted, setMounted] = useState(true)
   const onSelectionCopy = useCallback((text) => {
     globalThis.__orcaTerminalCopied = text
   }, [])
@@ -117,7 +118,8 @@ export default function TerminalProbeRoute() {
       write: (data) => handleRef.current?.write(data),
       selectAll: () => handleRef.current?.doSelectAll(),
       measure: () => handleRef.current?.measureFitDimensions(),
-      awaitReady: () => handleRef.current?.awaitReady()
+      awaitReady: () => handleRef.current?.awaitReady(),
+      setMounted: (next) => setMounted(next)
     }
     const onBeforeInput = (event) => {
       globalThis.__orcaTerminalBeforeInput.push({
@@ -131,12 +133,14 @@ export default function TerminalProbeRoute() {
   }, [])
   return (
     <View testID="terminal-probe" style={{ flex: 1 }}>
-      <TerminalWebView
-        ref={handleRef}
-        onWebReady={onWebReady}
-        onEngineError={onEngineError}
-        onSelectionCopy={onSelectionCopy}
-      />
+      {mounted ? (
+        <TerminalWebView
+          ref={handleRef}
+          onWebReady={onWebReady}
+          onEngineError={onEngineError}
+          onSelectionCopy={onSelectionCopy}
+        />
+      ) : null}
       {/* The shape the terminal's live input takes on the page: xterm's own textarea is inert by
           the document's design, so this is where typed text arrives. */}
       <TextInput testID="terminal-live-input" style={{ fontSize: 16 }} />
@@ -359,6 +363,48 @@ describeRender(
       expect(await terminalCspViolations(page)).toEqual([])
       expect(await page.evaluate(() => globalThis.__orcaTerminalEngineErrors)).toEqual([])
       expect(errors).toEqual([])
+      await page.close()
+    }, 300_000)
+
+    it('never takes window.onerror, and reports a runtime error anyway', async () => {
+      const { page } = await openTerminal()
+      // Null before, because nothing on this page installs one — which is the precondition that
+      // makes the two readings below mean anything.
+      expect(await page.evaluate(() => window.onerror)).toBe(null)
+      await openProbeTerminal(page)
+      expect(await page.evaluate(() => window.onerror)).toBe(null)
+
+      // The reporter still works: the document's own listener catches a real uncaught error and
+      // the component's onEngineError prop receives it. Without this the case above would pass on
+      // a terminal that had simply stopped reporting.
+      await page.evaluate(() => {
+        setTimeout(() => {
+          throw new Error('orca-terminal-render-uncaught')
+        }, 0)
+      })
+      await page.waitForFunction(
+        () =>
+          globalThis.__orcaTerminalEngineErrors.some((entry) =>
+            entry.includes('orca-terminal-render-uncaught')
+          ),
+        { timeout: 30_000, polling: 100 }
+      )
+
+      // And dispose takes the listener back off without touching the handler either.
+      await page.evaluate(() => globalThis.__orcaTerminalProbe.setMounted(false))
+      await page.locator('#terminal-container').waitFor({ state: 'detached', timeout: 30_000 })
+      expect(await page.evaluate(() => window.onerror)).toBe(null)
+      const afterDispose = await page.evaluate(() => {
+        const before = globalThis.__orcaTerminalEngineErrors.length
+        setTimeout(() => {
+          throw new Error('orca-terminal-render-after-dispose')
+        }, 0)
+        return before
+      })
+      await page.waitForTimeout(500)
+      expect(await page.evaluate(() => globalThis.__orcaTerminalEngineErrors.length)).toBe(
+        afterDispose
+      )
       await page.close()
     }, 300_000)
 

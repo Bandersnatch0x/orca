@@ -3,7 +3,9 @@ import {
   createEngineTerminal,
   createEngineUnicode11Addon,
   createEngineWebglAddon,
-  postToReactNativeWebView
+  installWindowErrorReporter,
+  postToReactNativeWebView,
+  type TerminalDocumentErrorReporter
 } from './document-host-seams'
 import type {
   TerminalDocumentDisposable,
@@ -194,6 +196,8 @@ export type TerminalDocumentScope = {
   createUnicode11Addon: () => TerminalDocumentWebglAddon | null
   /** `webgl-recovery`: builds the WebGL addon, or answers null when the host has none. */
   createWebglAddon: () => TerminalDocumentWebglAddon | null
+  /** `host-notify`: installs the document's runtime error reporter with the host. */
+  installErrorReporter: (report: TerminalDocumentErrorReporter) => void
 }
 
 /** The live selection; only the dragged handle is read outside the overlay slice. */
@@ -319,7 +323,8 @@ export function createTerminalDocumentScope(): TerminalDocumentScope {
     postToHost: postToReactNativeWebView,
     createTerminal: createEngineTerminal,
     createUnicode11Addon: createEngineUnicode11Addon,
-    createWebglAddon: createEngineWebglAddon
+    createWebglAddon: createEngineWebglAddon,
+    installErrorReporter: installWindowErrorReporter
   }
 }
 

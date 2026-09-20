@@ -1,5 +1,10 @@
 import { scope } from './document-scope'
 
+// Declared beside the seam that hands it out, and re-exported here because this is where the
+// document's readers have always named it.
+export type { TerminalEngineError } from './document-host-seams'
+import type { TerminalEngineError } from './document-host-seams'
+
 /**
  * The postMessage bridge to the host, and the engine error reporting that rides on it.
  *
@@ -16,9 +21,6 @@ declare global {
 export function notify(msg: Record<string, unknown>) {
   scope.postToHost(msg)
 }
-
-/** What a thrown value can be here: an Error-shaped object, a string, or nothing. */
-export type TerminalEngineError = string | null | undefined | { message?: unknown }
 
 export function engineErrorText(err: TerminalEngineError) {
   if (!err) {
@@ -70,7 +72,7 @@ export function reportEngineError(context: string, err: TerminalEngineError, fat
   })
 }
 
-window.onerror = function (
+scope.installErrorReporter(function (
   msg: string | (Event & { message?: unknown }),
   source,
   line,
@@ -81,4 +83,4 @@ window.onerror = function (
     window.__engineErrors.push(String(msg))
   }
   reportEngineError('terminal runtime error', err || msg)
-}
+})

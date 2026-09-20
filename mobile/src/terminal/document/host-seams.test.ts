@@ -3,7 +3,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { TerminalDocumentScope } from './document-scope'
 
 /**
- * The four host seams the page sets, and the window reads they default to.
+ * The five host seams the page sets, and the window reads and writes they default to.
  *
  * The document reached its host through `window.ReactNativeWebView` and built its engine from
  * `window.Terminal` and the two addon globals the engine bundle installs. On the page neither is
@@ -11,7 +11,7 @@ import type { TerminalDocumentScope } from './document-scope'
  * a terminal notify posted through it would put raw terminal JSON into the bridge's own channel,
  * and there is no engine bundle at all because the page imports xterm as a module.
  *
- * So each of the four is a scope field. The default is the window read the document already did,
+ * So each of the five is a scope field. The default is the window read the document already did,
  * unchanged and still performed at call time rather than captured when the scope is built; the
  * page assigns the field instead. Both halves are asserted here, because a seam whose default
  * quietly stopped reading the window would leave the native document mute with every other
@@ -137,6 +137,17 @@ describe('the document host seams, by default', () => {
     expect(term).toBeInstanceOf(TerminalStub)
   })
 
+  it('installs the runtime error reporter by taking window.onerror', () => {
+    const previous = window.onerror
+    try {
+      const report = () => {}
+      createTerminalDocumentScope().installErrorReporter(report)
+      expect(window.onerror).toBe(report)
+    } finally {
+      window.onerror = previous
+    }
+  })
+
   it('builds each addon from its engine global, and answers null when the engine has none', () => {
     const built = createTerminalDocumentScope()
     expect(built.createUnicode11Addon()).toBe(null)
@@ -200,6 +211,23 @@ describe('the document host seams, once the page sets them', () => {
         expect(posted).toContainEqual({ type: 'pong', pingId: 3 })
       }
     )
+  })
+
+  it('leaves window.onerror alone when the host installs the reporter its own way', () => {
+    // The page's case, which is the whole reason this one is a field: on a page that object is
+    // not the terminal's to take. A host that installs its reporter elsewhere must leave it null.
+    const previous = window.onerror
+    window.onerror = null
+    const installed: unknown[] = []
+    try {
+      const built = createTerminalDocumentScope()
+      built.installErrorReporter = (report) => installed.push(report)
+      built.installErrorReporter(() => {})
+      expect(installed).toHaveLength(1)
+      expect(window.onerror).toBe(null)
+    } finally {
+      window.onerror = previous
+    }
   })
 
   it('reports no webgl addon as a DOM-renderer fallback rather than as a failure', () => {
