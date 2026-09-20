@@ -35,7 +35,6 @@ export function oscLinkAtViewportPoint(clientX: number, clientY: number) {
     if (!cell) {
       return null
     }
-    // oxlint-disable-next-line typescript/no-non-null-assertion -- SAFETY: guarded by the catch, as every internals read here is.
     const line = scope.term!.buffer.active.getLine(cell.row)
     if (!line) {
       return null
@@ -214,7 +213,6 @@ export function initialOscLinkTextAtRow(link: TerminalInitialOscLink, row: numbe
 
 export function oscLinkIdAtCell(line: TerminalDocumentLine, col: number) {
   try {
-    // oxlint-disable-next-line typescript/no-non-null-assertion -- SAFETY: guarded by the catch, as every internals read here is.
     const bufCell = line.getCell!(col)
     return bufCell && bufCell.extended && bufCell.extended.urlId ? bufCell.extended.urlId : 0
   } catch {

@@ -44,7 +44,6 @@ export function attachWebglAddon(allowRecovery: boolean) {
         flog('webgl-context-loss', { retry: allowRecovery })
         scope.webglAddon = null
         try {
-          // oxlint-disable-next-line typescript/no-non-null-assertion -- SAFETY: this listener is registered on the addon, so it cannot run before the assignment above.
           addon!.dispose()
         } catch {}
         refreshTerminalSurface()

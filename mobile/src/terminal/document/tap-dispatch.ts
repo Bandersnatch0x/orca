@@ -112,7 +112,6 @@ document.addEventListener(
     if (onHandle && scope.selMode === 'select') {
       // start handle drag
       const handleName = target === scope.handleStart ? 'start' : 'end'
-      // oxlint-disable-next-line typescript/no-non-null-assertion -- SAFETY: a handle only exists while a selection does.
       scope.sel!.activeHandle = handleName
       dispatch.mode = 'select-drag'
       dispatch.touchId = t.identifier

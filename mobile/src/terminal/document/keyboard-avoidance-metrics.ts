@@ -11,7 +11,6 @@ export function lineHasVisibleContent(
   if (!cell || !line.getCell) {
     return false
   }
-  // oxlint-disable-next-line typescript/no-non-null-assertion -- SAFETY: only reached from computeContentBottomRow, past its `!scope.term` guard.
   const limit = Math.min(scope.term!.cols || 0, line.length || 0)
   for (let x = 0; x < limit; x++) {
     const current = line.getCell(x, cell)

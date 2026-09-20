@@ -123,7 +123,6 @@ export function beginMouseDrag(gesture: TerminalMouseGesture) {
   gesture.mode = 'selecting'
   scope.selMode = 'select'
   scope.sel = { anchor: anchor, focus: anchor, activeHandle: 'end' }
-  // oxlint-disable-next-line typescript/no-non-null-assertion -- SAFETY: the overlay element is in the document shell.
   scope.selectionOverlay!.classList.add('active')
   notify({ type: 'set-select-mode', enabled: true })
   applyXtermSelection()

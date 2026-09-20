@@ -94,7 +94,6 @@ export function getTotalScale() {
 }
 
 export function updateTransform() {
-  // oxlint-disable-next-line typescript/no-non-null-assertion -- SAFETY: the document shell ships the surface element.
   scope.surface!.style.transform =
     'translate(' + scope.panX + 'px,' + scope.panY + 'px) scale(' + getTotalScale() + ')'
   updateScrollIndicator(false)
@@ -137,7 +136,6 @@ export function updateScrollIndicator(reveal: boolean) {
     clearTimeout(scope.scrollIndicatorHideTimer)
   }
   scope.scrollIndicatorHideTimer = setTimeout(function () {
-    // oxlint-disable-next-line typescript/no-non-null-assertion -- SAFETY: the guard above returned when it was absent.
     scrollIndicator!.classList.remove('visible')
     scope.scrollIndicatorHideTimer = null
   }, 550)

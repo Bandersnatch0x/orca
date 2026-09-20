@@ -101,7 +101,6 @@ export function cancelSelect() {
       scope.term.refresh(0, scope.term.rows - 1)
     } catch {}
   }
-  // oxlint-disable-next-line typescript/no-non-null-assertion -- SAFETY: the document shell ships the overlay element.
   scope.selectionOverlay!.classList.remove('active')
   notify({ type: 'set-select-mode', enabled: false })
 }
@@ -109,7 +108,6 @@ export function cancelSelect() {
 export function enterSelect(col: number, absRow: number) {
   scope.selMode = 'select'
   seedWordSelection(col, absRow)
-  // oxlint-disable-next-line typescript/no-non-null-assertion -- SAFETY: the document shell ships the overlay element.
   scope.selectionOverlay!.classList.add('active')
   notify({ type: 'set-select-mode', enabled: true })
   notify({ type: 'haptic', kind: 'selection' })

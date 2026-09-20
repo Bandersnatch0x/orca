@@ -3,7 +3,6 @@ import { notify } from './host-notify'
 import { cancelSelect } from './selection-range'
 import { repositionOverlay } from './selection-overlay'
 
-// oxlint-disable-next-line typescript/no-non-null-assertion -- SAFETY: the document shell ships the menu buttons.
 scope.btnCopy!.addEventListener('click', function (e) {
   e.preventDefault()
   e.stopPropagation()
@@ -18,7 +17,6 @@ scope.btnCopy!.addEventListener('click', function (e) {
   }
 })
 
-// oxlint-disable-next-line typescript/no-non-null-assertion -- SAFETY: the document shell ships the menu buttons.
 scope.btnSelAll!.addEventListener('click', function (e) {
   e.preventDefault()
   e.stopPropagation()

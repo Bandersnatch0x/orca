@@ -41,7 +41,6 @@ export function measureFitDimensions(containerHeightPx: unknown, retriesLeft?: n
   let cellWidth = 0
   let cellHeight = 0
   if (!notReady) {
-    // oxlint-disable-next-line typescript/no-non-null-assertion -- SAFETY: notReady is exactly the absence check above.
     const core = scope.term!._core
     if (core && core._renderService && core._renderService.dimensions) {
       cellWidth = core._renderService.dimensions.css.cell.width
@@ -180,7 +179,6 @@ export function handleMsg(msg: TerminalHostMessage) {
         const b = scope.term.buffer.active
         if (scope.selMode !== 'select') {
           scope.selMode = 'select'
-          // oxlint-disable-next-line typescript/no-non-null-assertion -- SAFETY: the document shell ships the overlay element.
           scope.selectionOverlay!.classList.add('active')
           notify({ type: 'set-select-mode', enabled: true })
         }

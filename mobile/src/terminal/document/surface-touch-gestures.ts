@@ -1,5 +1,5 @@
 import { scope } from './document-scope'
-import { getCellHeight } from './fit-scale'
+import { clampPan, getCellHeight } from './fit-scale'
 import { notify } from './host-notify'
 import { attachSurfaceMouseClickDragHandler } from './mouse-click-drag'
 import { routeScrollLines, shouldRouteScrollToTerminalInput } from './mouse-input-encoding'
@@ -10,7 +10,6 @@ import {
 } from './normal-buffer-smooth-scroll'
 import { dispatcherShouldBlockSurface } from './tap-dispatch'
 import { applyTextScale, snapToTextScalePreset } from './text-scaling'
-import { clampPan } from './fit-scale'
 import { getTotalScale, updateTransform } from './viewport-transform'
 import { attachSurfaceWheelHandler } from './wheel-scroll'
 
@@ -274,5 +273,4 @@ export function attachSurfaceEventHandlers(targetSurface: TerminalGestureSurface
   )
 }
 
-// oxlint-disable-next-line typescript/no-non-null-assertion -- SAFETY: the document shell ships the surface element.
 attachSurfaceEventHandlers(scope.surface!)

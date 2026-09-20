@@ -91,7 +91,7 @@ export function init(
   scope.initialOscLinkRowOffset = 0
   scope.initialOscLinkEvictionReady = false
   const surfaceSwap = beginTerminalSurfaceSwap()
-  // oxlint-disable-next-line no-unused-vars -- the document declares it here; removing it is a different program.
+  // oxlint-disable-next-line no-unused-vars -- the document declares it here; removing it is a different program
   const nextSurface = surfaceSwap.nextSurface
 
   applyTerminalTheme(nextTheme)
@@ -119,7 +119,6 @@ export function init(
   })
   const nextTerm = scope.term
   scope.pendingTerm = nextTerm
-  // oxlint-disable-next-line typescript/no-non-null-assertion -- SAFETY: the surface swap just mounted one.
   scope.term.open(scope.surface!)
   attachWebglAddon(true)
   if (window.Unicode11Addon && window.Unicode11Addon.Unicode11Addon) {

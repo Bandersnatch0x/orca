@@ -72,7 +72,7 @@ export function disposeTermObservers() {
   scope.termObserverDisposables = []
   for (let i = 0; i < disposables.length; i++) {
     try {
-      // oxlint-disable-next-line no-unused-expressions, typescript/no-non-null-assertion -- SAFETY: the guard is the call's own condition, and it proves the method is there.
+      // oxlint-disable-next-line no-unused-expressions -- the guard is the call's own condition; the document's text is pinned token for token
       disposables[i] && disposables[i].dispose && disposables[i].dispose!()
     } catch {}
   }

@@ -1,7 +1,9 @@
 import { colors } from '../../theme/mobile-theme'
 import { TERMINAL_TEXT_SCALES } from '../../storage/preferences'
-import { DEFAULT_TERMINAL_THEME } from '../terminal-webview-html/theme'
-import { MOBILE_TERMINAL_CARET_OPTIONS } from '../terminal-webview-html/theme'
+import {
+  DEFAULT_TERMINAL_THEME,
+  MOBILE_TERMINAL_CARET_OPTIONS
+} from '../terminal-webview-html/theme'
 import {
   TERMINAL_FILE_URL_REGEX_SOURCE,
   TERMINAL_HTTP_URL_MAX_LENGTH,
