@@ -85,7 +85,7 @@ export function attachWebglAddon(allowRecovery: boolean) {
   }
 }
 
-document.addEventListener('visibilitychange', function () {
+function onDocumentVisibilityChange() {
   if (document.visibilityState !== 'visible') {
     return
   }
@@ -98,4 +98,12 @@ document.addEventListener('visibilitychange', function () {
     }
   } catch {}
   refreshTerminalSurface()
-})
+}
+
+export function startWebglRecovery() {
+  document.addEventListener('visibilitychange', onDocumentVisibilityChange)
+}
+
+export function stopWebglRecovery() {
+  document.removeEventListener('visibilitychange', onDocumentVisibilityChange)
+}

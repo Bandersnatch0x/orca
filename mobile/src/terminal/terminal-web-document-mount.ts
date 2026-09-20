@@ -9,16 +9,18 @@ import type { TerminalWebViewCommand } from './terminal-webview-messages'
 /**
  * The terminal document, mounted in the page instead of in a WebView.
  *
- * Same program: the modules the WebView's script is generated from, run here in the order the
+ * Same program: the modules the WebView's script is generated from, started here in the order the
  * generator emits them. What the WebView's HTML gave them — the stylesheet, the elements they read
  * by id, the engine on `window` and a `postMessage` back to React Native — this supplies instead,
- * through the four scope seams and the host's own element.
+ * through the five scope seams and the host's own element.
  *
- * The modules are reached by dynamic imports on purpose, and in two steps. They read their
- * elements as they are parsed, so the markup has to be in the document first and a static import
- * would hoist above the planting and leave every one of them holding null. And one seam —
- * the error reporter — is *called* as they are parsed rather than later, so the scope is reached
- * on its own first and every field is set before a single module runs.
+ * Ruling 20 is what makes a remount work. ES module bodies run once per page, so the second mount
+ * re-imports nothing: every element read, listener and reporter install lives in a start function,
+ * and this runs that sequence per mount against the markup it has just replanted. `dispose` takes
+ * back the three that outlive the host element.
+ *
+ * The import is still dynamic, because the page bundle must not carry the document into every
+ * route that never opens a terminal.
  */
 
 export type TerminalWebDocument = {
@@ -75,21 +77,19 @@ export async function mountTerminalWebDocument(
   // reads it unguarded. Without it the first report throws inside `window.onerror`.
   window.__engineErrors = []
 
-  // The scope alone, before the modules that read it: `host-notify` installs the error reporter
-  // as it is parsed, so a field set after the whole document had loaded would be set after the
-  // default had already run.
-  const { scope } = await import('./document/document-scope')
+  const documentModules = await import('./document/page-document-modules')
+  const { scope } = documentModules
 
   // Ruling 19 reaches `window.onerror` too: the WebView's document owns its page and may take
   // that handler, but this one is a guest. An `error` listener reports the same failures without
-  // displacing whatever the page installed, and it is removed on dispose. Held here so the
-  // listener can be taken off again.
-  let errorListener: ((event: ErrorEvent) => void) | null = null
+  // displacing whatever the page installed, and it hands back its own removal so `stopHostNotify`
+  // takes it off with everything else.
   scope.installErrorReporter = (report) => {
-    errorListener = (event) => {
+    const errorListener = (event: ErrorEvent) => {
       report(event.message, event.filename, event.lineno, event.colno, event.error)
     }
     window.addEventListener('error', errorListener)
+    return () => window.removeEventListener('error', errorListener)
   }
 
   scope.postToHost = receive
@@ -108,7 +108,7 @@ export async function mountTerminalWebDocument(
     )
 
   // Now the document itself, with every seam already in place.
-  const documentModules = await import('./document/page-document-modules')
+  documentModules.startPageDocumentModules()
 
   // `message-bridge` is not imported (ruling 19), so its one non-bridge duty is re-armed here:
   // a viewport change has to re-fit, or opening the keyboard leaves the terminal at the old scale.
@@ -127,10 +127,7 @@ export async function mountTerminalWebDocument(
     },
     dispose: () => {
       window.removeEventListener('resize', onWindowResize)
-      if (errorListener) {
-        window.removeEventListener('error', errorListener)
-        errorListener = null
-      }
+      documentModules.stopPageDocumentModules()
       try {
         scope.term?.dispose()
       } catch {}

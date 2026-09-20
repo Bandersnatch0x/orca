@@ -52,3 +52,21 @@ export const TERMINAL_DOCUMENT_MODULE_ORDER = [
   'surface-touch-gestures',
   'message-bridge'
 ]
+
+/**
+ * The per-module start function's name, by convention rather than by a second list.
+ *
+ * Ruling 20: no module does work as it is parsed, so each one that had a top-level effect now
+ * exports one function holding it. The generator calls the ones that exist, in module order, at
+ * the foot of the document; the page calls the same names per mount. A convention rather than a
+ * list because a list is a second place to forget.
+ */
+export function terminalDocumentStartFunctionName(moduleName) {
+  return (
+    'start' +
+    moduleName
+      .split('-')
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join('')
+  )
+}

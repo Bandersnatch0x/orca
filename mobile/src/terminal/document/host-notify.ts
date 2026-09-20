@@ -72,15 +72,26 @@ export function reportEngineError(context: string, err: TerminalEngineError, fat
   })
 }
 
-scope.installErrorReporter(function (
-  msg: string | (Event & { message?: unknown }),
-  source,
-  line,
-  column,
-  err?: TerminalEngineError
-) {
-  if (window.__engineErrors.length < 20) {
-    window.__engineErrors.push(String(msg))
+let uninstallErrorReporter: (() => void) | null = null
+
+export function startHostNotify() {
+  uninstallErrorReporter = scope.installErrorReporter(function (
+    msg: string | (Event & { message?: unknown }),
+    source,
+    line,
+    column,
+    err?: TerminalEngineError
+  ) {
+    if (window.__engineErrors.length < 20) {
+      window.__engineErrors.push(String(msg))
+    }
+    reportEngineError('terminal runtime error', err || msg)
+  })
+}
+
+export function stopHostNotify() {
+  if (uninstallErrorReporter) {
+    uninstallErrorReporter()
+    uninstallErrorReporter = null
   }
-  reportEngineError('terminal runtime error', err || msg)
-})
+}

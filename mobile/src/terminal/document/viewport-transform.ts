@@ -4,33 +4,10 @@ import { shouldRouteScrollToTerminalInput } from './mouse-input-encoding'
 import { scope } from './document-scope'
 import { scrollIndicator, scrollThumb } from './text-scaling'
 
-scope.panX = 0
-scope.panY = 0
-scope.smoothScrollOffsetY = 0
-scope.pendingNormalScrollDeltaY = 0
-scope.normalScrollFrameId = null
-scope.initRows = 24
-scope.terminalGeneration = 0
-scope.defaultTheme = terminalDefaultTheme
-scope.terminalThemeInput = null
-scope.terminalTheme = scope.defaultTheme
-scope.terminalMinimumContrastRatio = 3
-scope.webglAddon = null
-scope.webglRecoveryTimer = null
-scope.activeAltScreenSnapshot = false
-scope.trackedMouseTrackingMode = 'none'
-scope.sgrMouseMode = false
-scope.sgrMousePixelsMode = false
-scope.initialOscLinks = []
-scope.initialOscLinkRowOffset = 0
-scope.initialOscLinkEvictionReady = false
-scope.mouseModeScanTail = ''
-scope.handledMessageIds = []
 // Why: after init() the initial scrollback applyFitScale may have run
 // against an empty buffer (or one without the widest line yet). Re-fit
 // once when the first live data chunk arrives so a wider line that pushes
 // scrollWidth past the previously-measured value gets re-scaled to fit.
-scope.firstDataPending = false
 
 // Diagnostic logger — bridges WebView console.log to RN via postMessage.
 // Tag with [fit] so it's easy to filter in the Expo/Metro logs.
@@ -129,4 +106,30 @@ export function updateScrollIndicator(reveal: boolean) {
     scrollIndicator!.classList.remove('visible')
     scope.scrollIndicatorHideTimer = null
   }, 550)
+}
+
+export function startViewportTransform() {
+  scope.panX = 0
+  scope.panY = 0
+  scope.smoothScrollOffsetY = 0
+  scope.pendingNormalScrollDeltaY = 0
+  scope.normalScrollFrameId = null
+  scope.initRows = 24
+  scope.terminalGeneration = 0
+  scope.defaultTheme = terminalDefaultTheme
+  scope.terminalThemeInput = null
+  scope.terminalTheme = scope.defaultTheme
+  scope.terminalMinimumContrastRatio = 3
+  scope.webglAddon = null
+  scope.webglRecoveryTimer = null
+  scope.activeAltScreenSnapshot = false
+  scope.trackedMouseTrackingMode = 'none'
+  scope.sgrMouseMode = false
+  scope.sgrMousePixelsMode = false
+  scope.initialOscLinks = []
+  scope.initialOscLinkRowOffset = 0
+  scope.initialOscLinkEvictionReady = false
+  scope.mouseModeScanTail = ''
+  scope.handledMessageIds = []
+  scope.firstDataPending = false
 }

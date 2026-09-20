@@ -4,7 +4,9 @@ import type {
 } from './document-terminal-shape'
 
 /**
- * The five seams between the document and whatever is hosting it, as the document's own defaults.
+ * The five seams between the document and whatever is hosting it, as the document's own
+ * defaults. The document reads them at six places: `postToHost` twice, `createTerminal`,
+ * `createUnicode11Addon`, `createWebglAddon` and `installErrorReporter` once each.
  *
  * Inside the WebView the host is React Native and the engine is an IIFE that hangs its
  * constructors off `window`; on the page the host is the component that mounted these modules and
@@ -60,7 +62,13 @@ export function createEngineWebglAddon() {
  * The WebView's own installation: the document owns that page, so taking `window.onerror` is
  * taking nothing from anyone. A page mounting these modules must not, which is why this is a
  * field rather than a statement.
+ *
+ * It hands back its own undo, because ruling 20 makes the install a per-mount act and the page's
+ * override is a listener that has to come off again.
  */
 export function installWindowErrorReporter(report: TerminalDocumentErrorReporter) {
   window.onerror = report
+  return function () {
+    window.onerror = null
+  }
 }

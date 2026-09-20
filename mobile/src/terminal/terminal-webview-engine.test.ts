@@ -76,6 +76,7 @@ scope.term = term;
 scope.terminalGeneration = terminalGeneration;
 scope.terminalThemeInput = terminalThemeInput;
 ${terminalHtmlSource.slice(recoveryStart, recoveryEnd)}
+startWebglRecovery();
 attachWebglAddon(true);`).runInNewContext(context)
   return {
     addons,

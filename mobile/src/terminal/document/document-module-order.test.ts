@@ -15,8 +15,8 @@ import {
  * there is dead code that reads as live, and a name left in the list after its file goes makes the
  * generator throw at build time rather than at review time. Both directions are asserted.
  *
- * Four files are deliberately not emitted into the document, each for its own reason, and they
- * are named rather than filtered by a pattern so a fifth cannot join them by looking similar.
+ * Three files are deliberately not emitted into the document, each for its own reason, and they
+ * are named rather than filtered by a pattern so a fourth cannot join them by looking similar.
  */
 const NOT_EMITTED = [
   // Its exports are substituted into the modules that import them as literals, so the document
@@ -71,9 +71,9 @@ describe('the document module order', () => {
     expect(emitted).toBe('')
   })
 
-  it('emits the host seams ahead of the scope, whose defaults are those four functions', () => {
+  it('emits the host seams ahead of the scope, whose defaults are those five functions', () => {
     // Order, not just membership: `createTerminalDocumentScope()` runs as the script is parsed and
-    // reads the four by name, so a seams module emitted after it would throw on the first line of
+    // reads the five by name, so a seams module emitted after it would throw on the first line of
     // the document. The generator's own list is asserted in its test; this is the reason.
     expect(TERMINAL_DOCUMENT_MODULE_ORDER).not.toContain(TERMINAL_DOCUMENT_HOST_SEAMS_MODULE)
     expect(TERMINAL_DOCUMENT_HOST_SEAMS_MODULE).not.toBe(TERMINAL_DOCUMENT_SCOPE_MODULE)

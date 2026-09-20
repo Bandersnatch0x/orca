@@ -256,8 +256,9 @@ afterAll(async () => {
   }
 })
 
-async function openPage(pathname, { errorSentinel = false } = {}) {
+async function openPage(pathname, { errorSentinel = false, beforeNavigate } = {}) {
   const page = await browser.newPage({ viewport: { width: 390, height: 844 } })
+  await beforeNavigate?.(page)
   await page.addInitScript(installCspViolationRecorder)
   if (errorSentinel) {
     await page.addInitScript(installPageErrorSentinel)
@@ -451,6 +452,151 @@ describeRender(
       await page.evaluate(() => globalThis.__orcaTerminalProbe.setMounted(false))
       await page.locator('#terminal-container').waitFor({ state: 'detached', timeout: 30_000 })
       expect(await page.evaluate(() => window.onerror)).toBe(null)
+      await page.close()
+    }, 300_000)
+
+    /**
+     * A terminal that is mounted, taken down and mounted again has to be a terminal again.
+     *
+     * The document's modules are ES modules: their bodies run once per page, so anything they did
+     * as they were parsed — reading their elements by id, installing the error reporter, adding
+     * listeners — a second mount would inherit from the first, pointing at elements that are no
+     * longer in the document. Nothing above the contract would notice: `onWebReady` still fires,
+     * because readiness is the component's own handshake and not a claim about the engine.
+     *
+     * So the assertions are about the live DOM and the live paths, not about readiness.
+     */
+    async function assertLiveTerminal(page, label) {
+      await page.locator('#terminal-surface .xterm').waitFor({ state: 'attached', timeout: 30_000 })
+      expect(
+        await page.evaluate(() => document.querySelectorAll('#terminal-surface .xterm').length),
+        `${label}: xterm elements in the live DOM`
+      ).toBeGreaterThan(0)
+
+      // The selection overlay is the document's own element, reached through the handle: it only
+      // activates if `handleMsg` is talking to the elements that are actually on the page.
+      await page.evaluate(() => globalThis.__orcaTerminalProbe.selectAll())
+      await page.waitForFunction(
+        () => document.getElementById('selection-overlay')?.classList.contains('active') === true,
+        { timeout: 30_000, polling: 100 }
+      )
+
+      // And the reporter, which is the seam that is installed once per mount.
+      const marker = `orca-remount-${label}`
+      await page.evaluate((thrown) => {
+        globalThis.__orcaTerminalEngineErrors = []
+        setTimeout(() => {
+          throw new Error(thrown)
+        }, 0)
+      }, marker)
+      await page.waitForFunction(
+        (thrown) => globalThis.__orcaTerminalEngineErrors.some((entry) => entry.includes(thrown)),
+        marker,
+        { timeout: 30_000, polling: 100 }
+      )
+    }
+
+    it('is a live terminal again after an unmount and a remount', async () => {
+      const { page } = await openTerminal()
+      await openProbeTerminal(page)
+      await assertLiveTerminal(page, 'first-mount')
+
+      await page.evaluate(() => globalThis.__orcaTerminalProbe.setMounted(false))
+      await page.locator('#terminal-container').waitFor({ state: 'detached', timeout: 30_000 })
+      await page.evaluate(() => {
+        globalThis.__orcaTerminalReady = false
+        globalThis.__orcaTerminalProbe.setMounted(true)
+      })
+      await page.waitForFunction(() => globalThis.__orcaTerminalReady === true, {
+        timeout: 60_000,
+        polling: 100
+      })
+      await openProbeTerminal(page)
+      await assertLiveTerminal(page, 'remount')
+      await page.close()
+    }, 300_000)
+
+    it('is a live terminal again after the user reloads a failed one', async () => {
+      // The other way a second mount happens, and the one a user reaches: the terminal fails
+      // before it is ready, the engine-error overlay appears, and Reload disposes the document
+      // and builds another inside the same component. Driven end to end rather than by calling
+      // the handler — an uncaught error before the first `init` is fatal by the document's own
+      // rule, which is what puts the overlay on screen.
+      const { page } = await openTerminal()
+      await page.locator('#terminal-container').waitFor({ state: 'attached', timeout: 30_000 })
+      await page.evaluate(() => {
+        setTimeout(() => {
+          throw new Error('orca-terminal-render-fatal')
+        }, 0)
+      })
+      const reload = page.getByText('Reload')
+      await reload.waitFor({ timeout: 30_000 })
+
+      await page.evaluate(() => {
+        globalThis.__orcaTerminalReady = false
+      })
+      await reload.click()
+      await page.waitForFunction(() => globalThis.__orcaTerminalReady === true, {
+        timeout: 60_000,
+        polling: 100
+      })
+      await openProbeTerminal(page)
+      await assertLiveTerminal(page, 'after-reload')
+      await page.close()
+    }, 300_000)
+
+    it('names the cause when the document chunk will not load', async () => {
+      // The component reaches the document through a dynamic import, so the document is its own
+      // chunk and the chunk can fail: offline, a hashed filename that no longer exists after a
+      // deploy, a module that throws as it evaluates. That is a rejected promise and nothing
+      // else — no engine ran, so no `error` notify is ever posted. Without the rejection being
+      // routed it is an unhandled rejection and a blank frame until the 15 s readiness watchdog.
+      //
+      // The fault is the real one: the chunk is identified by what it carries and refused at the
+      // wire, rather than a stub swapped in for the mount.
+      // A string literal only `host-notify` carries, so the chunk is recognised by its contents
+      // rather than by a filename that is a content hash or by a declaration name a minifier
+      // renames. It has to be unique to the document: the route's own chunk carries the
+      // component, the controller and the notification dispatcher, and refusing that one would
+      // take the whole route down instead of the document.
+      const documentChunkMarker = 'terminal runtime error'
+      let aborted = null
+      const served = []
+      const { page } = await openPage(PROBE_ROUTE, {
+        beforeNavigate: async (opened) => {
+          await opened.route('**/*.js', async (route) => {
+            const response = await route.fetch()
+            const body = await response.text()
+            served.push(route.request().url())
+            if (aborted === null && body.includes(documentChunkMarker)) {
+              aborted = route.request().url()
+              await route.abort('failed')
+              return
+            }
+            await route.fulfill({ response, body })
+          })
+        }
+      })
+      // The chunk is fetched when the component mounts, which is after the page entry is up, so
+      // the refusal is waited for rather than asserted on the way past. A run where nothing
+      // matched would otherwise fail below for the wrong reason.
+      await expect
+        .poll(() => aborted, {
+          timeout: 60_000,
+          message: `no served script carried the document; saw ${served.join(', ')}`
+        })
+        .not.toBe(null)
+      await page.waitForFunction(
+        () =>
+          (globalThis.__orcaTerminalEngineErrors ?? []).some((entry) =>
+            entry.includes('terminal document failed to load')
+          ),
+        undefined,
+        { timeout: 60_000, polling: 100 }
+      )
+      // And the user-visible half: the overlay, with its Reload, rather than a blank frame.
+      await page.getByText('Reload').waitFor({ timeout: 30_000 })
+      await page.unrouteAll({ behavior: 'ignoreErrors' })
       await page.close()
     }, 300_000)
 

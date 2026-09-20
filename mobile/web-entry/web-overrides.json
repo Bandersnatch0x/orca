@@ -35,7 +35,7 @@
     },
     {
       "file": "app/h/[hostId]/files/[worktreeId].web.tsx",
-      "reason": "The shell renders this page for the file explorer, so the page has no shell to mount inside itself and no flag to read; the switch already happened natively. Its native file reaches OrcaMobileWebShellView, whose requireNativeViewManager call runs at import and throws in a browser \u2014 reproduced in the render check, which painted that console error instead of the route."
+      "reason": "The shell renders this page for the file explorer, so the page has no shell to mount inside itself and no flag to read; the switch already happened natively. Its native file reaches OrcaMobileWebShellView, whose requireNativeViewManager call runs at import and throws in a browser — reproduced in the render check, which painted that console error instead of the route."
     },
     {
       "file": "app/h/[hostId]/files/preview/[worktreeId].web.tsx",
@@ -63,7 +63,7 @@
     },
     {
       "file": "src/components/pr-sidebar/MermaidDiagram.web.tsx",
-      "reason": "The native component renders the diagram inside a sandboxed WebView, and react-native-webview is a native component with no browser counterpart: importing it runs a codegen lookup that throws, and the route manifest imports every route, so one such import takes the whole page down rather than one diagram. This one renders the labelled source box the native component already falls back to on a parse or render error. A real browser renderer is reachable \u2014 mermaid is a browser library and the engine bundle is vendored \u2014 but it is a different shape rather than a smaller one: with no WebView to sandbox untrusted diagram source in, the escaping buildHtml does for </script> and the line separators has to be replaced by whatever the DOM path needs, which is its own change with its own proof."
+      "reason": "The native component renders the diagram inside a sandboxed WebView, and react-native-webview is a native component with no browser counterpart: importing it runs a codegen lookup that throws, and the route manifest imports every route, so one such import takes the whole page down rather than one diagram. This one renders the labelled source box the native component already falls back to on a parse or render error. A real browser renderer is reachable — mermaid is a browser library and the engine bundle is vendored — but it is a different shape rather than a smaller one: with no WebView to sandbox untrusted diagram source in, the escaping buildHtml does for </script> and the line separators has to be replaced by whatever the DOM path needs, which is its own change with its own proof."
     },
     {
       "file": "app/h/[hostId]/tasks.web.tsx",
@@ -71,7 +71,7 @@
     },
     {
       "file": "src/browser/browser-frame-layer-paint.web.ts",
-      "reason": "setNativeProps does not exist on React Native Web: an Image or View ref is the DOM node itself, so both native writes throw rather than paint and the pane never shows a frame. This file writes the same two things through the element \u2014 the frame as a background-image on the child RN Web sizes, the double buffer as one opacity write per layer \u2014 so the pane still never re-renders while it streams. It also answers whenBrowserFrameDisplayable, which is a no-op natively: a background write fires no load event, so the flip to the pending layer is armed from an image decode instead of the Image's onLoad."
+      "reason": "setNativeProps does not exist on React Native Web: an Image or View ref is the DOM node itself, so both native writes throw rather than paint and the pane never shows a frame. This file writes the same two things through the element — the frame as a background-image on the child RN Web sizes, the double buffer as one opacity write per layer — so the pane still never re-renders while it streams. It also answers whenBrowserFrameDisplayable, which is a no-op natively: a background write fires no load event, so the flip to the pending layer is armed from an image decode instead of the Image's onLoad."
     },
     {
       "file": "src/browser/browser-frame-data-uri.web.ts",
@@ -99,11 +99,11 @@
     },
     {
       "file": "src/terminal/TerminalWebView.web.tsx",
-      "reason": "react-native-webview has no web build that renders anything: on the page it paints the line \"React Native WebView does not support this platform\" where the terminal was, which is a red line and no terminal rather than a crash. This file mounts the same document the WebView loads \u2014 xterm imported from @xterm/xterm with the unicode11 and webgl addons, and the document's own modules imported in the order the generator emits them \u2014 behind the identical TerminalWebViewProps and TerminalWebViewHandle, so nothing above the contract can tell the two apart."
+      "reason": "react-native-webview has no web build that renders anything: on the page it paints the line \"React Native WebView does not support this platform\" where the terminal was, which is a red line and no terminal rather than a crash. This file mounts the same document the WebView loads — xterm imported from @xterm/xterm with the unicode11 and webgl addons, and the document's own modules imported in the order the generator emits them — behind the identical TerminalWebViewProps and TerminalWebViewHandle, so nothing above the contract can tell the two apart."
     },
     {
       "file": "src/terminal/terminal-webview-html.web.ts",
-      "reason": "The native file composes the whole WebView document, which splices in the 612 KiB minified xterm engine string. On the page that string is unusable \u2014 the shell's CSP is script-src 'self' with frame-src 'none', so there is no nested document to load it into \u2014 and it would be the largest single module in the session route's closure. The web file answers the caret options, the markup and the stylesheet, which is everything the page mounts, and nothing else; mobile-web-terminal-engine-closure.test.mjs is the fence."
+      "reason": "The native file composes the whole WebView document, which splices in the 612 KiB minified xterm engine string. On the page that string is unusable — the shell's CSP is script-src 'self' with frame-src 'none', so there is no nested document to load it into — and it would be the largest single module in the session route's closure. The web file answers the caret options, the markup and the stylesheet, which is everything the page mounts, and nothing else; mobile-web-terminal-engine-closure.test.mjs is the fence."
     },
     {
       "file": "src/platform/media-picker.web.ts",

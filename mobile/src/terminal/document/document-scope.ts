@@ -197,7 +197,7 @@ export type TerminalDocumentScope = {
   /** `webgl-recovery`: builds the WebGL addon, or answers null when the host has none. */
   createWebglAddon: () => TerminalDocumentWebglAddon | null
   /** `host-notify`: installs the document's runtime error reporter with the host. */
-  installErrorReporter: (report: TerminalDocumentErrorReporter) => void
+  installErrorReporter: (report: TerminalDocumentErrorReporter) => () => void
 }
 
 /** The live selection; only the dragged handle is read outside the overlay slice. */

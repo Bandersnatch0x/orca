@@ -12,8 +12,8 @@ export type TerminalSurfaceSwap = {
 // Why: phone-fit startup can issue several init() calls before xterm finishes
 // replaying. Track the last painted surface separately from its replacement.
 let committedTerm: TerminalDocumentTerminal | null = null
-let committedSurface = scope.surface
-scope.pendingTerm = null
+let committedSurface: HTMLElement | null = null
+
 let pendingSurface: HTMLElement | null = null
 
 export function beginTerminalSurfaceSwap() {
@@ -66,4 +66,9 @@ export function commitTerminalSurfaceSwap(
   committedSurface = swap.nextSurface
   scope.pendingTerm = null
   pendingSurface = null
+}
+
+export function startSurfaceSwap() {
+  committedSurface = scope.surface
+  scope.pendingTerm = null
 }

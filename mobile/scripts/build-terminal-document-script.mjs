@@ -5,7 +5,8 @@ import { importTypeScriptModule } from './import-typescript-module.mjs'
 import {
   TERMINAL_DOCUMENT_HOST_SEAMS_MODULE,
   TERMINAL_DOCUMENT_MODULE_ORDER,
-  TERMINAL_DOCUMENT_SCOPE_MODULE
+  TERMINAL_DOCUMENT_SCOPE_MODULE,
+  terminalDocumentStartFunctionName
 } from './terminal-document-module-order.mjs'
 
 /**
@@ -160,23 +161,48 @@ export const TERMINAL_DOCUMENT_SCRIPT_PATH = path.join(
 )
 
 /**
+ * The start functions the emitted document calls, in module order (ruling 20).
+ *
+ * Presence is read from the source rather than listed here: a module that has no top-level effect
+ * exports no start function, and one that grows an effect is reached the moment it does. The
+ * declaration is matched on its own line because that is how esbuild's TypeScript prints it and
+ * how every module in this directory writes it.
+ */
+export async function terminalDocumentStartCalls(moduleNames) {
+  const calls = []
+  for (const name of moduleNames) {
+    const source = await readFile(path.join(documentDirectory, `${name}.ts`), 'utf8')
+    const startName = terminalDocumentStartFunctionName(name)
+    if (new RegExp(`^export function ${startName}\\(\\) \\{$`, 'm').test(source)) {
+      calls.push(startName)
+    }
+  }
+  return calls
+}
+
+/**
  * The document's whole script: every module in the order the document had, inside the one function
- * scope it has always been.
+ * scope it has always been, and then the one call sequence that starts them.
  */
 export async function buildTerminalDocumentScript() {
   const emitted = []
   // The scope object goes first: every module below reads it, and the document is one function
   // scope, so it has to exist before any of them run. It is the only part of the emitted script
   // the hand-written document did not have, and the host seams come ahead of it because its
-  // defaults are those four functions.
-  for (const name of [
+  // defaults are those five functions.
+  const order = [
     TERMINAL_DOCUMENT_HOST_SEAMS_MODULE,
     TERMINAL_DOCUMENT_SCOPE_MODULE,
     ...TERMINAL_DOCUMENT_MODULE_ORDER
-  ]) {
+  ]
+  for (const name of order) {
     emitted.push(await emitTerminalDocumentModule(path.join(documentDirectory, `${name}.ts`)))
   }
-  return `(function() {\n${emitted.join('\n')}\n})();`
+  // Ruling 20: the modules above only declare. Every element read, listener and reporter install
+  // they used to do at parse time is in a start function, and this is where they run — once here,
+  // per mount on the page, in the one order both hosts share.
+  const calls = (await terminalDocumentStartCalls(order)).map((name) => `${INDENT}${name}();`)
+  return `(function() {\n${emitted.join('\n')}\n${calls.join('\n')}\n})();`
 }
 
 async function main() {

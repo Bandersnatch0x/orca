@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
+import { terminalDocumentStartCalls } from '../../../scripts/build-terminal-document-script.mjs'
 import {
   TERMINAL_DOCUMENT_HOST_SEAMS_MODULE,
   TERMINAL_DOCUMENT_MODULE_ORDER,
@@ -25,7 +26,9 @@ const pageEntry = readFileSync(new URL('./page-document-modules.ts', import.meta
 const EXCLUDED = ['message-bridge']
 
 function importedModules(): string[] {
-  return [...pageEntry.matchAll(/^import '\.\/([a-z0-9-]+)'$/gm)].map((match) => match[1]!)
+  return [...pageEntry.matchAll(/^import (?:\{[^}]*\} from )?'\.\/([a-z0-9-]+)'$/gm)].map(
+    (match) => match[1]!
+  )
 }
 
 describe('the page entry for the terminal document', () => {
@@ -40,8 +43,25 @@ describe('the page entry for the terminal document', () => {
   it('names its exclusion, and the exclusion is a module the generator does emit', () => {
     for (const name of EXCLUDED) {
       expect(TERMINAL_DOCUMENT_MODULE_ORDER).toContain(name)
-      expect(pageEntry).not.toContain(`import './${name}'`)
+      expect(importedModules()).not.toContain(name)
     }
+  })
+
+  it('calls the same start sequence the generated document calls, minus the bridge', async () => {
+    // Ruling 20's other half. The import list above only proves the page reaches the same
+    // modules; what runs is the call sequence, and the generator writes its own from the same
+    // sources. A module that grows a start function and is not called here would leave the page
+    // with an element nobody read.
+    const sequence = [...pageEntry.matchAll(/^ {2}(start[A-Za-z]+)\(\)$/gm)].map(
+      (match) => match[1]!
+    )
+    const emitted = await terminalDocumentStartCalls([
+      TERMINAL_DOCUMENT_HOST_SEAMS_MODULE,
+      TERMINAL_DOCUMENT_SCOPE_MODULE,
+      ...TERMINAL_DOCUMENT_MODULE_ORDER
+    ])
+    expect(sequence.length).toBeGreaterThan(0)
+    expect(sequence).toEqual(emitted.filter((name) => name !== 'startMessageBridge'))
   })
 
   it('would report a reordered list', () => {

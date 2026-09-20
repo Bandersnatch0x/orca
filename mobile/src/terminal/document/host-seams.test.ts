@@ -25,9 +25,8 @@ const SURFACE_MARKUP =
   '<button id="sel-menu-copy"></button><button id="sel-menu-all"></button></div></div>' +
   '<div id="scroll-indicator"><div id="scroll-thumb"></div></div>'
 
-// Imported after the markup exists: the document's modules read their elements as they are
-// parsed, exactly as they do inside the WebView, and a static import would run them against an
-// empty body and leave the surface null.
+// Imported after the markup exists: ruling 20 leaves the module bodies inert, but the start
+// sequence below reads the elements as the document does, and it has to find them.
 let createTerminalDocumentScope: () => TerminalDocumentScope
 let scope: TerminalDocumentScope
 let handleMsg: typeof import('./host-message-router').handleMsg
@@ -37,13 +36,12 @@ let attachWebglAddon: typeof import('./webgl-recovery').attachWebglAddon
 
 beforeAll(async () => {
   document.body.innerHTML = SURFACE_MARKUP
-  // The document is one script whose modules run in a pinned order, and three of them read their
-  // elements as they run: `runtime-constants` takes the surface, `surface-swap` takes the surface
-  // it was handed, `selection-state-and-eviction` takes the overlay. Reached in that order here
-  // for the same reason the generator emits them in it.
-  await import('./runtime-constants')
-  await import('./surface-swap')
-  await import('./selection-state-and-eviction')
+  // The page's own entry and the page's own sequence, rather than a hand-picked subset: the
+  // elements `runtime-constants`, `surface-swap` and `selection-state-and-eviction` take are read
+  // in the one order both hosts run them in, and a module added to that order is covered here
+  // without this file being edited.
+  const pageModules = await import('./page-document-modules')
+  pageModules.startPageDocumentModules()
   const documentScope = await import('./document-scope')
   createTerminalDocumentScope = documentScope.createTerminalDocumentScope
   scope = documentScope.scope
@@ -137,12 +135,15 @@ describe('the document host seams, by default', () => {
     expect(term).toBeInstanceOf(TerminalStub)
   })
 
-  it('installs the runtime error reporter by taking window.onerror', () => {
+  it('installs the runtime error reporter by taking window.onerror, and hands back its undo', () => {
     const previous = window.onerror
     try {
       const report = () => {}
-      createTerminalDocumentScope().installErrorReporter(report)
+      const uninstall = createTerminalDocumentScope().installErrorReporter(report)
       expect(window.onerror).toBe(report)
+      // Ruling 20 made the install a per-mount act, so the seam owes the caller a way back.
+      uninstall()
+      expect(window.onerror).toBe(null)
     } finally {
       window.onerror = previous
     }
@@ -221,9 +222,14 @@ describe('the document host seams, once the page sets them', () => {
     const installed: unknown[] = []
     try {
       const built = createTerminalDocumentScope()
-      built.installErrorReporter = (report) => installed.push(report)
-      built.installErrorReporter(() => {})
+      const undos: unknown[] = []
+      built.installErrorReporter = (report) => {
+        installed.push(report)
+        return () => undos.push(report)
+      }
+      built.installErrorReporter(() => {})()
       expect(installed).toHaveLength(1)
+      expect(undos).toHaveLength(1)
       expect(window.onerror).toBe(null)
     } finally {
       window.onerror = previous

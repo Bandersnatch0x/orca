@@ -273,4 +273,6 @@ export function attachSurfaceEventHandlers(targetSurface: TerminalGestureSurface
   )
 }
 
-attachSurfaceEventHandlers(scope.surface!)
+export function startSurfaceTouchGestures() {
+  attachSurfaceEventHandlers(scope.surface!)
+}

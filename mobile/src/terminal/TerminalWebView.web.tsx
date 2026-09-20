@@ -84,6 +84,23 @@ export const TerminalWebView = forwardRef<TerminalWebViewHandle, Props>(
           // The WebView's document posts this as its last parsed statement, once it has seen the
           // engine. Here the engine is an import that already resolved, so the mount is the moment.
           confirmWebReady(true)
+        },
+        (error: unknown) => {
+          if (cancelled) {
+            return
+          }
+          // The document is reached by a dynamic import, so its chunk can fail to load — offline,
+          // a stale hashed filename after a deploy, an evaluation error in a module body. That is
+          // a rejected promise and nothing else: no engine ever ran, so no `error` notify is
+          // coming. It goes down the document's own reporting path, which names the cause in the
+          // overlay instead of leaving the readiness watchdog to say "no ready after 15s".
+          receiveRef.current?.({
+            type: 'error',
+            fatal: true,
+            message: `terminal document failed to load - ${
+              error instanceof Error ? error.message : String(error)
+            }`
+          })
         }
       )
       return () => {

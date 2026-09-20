@@ -37,10 +37,13 @@ export function emitModesIfChanged() {
     })
   }
 }
-scope.lastEmittedModes = {
-  bracketedPasteMode: false,
-  altScreen: false,
-  mouseTrackingMode: 'none',
-  sgrMouseMode: false,
-  sgrMousePixelsMode: false
+
+export function startModeMirroring() {
+  scope.lastEmittedModes = {
+    bracketedPasteMode: false,
+    altScreen: false,
+    mouseTrackingMode: 'none',
+    sgrMouseMode: false,
+    sgrMousePixelsMode: false
+  }
 }

@@ -219,17 +219,14 @@ describe('TerminalWebView scroll routing', () => {
     expect(source).toContain('if (mouseTrackingMode === "x10") {\n      return press;')
     expect(source).toContain('if (col > 126 || row > 126) {\n      return "";')
 
-    const touchEndBlock = sliceBetween(
-      'document.addEventListener(\n    "touchend"',
-      '{ capture: true, passive: true }'
-    )
+    const touchEndBlock = sliceBetween('function onDocumentTouchEnd(e)', '\n  function ')
     expect(touchEndBlock).toContain(
       'notifyTerminalSurfaceTap(scope.tapCandidate.x, scope.tapCandidate.y, true)'
     )
 
     const tapHandlerBlock = sliceBetween(
       'function notifyTerminalSurfaceTap(originX, originY, focusKeyboard)',
-      'document.addEventListener(\n    "touchstart"'
+      'function onDocumentTouchStart(e)'
     )
     expect(tapHandlerBlock.indexOf('oscLinkAtViewportPoint')).toBeLessThan(
       tapHandlerBlock.indexOf('urlAtViewportPoint')

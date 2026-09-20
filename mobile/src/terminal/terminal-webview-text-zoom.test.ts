@@ -26,19 +26,30 @@ const terminalHtmlSource = XTERM_HTML
 const terminalWebglRecoverySource = await generatedDocumentModule('webgl-recovery')
 
 function extractStatusDotNormalizer() {
-  const declarationStart = terminalHtmlSource.indexOf('  scope.CLAUDE_STATUS_DOT =')
-  const declarationEnd = terminalHtmlSource.indexOf('  scope.PRIVATE_MODE_SCAN_TAIL_LIMIT')
+  // Ruling 20 put the dot constants inside `startRuntimeConstants`, so the block is taken whole
+  // and called rather than sliced statement by statement.
+  const declarationStart = terminalHtmlSource.indexOf('  function startRuntimeConstants() {')
+  const declarationEnd = terminalHtmlSource.indexOf(
+    '\n  function startTerminalHandle',
+    declarationStart
+  )
   const functionStart = terminalHtmlSource.indexOf('  function isStatusDotPresentationSelector')
   const functionEnd = terminalHtmlSource.indexOf('\n  function enqueueWrite', functionStart)
   expect(declarationStart).toBeGreaterThanOrEqual(0)
   expect(declarationEnd).toBeGreaterThan(declarationStart)
   expect(functionStart).toBeGreaterThan(declarationEnd)
   expect(functionEnd).toBeGreaterThan(functionStart)
-  return `${documentScopePreamble()}${terminalHtmlSource.slice(declarationStart, declarationEnd)}\n${terminalHtmlSource.slice(functionStart, functionEnd)}`
+  return `${documentScopePreamble()}${terminalHtmlSource.slice(declarationStart, declarationEnd)}\nstartRuntimeConstants();\n${terminalHtmlSource.slice(functionStart, functionEnd)}`
 }
 
 function normalizeStatusDotChunks(chunks: string[]) {
-  const context: { chunks: string[]; output?: string } = { chunks }
+  // `startRuntimeConstants` opens with the surface read; the dot constants below it need no
+  // element, so an element-less document is enough to reach them.
+  const context: {
+    chunks: string[]
+    document: { getElementById: () => null }
+    output?: string
+  } = { chunks, document: { getElementById: () => null } }
   new Script(`
 ${extractStatusDotNormalizer()}
 output = chunks.map(function(chunk) { return normalizeStatusDotPresentation(chunk); }).join('');
@@ -54,16 +65,25 @@ function resolveTerminalFontFamily(navigatorValue: {
   // Slice only the font block itself (isIOSWebView + terminalFontFamily), anchored
   // on font-related markers so unrelated edits below it can't break this extraction.
   const functionStart = terminalHtmlSource.indexOf('  function isIOSWebView()')
-  const declarationLine = terminalHtmlSource.indexOf('  scope.terminalFontFamily =', functionStart)
+  // Ruling 20 put the assignment inside `startTextScaling`, whose earlier statements read
+  // elements and constants this has nothing to do with. So the declarations come from one slice
+  // and the font line from another, which is what "only the font block itself" already meant.
+  const declarationsEnd = terminalHtmlSource.indexOf('  function startTextScaling()', functionStart)
+  const declarationLine = terminalHtmlSource.indexOf(
+    '    scope.terminalFontFamily =',
+    declarationsEnd
+  )
   const declarationEnd = terminalHtmlSource.indexOf(';\n', declarationLine) + 1
   expect(functionStart).toBeGreaterThanOrEqual(0)
-  expect(declarationLine).toBeGreaterThan(functionStart)
+  expect(declarationsEnd).toBeGreaterThan(functionStart)
+  expect(declarationLine).toBeGreaterThan(declarationsEnd)
   expect(declarationEnd).toBeGreaterThan(declarationLine)
   const context: { navigator: typeof navigatorValue; output?: string } = {
     navigator: navigatorValue
   }
   new Script(`
-${documentScopePreamble()}${terminalHtmlSource.slice(functionStart, declarationEnd)}
+${documentScopePreamble()}${terminalHtmlSource.slice(functionStart, declarationsEnd)}
+${terminalHtmlSource.slice(declarationLine, declarationEnd)}
 output = scope.terminalFontFamily;
 `).runInNewContext(context)
   return context.output ?? ''
