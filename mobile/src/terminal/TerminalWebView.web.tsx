@@ -56,7 +56,12 @@ export const TerminalWebView = forwardRef<TerminalWebViewHandle, Props>(
     const [generation, setGeneration] = useState(0)
 
     useImperativeHandle(ref, () => handle, [handle])
-    receiveRef.current = receive
+    // In an effect, not during render: React may replay or discard render work, and the document
+    // reads this ref from a callback that outlives the render that mounted it. The mount effect
+    // below is declared after this one, so the first read already sees a sink.
+    useEffect(() => {
+      receiveRef.current = receive
+    }, [receive])
 
     useEffect(() => {
       let cancelled = false
