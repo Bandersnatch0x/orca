@@ -14,9 +14,7 @@ declare global {
 }
 
 export function notify(msg: Record<string, unknown>) {
-  if (window.ReactNativeWebView) {
-    window.ReactNativeWebView.postMessage(JSON.stringify(msg))
-  }
+  scope.postToHost(msg)
 }
 
 /** What a thrown value can be here: an Error-shaped object, a string, or nothing. */

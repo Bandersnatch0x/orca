@@ -3,6 +3,7 @@ import path from 'node:path'
 import * as esbuild from 'esbuild'
 import { importTypeScriptModule } from './import-typescript-module.mjs'
 import {
+  TERMINAL_DOCUMENT_HOST_SEAMS_MODULE,
   TERMINAL_DOCUMENT_MODULE_ORDER,
   TERMINAL_DOCUMENT_SCOPE_MODULE
 } from './terminal-document-module-order.mjs'
@@ -154,8 +155,13 @@ export async function buildTerminalDocumentScript() {
   const emitted = []
   // The scope object goes first: every module below reads it, and the document is one function
   // scope, so it has to exist before any of them run. It is the only part of the emitted script
-  // the hand-written document did not have.
-  for (const name of [TERMINAL_DOCUMENT_SCOPE_MODULE, ...TERMINAL_DOCUMENT_MODULE_ORDER]) {
+  // the hand-written document did not have, and the host seams come ahead of it because its
+  // defaults are those four functions.
+  for (const name of [
+    TERMINAL_DOCUMENT_HOST_SEAMS_MODULE,
+    TERMINAL_DOCUMENT_SCOPE_MODULE,
+    ...TERMINAL_DOCUMENT_MODULE_ORDER
+  ]) {
     emitted.push(await emitTerminalDocumentModule(path.join(documentDirectory, `${name}.ts`)))
   }
   return `(function() {\n${emitted.join('\n')}\n})();`

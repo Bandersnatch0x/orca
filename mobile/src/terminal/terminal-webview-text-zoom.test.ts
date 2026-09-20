@@ -168,12 +168,16 @@ describe('TerminalWebView text zoom', () => {
 
   it('uses the bundled WebGL-capable xterm stack and platform-safe font fallbacks', () => {
     expect(terminalHtmlSource).not.toContain('cdn.jsdelivr.net')
-    expect(terminalWebglRecoverySource).toContain('window.WebglAddon.WebglAddon')
+    // C7.5 moved the engine constructors onto the scope so the page can set them; inside the
+    // document the default still reads the bundled engine, and it is now the preamble that
+    // carries the read rather than the recovery module.
+    expect(documentScopePreamble()).toContain('window.WebglAddon.WebglAddon')
+    expect(terminalWebglRecoverySource).toContain('scope.createWebglAddon()')
     expect(terminalHtmlSource).toContain('function isIOSWebView()')
     expect(terminalHtmlSource).toContain('fontFamily: scope.terminalFontFamily')
     expect(terminalHtmlSource).toContain('fontWeight: "300"')
     expect(terminalHtmlSource).toContain('fontWeightBold: "500"')
-    expect(terminalWebglRecoverySource).toContain('new window.WebglAddon.WebglAddon()')
+    expect(documentScopePreamble()).toContain('new window.WebglAddon.WebglAddon()')
   })
 
   const IOS_IPHONE_NAVIGATOR = {

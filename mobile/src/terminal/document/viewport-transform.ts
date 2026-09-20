@@ -4,12 +4,6 @@ import { shouldRouteScrollToTerminalInput } from './mouse-input-encoding'
 import { scope } from './document-scope'
 import { scrollIndicator, scrollThumb } from './text-scaling'
 
-declare global {
-  interface Window {
-    ReactNativeWebView?: { postMessage: (message: string) => void }
-  }
-}
-
 scope.panX = 0
 scope.panY = 0
 scope.smoothScrollOffsetY = 0
@@ -42,15 +36,11 @@ scope.firstDataPending = false
 // Tag with [fit] so it's easy to filter in the Expo/Metro logs.
 export function flog(tag: string, payload: Record<string, unknown>) {
   try {
-    if (window.ReactNativeWebView) {
-      window.ReactNativeWebView.postMessage(
-        JSON.stringify({
-          type: 'log',
-          tag: '[fit]' + tag,
-          payload: payload
-        })
-      )
-    }
+    scope.postToHost({
+      type: 'log',
+      tag: '[fit]' + tag,
+      payload: payload
+    })
   } catch {}
 }
 

@@ -1,5 +1,22 @@
 import { terminalDefaultTheme, terminalTextScalePresets } from './document-constants'
+import {
+  createEngineTerminal,
+  createEngineUnicode11Addon,
+  createEngineWebglAddon,
+  postToReactNativeWebView
+} from './document-host-seams'
+import type {
+  TerminalDocumentDisposable,
+  TerminalDocumentTerminal,
+  TerminalDocumentTheme,
+  TerminalDocumentWebglAddon,
+  TerminalInitialOscLink
+} from './document-terminal-shape'
 import type { TerminalDocumentThemeMessage } from './terminal-theme'
+
+// Re-exported so every module that reads the scope keeps naming one import for both: the split is
+// about this file's length, not about a second place to look for the engine's shape.
+export type * from './document-terminal-shape'
 /**
  * The state the in-WebView terminal document shares across its parts.
  *
@@ -22,104 +39,6 @@ import type { TerminalDocumentThemeMessage } from './terminal-theme'
  *
  * The table grows one group at a time as C7.1 extracts them; a field arrives with its group.
  */
-
-/** One cell of a buffer line, as the document inspects it. */
-/** xterm's OSC 8 link service, reached through internals and always guarded. */
-export type TerminalOscLinkService = { getLinkData?: (id: number) => { uri?: string } | undefined }
-
-/** The xterm internals the OSC 8 lookup walks. */
-export type TerminalDocumentCore = {
-  _renderService?: { dimensions?: { css: { cell: { height: number; width: number } } } }
-  _oscLinkService?: TerminalOscLinkService
-  _inputHandler?: { _oscLinkService?: TerminalOscLinkService }
-}
-
-/** An OSC 8 link the host captured from scrollback before xterm replayed it. */
-export type TerminalInitialOscLink = {
-  uri?: string
-  row: number
-  startCol: number
-  endCol: number
-  text?: string
-}
-
-export type TerminalDocumentCell = {
-  isBgDefault: () => boolean
-  extended?: { urlId?: number }
-  isInverse: () => boolean
-  isUnderline?: () => boolean
-  isStrikethrough?: () => boolean
-  isOverline?: () => boolean
-}
-
-/** One buffer line, as the document inspects it. */
-export type TerminalDocumentLine = {
-  readonly length: number
-  translateToString: (trimRight: boolean, startColumn?: number, endColumn?: number) => string
-  getCell?: (x: number, cell?: TerminalDocumentCell | null) => TerminalDocumentCell | null
-}
-
-/** One side of xterm's buffer, as the document reads it. */
-export type TerminalDocumentBuffer = {
-  readonly length: number
-  readonly viewportY: number
-  readonly baseY: number
-  readonly cursorY: number
-  readonly type: string
-  getNullCell?: () => TerminalDocumentCell
-  getLine: (index: number) => TerminalDocumentLine | undefined
-}
-
-/** As much of xterm's terminal as the document's own code touches. */
-/** A terminal colour theme: xterm reads it as a flat map of slot to CSS colour. */
-export type TerminalDocumentTheme = Record<string, string>
-
-/** The xterm options the document writes; each field is owned by the group that sets it. */
-export type TerminalDocumentTerminalOptions = {
-  theme: TerminalDocumentTheme
-  minimumContrastRatio: number
-  fontSize: number
-}
-
-export type TerminalDocumentTerminal = {
-  readonly cols: number
-  readonly rows: number
-  readonly buffer: { readonly active: TerminalDocumentBuffer }
-  options: TerminalDocumentTerminalOptions
-  write: (data: string, callback?: () => void) => void
-  open: (element: HTMLElement) => void
-  scrollToLine: (line: number) => void
-  clear: () => void
-  reset: () => void
-  selectAll: () => void
-  getSelection?: () => string
-  select: (col: number, row: number, length: number) => void
-  clearSelection: () => void
-  readonly unicode: { activeVersion: string }
-  attachCustomKeyEventHandler: (handler: () => boolean) => void
-  onData: (listener: (data: string) => void) => TerminalDocumentDisposable
-  readonly textarea?: {
-    readOnly: boolean
-    tabIndex: number
-    setAttribute: (name: string, value: string) => void
-  }
-  readonly element?: HTMLElement
-  readonly _core?: TerminalDocumentCore
-  readonly modes?: {
-    bracketedPasteMode?: boolean
-    mouseTrackingMode?: string
-    applicationCursorKeysMode?: boolean
-  }
-  onLineFeed?: (listener: () => void) => TerminalDocumentDisposable
-  onScroll?: (listener: () => void) => TerminalDocumentDisposable
-  onWriteParsed?: (listener: () => void) => TerminalDocumentDisposable
-  resize: (cols: number, rows: number) => void
-  refresh: (start: number, end: number) => void
-  dispose: () => void
-  loadAddon: (addon: TerminalDocumentWebglAddon) => void
-  scrollToBottom: () => void
-  scrollLines: (amount: number) => void
-}
 
 export type TerminalDocumentScope = {
   /** `terminal-handle`: the live xterm terminal, or null before the first init. */
@@ -267,9 +186,16 @@ export type TerminalDocumentScope = {
   surface: HTMLElement | null
   /** `surface-swap`: the terminal of a hidden replacement surface that has not committed. */
   pendingTerm: TerminalDocumentTerminal | null
+  /** `host-notify`, `viewport-transform`: where a message for the host goes. */
+  postToHost: (message: Record<string, unknown>) => void
+  /** `terminal-init`: builds the xterm terminal. */
+  createTerminal: (options: Record<string, unknown>) => TerminalDocumentTerminal
+  /** `terminal-init`: builds the unicode11 addon, or answers null when the host has none. */
+  createUnicode11Addon: () => TerminalDocumentWebglAddon | null
+  /** `webgl-recovery`: builds the WebGL addon, or answers null when the host has none. */
+  createWebglAddon: () => TerminalDocumentWebglAddon | null
 }
 
-/** An xterm listener handle, as the document disposes of one. */
 /** The live selection; only the dragged handle is read outside the overlay slice. */
 export type TerminalDocumentSelection = {
   anchor: { row: number; col: number }
@@ -294,15 +220,6 @@ export type TerminalDocumentModes = {
 
 /** One entry of the write queue: a chunk, a boundary callback, or a consumed slot. */
 export type TerminalWriteQueueEntry = string | (() => void) | undefined
-
-export type TerminalDocumentDisposable = { dispose?: () => void }
-
-/** xterm's WebGL addon, as the document loads, repaints and disposes of it. */
-export type TerminalDocumentWebglAddon = {
-  onContextLoss?: (listener: () => void) => void
-  clearTextureAtlas?: () => void
-  dispose: () => void
-}
 
 /**
  * The initial values, which are the ones the document's own declarations carried.
@@ -398,7 +315,11 @@ export function createTerminalDocumentScope(): TerminalDocumentScope {
     tapCandidate: null,
     wheelAccumDeltaY: 0,
     surface: null,
-    pendingTerm: null
+    pendingTerm: null,
+    postToHost: postToReactNativeWebView,
+    createTerminal: createEngineTerminal,
+    createUnicode11Addon: createEngineUnicode11Addon,
+    createWebglAddon: createEngineWebglAddon
   }
 }
 

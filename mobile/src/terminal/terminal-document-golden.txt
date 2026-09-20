@@ -159,6 +159,20 @@ window.onerror = function(msg) {
 <script>__ORCA_TERMINAL_ENGINE_JS__</script>
 <script>
 (function() {
+  function postToReactNativeWebView(message) {
+    if (window.ReactNativeWebView) {
+      window.ReactNativeWebView.postMessage(JSON.stringify(message));
+    }
+  }
+  function createEngineTerminal(options) {
+    return new Terminal(options);
+  }
+  function createEngineUnicode11Addon() {
+    return window.Unicode11Addon && window.Unicode11Addon.Unicode11Addon ? new window.Unicode11Addon.Unicode11Addon() : null;
+  }
+  function createEngineWebglAddon() {
+    return window.WebglAddon && window.WebglAddon.WebglAddon ? new window.WebglAddon.WebglAddon() : null;
+  }
   const textScalePresets = [0.5, 0.75, 1, 1.25, 1.5, 2];
   const statusDot = String.fromCharCode(9210);
   const textPresentationSelector = String.fromCharCode(65038);
@@ -246,7 +260,11 @@ window.onerror = function(msg) {
       tapCandidate: null,
       wheelAccumDeltaY: 0,
       surface: null,
-      pendingTerm: null
+      pendingTerm: null,
+      postToHost: postToReactNativeWebView,
+      createTerminal: createEngineTerminal,
+      createUnicode11Addon: createEngineUnicode11Addon,
+      createWebglAddon: createEngineWebglAddon
     };
   }
   const scope = createTerminalDocumentScope();
@@ -449,15 +467,11 @@ window.onerror = function(msg) {
   scope.firstDataPending = false;
   function flog(tag, payload) {
     try {
-      if (window.ReactNativeWebView) {
-        window.ReactNativeWebView.postMessage(
-          JSON.stringify({
-            type: "log",
-            tag: "[fit]" + tag,
-            payload
-          })
-        );
-      }
+      scope.postToHost({
+        type: "log",
+        tag: "[fit]" + tag,
+        payload
+      });
     } catch {
     }
   }
@@ -959,12 +973,15 @@ window.onerror = function(msg) {
     scope.webglRecoveryTimer = null;
   }
   function attachWebglAddon(allowRecovery) {
-    if (!scope.term || !window.WebglAddon || !window.WebglAddon.WebglAddon) {
+    if (!scope.term) {
       return false;
     }
     let addon = null;
     try {
-      addon = new window.WebglAddon.WebglAddon();
+      addon = scope.createWebglAddon();
+      if (!addon) {
+        return false;
+      }
       scope.webglAddon = addon;
       if (addon.onContextLoss) {
         addon.onContextLoss(function() {
@@ -1072,7 +1089,7 @@ window.onerror = function(msg) {
     const surfaceSwap = beginTerminalSurfaceSwap();
     const nextSurface = surfaceSwap.nextSurface;
     applyTerminalTheme(nextTheme);
-    scope.term = new Terminal({
+    scope.term = scope.createTerminal({
       cols: cols || 80,
       rows: rows || 24,
       theme: scope.terminalTheme,
@@ -1098,12 +1115,13 @@ window.onerror = function(msg) {
     scope.pendingTerm = nextTerm;
     scope.term.open(scope.surface);
     attachWebglAddon(true);
-    if (window.Unicode11Addon && window.Unicode11Addon.Unicode11Addon) {
-      try {
-        scope.term.loadAddon(new window.Unicode11Addon.Unicode11Addon());
+    try {
+      const unicodeAddon = scope.createUnicode11Addon();
+      if (unicodeAddon) {
+        scope.term.loadAddon(unicodeAddon);
         scope.term.unicode.activeVersion = "11";
-      } catch {
       }
+    } catch {
     }
     if (typeof replayData === "string" && replayData.length > 0) {
       enqueueWrite(scope.ESC + "[0m" + replayData);
@@ -1189,9 +1207,7 @@ window.onerror = function(msg) {
     emitKeyboardAvoidanceMetrics();
   }
   function notify(msg) {
-    if (window.ReactNativeWebView) {
-      window.ReactNativeWebView.postMessage(JSON.stringify(msg));
-    }
+    scope.postToHost(msg);
   }
   function engineErrorText(err) {
     if (!err) {

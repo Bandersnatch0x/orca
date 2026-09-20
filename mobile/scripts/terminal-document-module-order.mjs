@@ -5,6 +5,12 @@
  *
  * Both the generator and the equivalence test read this, so neither can drift from the other.
  */
+/**
+ * The host seams, emitted ahead of the scope object: the scope's defaults *are* these functions,
+ * and the factory that reads them runs as the script is parsed.
+ */
+export const TERMINAL_DOCUMENT_HOST_SEAMS_MODULE = 'document-host-seams'
+
 /** The scope object, emitted ahead of everything else because everything else reads it. */
 export const TERMINAL_DOCUMENT_SCOPE_MODULE = 'document-scope'
 
