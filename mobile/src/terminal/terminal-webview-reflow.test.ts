@@ -1,7 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { XTERM_HTML } from './terminal-webview-html'
-import { readTerminalWebViewHtmlSource } from './terminal-webview-html-source.test-support'
 
 // The reflow logic lives as injected in-WebView JS; the message dispatch and
 // handle wiring live in terminal-webview-html.ts / TerminalWebView.tsx. Assert
@@ -10,8 +9,8 @@ const reflowSource = readFileSync(
   new URL('./terminal-webview-reflow-injected.ts', import.meta.url),
   'utf8'
 )
-// Use the assembled document so the test covers the fragments that run in the WebView.
-const htmlSource = readTerminalWebViewHtmlSource()
+// Use the assembled document so the test covers what the WebView actually runs.
+const htmlSource = XTERM_HTML
 const handleSource = readFileSync(new URL('./TerminalWebView.tsx', import.meta.url), 'utf8')
 
 function reflowFnBody(): string {
@@ -46,16 +45,16 @@ describe('terminal WebView reflow', () => {
   })
 
   it('is dispatched by the reflow WebView message and exposed on the handle', () => {
-    expect(htmlSource).toContain("} else if (msg.type === 'reflow') {")
+    expect(htmlSource).toContain('} else if (msg.type === "reflow") {')
     expect(htmlSource).toContain('reflow(msg.cols, msg.rows);')
     expect(handleSource).toContain("postMessage({ type: 'reflow', cols, rows })")
   })
 
   it('does not locally resize hidden WebViews to a one-column grid', () => {
-    expect(htmlSource).toContain('var MIN_FIT_COLS = 20;')
-    expect(htmlSource).toContain('if (cols < MIN_FIT_COLS) return;')
-    expect(htmlSource).toContain("flog('measure-skip-small-width'")
-    expect(htmlSource).toContain("notify({ type: 'measure-result', cols: null, rows: null });")
+    expect(htmlSource).toContain('scope.MIN_FIT_COLS = 20;')
+    expect(htmlSource).toContain('if (cols < scope.MIN_FIT_COLS) {')
+    expect(htmlSource).toContain('flog("measure-skip-small-width"')
+    expect(htmlSource).toContain('notify({ type: "measure-result", cols: null, rows: null });')
   })
 
   // Why: the raw-source assertions above pass even if the reflow module is
@@ -74,7 +73,7 @@ describe('terminal WebView reflow', () => {
     })
 
     it('still routes the reflow message to the injected routine', () => {
-      expect(XTERM_HTML).toContain("} else if (msg.type === 'reflow') {")
+      expect(XTERM_HTML).toContain('} else if (msg.type === "reflow") {')
       expect(XTERM_HTML).toContain('reflow(msg.cols, msg.rows);')
     })
 
@@ -84,8 +83,8 @@ describe('terminal WebView reflow', () => {
       // between them; if its IIFE-time code threw, the listener below would
       // never bind and reflow messages would silently no-op.
       const reflowAt = XTERM_HTML.indexOf('function reflow(cols, rows) {')
-      const dispatchAt = XTERM_HTML.indexOf("var dispatch = { mode: 'idle'")
-      const listenerAt = XTERM_HTML.indexOf("window.addEventListener('message'")
+      const dispatchAt = XTERM_HTML.indexOf('const dispatch = {\n    mode: "idle"')
+      const listenerAt = XTERM_HTML.indexOf('window.addEventListener("message"')
       expect(reflowAt).toBeGreaterThanOrEqual(0)
       expect(dispatchAt).toBeGreaterThan(reflowAt)
       expect(listenerAt).toBeGreaterThan(dispatchAt)

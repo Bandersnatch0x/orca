@@ -5,6 +5,9 @@
  *
  * Both the generator and the equivalence test read this, so neither can drift from the other.
  */
+/** The scope object, emitted ahead of everything else because everything else reads it. */
+export const TERMINAL_DOCUMENT_SCOPE_MODULE = 'document-scope'
+
 export const TERMINAL_DOCUMENT_MODULE_ORDER = [
   'runtime-constants',
   'terminal-handle',

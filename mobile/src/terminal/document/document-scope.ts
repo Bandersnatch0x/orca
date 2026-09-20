@@ -1,5 +1,4 @@
-import { terminalTextScalePresets } from './document-constants'
-import { DEFAULT_TERMINAL_THEME } from '../terminal-webview-html/theme'
+import { terminalDefaultTheme, terminalTextScalePresets } from './document-constants'
 import type { TerminalDocumentThemeMessage } from './terminal-theme'
 /**
  * The state the in-WebView terminal document shares across its parts.
@@ -327,8 +326,8 @@ export function createTerminalDocumentScope(): TerminalDocumentScope {
     webglAddon: null,
     webglRecoveryTimer: null,
     terminalThemeInput: null,
-    defaultTheme: DEFAULT_TERMINAL_THEME,
-    terminalTheme: DEFAULT_TERMINAL_THEME,
+    defaultTheme: terminalDefaultTheme,
+    terminalTheme: terminalDefaultTheme,
     terminalMinimumContrastRatio: 3,
     initialOscLinks: [],
     initialOscLinkRowOffset: 0,

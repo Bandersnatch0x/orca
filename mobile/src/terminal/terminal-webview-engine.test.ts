@@ -3,21 +3,26 @@ import { parse } from 'acorn'
 import { describe, expect, it, vi } from 'vitest'
 import { XTERM_ENGINE_CSS, XTERM_ENGINE_JS } from './terminal-webview-engine.generated'
 import { XTERM_HTML } from './terminal-webview-html'
-import { readTerminalWebViewHtmlSource } from './terminal-webview-html-source.test-support'
-import { TERMINAL_WEBGL_RECOVERY_JS } from './terminal-webview-webgl-recovery-injected'
 
 // Assert against the assembled document so extracted fragments cannot silently
 // disappear from the WebView while source-level checks still pass.
-const terminalHtmlSource = readTerminalWebViewHtmlSource()
+const terminalHtmlSource = XTERM_HTML
+
+/** The scope object the document opens with; the extracted block reads its state through it. */
+function documentScopePreamble(): string {
+  const start = terminalHtmlSource.indexOf('(function() {\n')
+  const end = terminalHtmlSource.indexOf('  scope.surface = document.getElementById', start)
+  if (start === -1 || end <= start) {
+    throw new Error('the document does not open with the scope object')
+  }
+  return terminalHtmlSource.slice(start + '(function() {\n'.length, end)
+}
 
 function createWebglRecoveryHarness(failSecondAttach = false) {
-  const variablesStart = terminalHtmlSource.indexOf('  var webglAddon = null;')
-  const variablesEnd = terminalHtmlSource.indexOf(
-    '\n',
-    terminalHtmlSource.indexOf('  var webglRecoveryTimer = null;')
-  )
-  expect(variablesStart).toBeGreaterThanOrEqual(0)
-  expect(variablesEnd).toBeGreaterThan(variablesStart)
+  const recoveryStart = terminalHtmlSource.indexOf('  function refreshTerminalSurface()')
+  const recoveryEnd = terminalHtmlSource.indexOf('  function init(', recoveryStart)
+  expect(recoveryStart).toBeGreaterThanOrEqual(0)
+  expect(recoveryEnd).toBeGreaterThan(recoveryStart)
 
   const timers: Array<() => void> = []
   const addons: Array<{
@@ -74,8 +79,11 @@ function createWebglRecoveryHarness(failSecondAttach = false) {
     terminalThemeInput,
     window: { WebglAddon: { WebglAddon } }
   }
-  new Script(`${terminalHtmlSource.slice(variablesStart, variablesEnd)}
-${TERMINAL_WEBGL_RECOVERY_JS}
+  new Script(`${documentScopePreamble()}
+scope.term = term;
+scope.terminalGeneration = terminalGeneration;
+scope.terminalThemeInput = terminalThemeInput;
+${terminalHtmlSource.slice(recoveryStart, recoveryEnd)}
 attachWebglAddon(true);`).runInNewContext(context)
   return {
     addons,
@@ -154,14 +162,14 @@ describe('terminal WebView bundled engine', () => {
 
   it('reports WebView message handler failures instead of swallowing them', () => {
     const start = terminalHtmlSource.indexOf('function handleIncomingMessage')
-    const end = terminalHtmlSource.indexOf("window.addEventListener('resize'", start)
+    const end = terminalHtmlSource.indexOf('window.addEventListener("resize"', start)
     expect(start).toBeGreaterThanOrEqual(0)
     expect(end).toBeGreaterThan(start)
     const handlerSource = terminalHtmlSource.slice(start, end)
 
     expect(handlerSource).toContain('reportEngineError(')
-    expect(handlerSource).toContain("'terminal init failed'")
-    expect(handlerSource).toContain("'terminal message failed'")
+    expect(handlerSource).toContain('"terminal init failed"')
+    expect(handlerSource).toContain('"terminal message failed"')
     expect(handlerSource).not.toContain('catch(ex) {}')
   })
 
@@ -170,11 +178,11 @@ describe('terminal WebView bundled engine', () => {
     // old surface visible meanwhile), so the fatal default and the init-catch must
     // key off `everReady` — otherwise a transient reflow error blanks a live
     // terminal behind the fatal overlay. The latch stays set for the document.
-    expect(terminalHtmlSource).toContain('var everReady = false;')
-    expect(terminalHtmlSource).toContain('everReady = true;')
-    expect(terminalHtmlSource).toContain('fatal === undefined ? !everReady : !!fatal')
-    expect(terminalHtmlSource).toContain("msg.type === 'init' && !everReady")
-    expect(terminalHtmlSource).not.toMatch(/fatal === undefined \? !ready\b/)
+    expect(terminalHtmlSource).toContain('scope.everReady = false;')
+    expect(terminalHtmlSource).toContain('scope.everReady = true;')
+    expect(terminalHtmlSource).toContain('fatal === void 0 ? !scope.everReady : !!fatal')
+    expect(terminalHtmlSource).toContain('msg.type === "init" && !scope.everReady')
+    expect(terminalHtmlSource).not.toMatch(/fatal === void 0 \? !scope\.ready\b/)
   })
 
   it('bounds error capture and non-fatal reporting on a degraded engine', () => {
@@ -235,7 +243,7 @@ describe('terminal WebView bundled engine', () => {
   })
 
   it('answers native readiness probes from the live document', () => {
-    expect(terminalHtmlSource).toContain("if (msg.type === 'ping')")
-    expect(terminalHtmlSource).toContain("notify({ type: 'pong', pingId: msg.id })")
+    expect(terminalHtmlSource).toContain('if (msg.type === "ping")')
+    expect(terminalHtmlSource).toContain('notify({ type: "pong", pingId: msg.id })')
   })
 })

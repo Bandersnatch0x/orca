@@ -161,5 +161,4 @@ window.onerror = function(msg) {
 </div>
 <script>${XTERM_ENGINE_JS}</script>
 <script>
-(function() {
 `

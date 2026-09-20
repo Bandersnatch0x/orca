@@ -1,22 +1,30 @@
-import { fileURLToPath } from 'node:url'
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { emitTerminalDocumentModule } from '../../../scripts/build-terminal-document-script.mjs'
-import { TERMINAL_DOCUMENT_MODULE_ORDER } from '../../../scripts/terminal-document-module-order.mjs'
-import { XTERM_ENGINE_JS } from '../terminal-webview-engine.generated'
-import { XTERM_HTML } from '../terminal-webview-html'
+import { fileURLToPath } from 'node:url'
 import {
-  compareTerminalDocumentScripts,
-  readTerminalDocumentScript
-} from './terminal-document-equivalence.test-support'
+  buildTerminalDocumentScript,
+  emitTerminalDocumentModule
+} from '../../../scripts/build-terminal-document-script.mjs'
+import { TERMINAL_DOCUMENT_MODULE_ORDER } from '../../../scripts/terminal-document-module-order.mjs'
+import { compareTerminalDocumentScripts } from './terminal-document-equivalence.test-support'
 
 /**
  * The review of the move, as one number per difference class.
  *
- * Every line of the document's script is now a module, and this says the two are the same program
+ * `terminal-document-pre-flip-script.txt` is the hand-written script exactly as it stood before any
+ * of this, taken from the byte fixture that pinned it. This says the modules emit the same program
  * modulo the qualifier and the repository's own rules rewriting an ES5 document the moment its
  * source is a linted module. Anything outside those classes refuses with the token index and both
  * sides, so a reordered statement, a changed literal or a renamed local cannot pass here.
+ *
+ * The scope object is the one thing the emitted script has that the document did not, so it is
+ * pinned on its own below rather than folded into a count.
  */
+const preFlipScript = readFileSync(
+  new URL('../terminal-document-pre-flip-script.txt', import.meta.url),
+  'utf8'
+)
+
 describe('the whole terminal document script', () => {
   it('is what the modules emit, modulo the seven normalisations', async () => {
     const emitted = await Promise.all(
@@ -25,8 +33,7 @@ describe('the whole terminal document script', () => {
       )
     )
     const candidate = `(function() {\n${emitted.join('\n')}\n})();`
-    const baseline = readTerminalDocumentScript(XTERM_HTML, XTERM_ENGINE_JS)
-    expect(compareTerminalDocumentScripts(baseline, candidate, 'scope')).toEqual({
+    expect(compareTerminalDocumentScripts(preFlipScript, candidate, 'scope')).toEqual({
       equivalent: true,
       normalisations: {
         // The qualifier, partitioned: 609 reads and writes of a name whose declaration stayed put,
@@ -47,5 +54,22 @@ describe('the whole terminal document script', () => {
         unshadowedNames: 7
       }
     })
+  })
+
+  it('adds the scope object and nothing else', async () => {
+    const script = await buildTerminalDocumentScript()
+    const emitted = await Promise.all(
+      TERMINAL_DOCUMENT_MODULE_ORDER.map((name) =>
+        emitTerminalDocumentModule(fileURLToPath(new URL(`./${name}.ts`, import.meta.url)))
+      )
+    )
+    const body = emitted.join('\n')
+    const at = script.indexOf(body)
+    expect(at).toBeGreaterThan(-1)
+    const preamble = script.slice('(function() {\n'.length, at)
+    expect(script.slice(at + body.length)).toBe('\n})();')
+    expect(preamble).toContain('function createTerminalDocumentScope()')
+    expect(preamble).toContain('const scope = createTerminalDocumentScope();')
+    expect(preamble.split('createTerminalDocumentScope').length - 1).toBe(2)
   })
 })

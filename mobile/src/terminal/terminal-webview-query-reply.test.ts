@@ -39,7 +39,7 @@ describe('mobile terminal query replies', () => {
   it('forwards xterm-generated data only after initial replay drains', () => {
     const listenerIndex = XTERM_WEBVIEW_SOURCE.html.indexOf('term.onData(function(data)')
     const enableIndex = XTERM_WEBVIEW_SOURCE.html.indexOf(
-      'attachTerminalQueryReplyBridge(term, gen)',
+      'attachTerminalQueryReplyBridge(scope.term, gen)',
       listenerIndex
     )
     const notifyIndex = XTERM_WEBVIEW_SOURCE.html.indexOf(
@@ -52,9 +52,9 @@ describe('mobile terminal query replies', () => {
     expect(notifyIndex).toBeGreaterThan(listenerIndex)
     expect(XTERM_WEBVIEW_SOURCE.html).toContain('disableStdin: false')
     expect(XTERM_WEBVIEW_SOURCE.html).toContain(
-      'term.attachCustomKeyEventHandler(function() { return false; })'
+      'term.attachCustomKeyEventHandler(function() {\n        return false;\n      });'
     )
-    expect(XTERM_WEBVIEW_SOURCE.html).toContain('term.textarea.readOnly = true')
+    expect(XTERM_WEBVIEW_SOURCE.html).toContain('term.textarea.readOnly = true;')
   })
 
   it('mutes a replacement terminal until its own replay drains', () => {
@@ -64,7 +64,7 @@ describe('mobile terminal query replies', () => {
       initIndex
     )
     const enableIndex = XTERM_WEBVIEW_SOURCE.html.indexOf(
-      'attachTerminalQueryReplyBridge(term, gen)',
+      'attachTerminalQueryReplyBridge(scope.term, gen)',
       disableIndex
     )
 
@@ -114,9 +114,9 @@ describe('mobile terminal query replies', () => {
     gate.forward('\x1b[3;4R')
 
     expect(messages).toEqual([{ type: 'terminal-data', bytes: '\x1b[3;4R' }])
-    const clearStart = XTERM_WEBVIEW_SOURCE.html.indexOf("} else if (msg.type === 'clear') {")
+    const clearStart = XTERM_WEBVIEW_SOURCE.html.indexOf('} else if (msg.type === "clear") {')
     const clearEnd = XTERM_WEBVIEW_SOURCE.html.indexOf(
-      "} else if (msg.type === 'measure')",
+      '} else if (msg.type === "measure")',
       clearStart
     )
     expect(XTERM_WEBVIEW_SOURCE.html.slice(clearStart, clearEnd)).toContain(
