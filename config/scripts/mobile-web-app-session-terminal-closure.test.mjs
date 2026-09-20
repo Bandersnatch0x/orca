@@ -16,15 +16,20 @@ import {
  * the terminal is by far the largest thing in it. Measured here so the trade is a number rather
  * than a claim, and so that a later change cannot quietly put the engine string back.
  *
- * Measured against `ota-c7-1-terminal-document` at 51ae7b1b03, which is this branch's base:
+ * Measured against `ota-c7-1-terminal-document` at 0ce0fc99a2, which is this branch's base:
  *
  *   modules        4316 -> 4363   (+47)
  *   local modules   927 ->  971   (+44)
- *   minified bytes  3,930,787 -> 3,883,532   (-47,255)
+ *   minified bytes  3,930,787 -> 3,875,226   (-55,561)
  *
  * The route gets smaller. It sheds the 612 KiB engine string and the 105 KiB generated document
  * script, both string literals it could not run, and gains xterm and the two addons as real code
  * — 607,945 bytes minified ESM on their own — plus the document's own modules.
+ *
+ * 8,306 of those bytes are C7.1's, not this lane's, and the base cannot show them: C7.1's round-1
+ * fold deleted `URL_TAP_WEBVIEW_JS` from `terminal-webview-url-tap.ts`, and that module is in this
+ * closure only once the page's component reaches it. Against 51ae7b1b03 the same measurement read
+ * -47,255.
  */
 
 const projectDir = fileURLToPath(new URL('../..', import.meta.url))
