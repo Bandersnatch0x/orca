@@ -1,5 +1,5 @@
+import { getCellHeight } from './fit-scale'
 import {
-  getCellHeight,
   getTotalScale,
   routeScrollLines,
   shouldRouteScrollToTerminalInput

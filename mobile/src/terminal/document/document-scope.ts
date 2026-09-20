@@ -29,6 +29,7 @@ export type TerminalOscLinkService = { getLinkData?: (id: number) => { uri?: str
 
 /** The xterm internals the OSC 8 lookup walks. */
 export type TerminalDocumentCore = {
+  _renderService?: { dimensions?: { css: { cell: { height?: number } } } }
   _oscLinkService?: TerminalOscLinkService
   _inputHandler?: { _oscLinkService?: TerminalOscLinkService }
 }
@@ -84,6 +85,7 @@ export type TerminalDocumentTerminal = {
   readonly buffer: { readonly active: TerminalDocumentBuffer }
   readonly options: TerminalDocumentTerminalOptions
   write: (data: string, callback?: () => void) => void
+  readonly element?: HTMLElement
   readonly _core?: TerminalDocumentCore
   readonly modes?: { bracketedPasteMode?: boolean }
   onLineFeed?: (listener: () => void) => TerminalDocumentDisposable
@@ -143,6 +145,10 @@ export type TerminalDocumentScope = {
   sgrMouseMode: boolean
   /** `runtime-state`: whether the TUI asked for SGR pixel (1016) mouse reports. */
   sgrMousePixelsMode: boolean
+  /** `terminal-fit-scale`: the fit scale the document committed. */
+  currentScale: number
+  /** `runtime-state`: the pinch zoom the user applied on top of the fit scale. */
+  userScale: number
   /** `runtime-state`: Claude's record dot, which iOS WebKit would otherwise promote to emoji. */
   CLAUDE_STATUS_DOT: string
   /** `runtime-state`: the variation selector that forces the text glyph. */
@@ -298,6 +304,8 @@ export function createTerminalDocumentScope(): TerminalDocumentScope {
     trackedMouseTrackingMode: 'none',
     sgrMouseMode: false,
     sgrMousePixelsMode: false,
+    currentScale: 1,
+    userScale: 1,
     CLAUDE_STATUS_DOT: statusDot,
     TEXT_PRESENTATION_SELECTOR: textPresentationSelector,
     EMOJI_PRESENTATION_SELECTOR: emojiPresentationSelector,

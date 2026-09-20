@@ -1,7 +1,5 @@
+import { adjustRowsForViewport, applyFitScale, clampPan } from './fit-scale'
 import {
-  adjustRowsForViewport,
-  applyFitScale,
-  clampPan,
   handleMsg,
   notify,
   reportEngineError,

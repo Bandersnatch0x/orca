@@ -12,9 +12,6 @@
 /** `smooth-scroll-and-cell-geometry`: one character cell's width in surface pixels. */
 export declare function getCellWidth(): number
 
-/** `smooth-scroll-and-cell-geometry`: one character cell's height in surface pixels. */
-export declare function getCellHeight(): number
-
 /** `terminal-fit-scale`: the fit scale times the user's pinch scale. */
 export declare function getTotalScale(): number
 
@@ -23,9 +20,6 @@ export declare function notify(message: Record<string, unknown>): void
 
 /** `terminal-init-and-write`: whether xterm is showing the alternate screen buffer. */
 export declare function isAlternateBufferActive(): boolean
-
-/** `terminal-fit-scale`: recomputes the fit scale and applies it, naming why. */
-export declare function applyFitScale(reason: string): void
 
 /** `smooth-scroll-and-cell-geometry`: shows or hides the scroll indicator. */
 export declare function updateScrollIndicator(visible: boolean): void
@@ -84,11 +78,8 @@ export declare function handleMsg(msg: unknown): void
 /** `terminal-init-and-write`: reports an engine failure to the host. */
 export declare function reportEngineError(summary: string, cause: unknown, fatal: unknown): void
 
-/** `terminal-init-and-write`: re-fits the row count to the current viewport. */
-export declare function adjustRowsForViewport(): void
-
-/** `smooth-scroll-and-cell-geometry`: clamps the pan offsets to the scaled surface. */
-export declare function clampPan(): void
-
 /** `smooth-scroll-and-cell-geometry`: writes the pan and scale onto the surface transform. */
 export declare function updateTransform(): void
+
+/** `runtime-state-and-text-scaling`: the scale that fits the grid to the viewport. */
+export declare function computeFitScale(): number
