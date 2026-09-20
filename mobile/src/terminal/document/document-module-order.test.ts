@@ -1,5 +1,7 @@
 import { readdirSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { emitTerminalDocumentModule } from '../../../scripts/build-terminal-document-script.mjs'
 import {
   TERMINAL_DOCUMENT_HOST_SEAMS_MODULE,
   TERMINAL_DOCUMENT_MODULE_ORDER,
@@ -55,6 +57,18 @@ describe('the document module order', () => {
       ...TERMINAL_DOCUMENT_MODULE_ORDER
     ]
     expect(listed).toHaveLength(new Set(listed).size)
+  })
+
+  it('emits nothing for the types-only module, which is why it is an exception', async () => {
+    // The reason `document-terminal-shape` is not in the order list, measured rather than
+    // asserted in prose: esbuild erases a module of type declarations to the empty string, and
+    // emitting it would put a blank line in the document instead of a program. If it ever
+    // declared a value this goes red, and the module belongs in the order list with its own line
+    // in the golden diff.
+    const emitted = await emitTerminalDocumentModule(
+      fileURLToPath(new URL('./document-terminal-shape.ts', import.meta.url))
+    )
+    expect(emitted).toBe('')
   })
 
   it('emits the host seams ahead of the scope, whose defaults are those four functions', () => {
