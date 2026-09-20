@@ -1,7 +1,7 @@
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { emitTerminalDocumentModule } from '../../../scripts/build-terminal-document-script.mjs'
-import { TERMINAL_HTML_MESSAGE_BRIDGE } from '../terminal-webview-html/message-bridge-and-document-close'
+import { TERMINAL_HTML_MESSAGE_BRIDGE } from '../terminal-webview-html/message-bridge'
 import { compareTerminalDocumentScripts } from './terminal-document-equivalence.test-support'
 
 const modulePath = fileURLToPath(new URL('./message-bridge.ts', import.meta.url))

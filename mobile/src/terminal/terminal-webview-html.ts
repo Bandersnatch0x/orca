@@ -11,10 +11,8 @@ import { TERMINAL_HTML_MOUSE_REPORT_AND_SCROLL_ROUTING } from './terminal-webvie
 import { TERMINAL_HTML_SMOOTH_SCROLL_AND_CELL_GEOMETRY } from './terminal-webview-html/smooth-scroll-and-cell-geometry'
 import { TERMINAL_HTML_SELECTION_OVERLAY } from './terminal-webview-html/selection-overlay'
 import { TERMINAL_HTML_SURFACE_TOUCH_GESTURES } from './terminal-webview-html/surface-touch-gestures'
-import {
-  TERMINAL_HTML_DOCUMENT_CLOSE,
-  TERMINAL_HTML_MESSAGE_BRIDGE
-} from './terminal-webview-html/message-bridge-and-document-close'
+import { TERMINAL_HTML_MESSAGE_BRIDGE } from './terminal-webview-html/message-bridge'
+import { TERMINAL_HTML_DOCUMENT_CLOSE } from './terminal-webview-html/document-close'
 
 export { MOBILE_TERMINAL_CARET_OPTIONS } from './terminal-webview-html/theme'
 

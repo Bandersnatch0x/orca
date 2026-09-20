@@ -1,4 +1,4 @@
-// The script ends here and the document ends below: the boundary is where the IIFE closes.
+// The script ends where the IIFE closes; `document-close.ts` carries everything after it.
 export const TERMINAL_HTML_MESSAGE_BRIDGE = `  function handleIncomingMessage(e) {
     var msg;
     try {
@@ -39,8 +39,3 @@ export const TERMINAL_HTML_MESSAGE_BRIDGE = `  function handleIncomingMessage(e)
     reportEngineError('terminal engine missing', 'xterm failed to load', true);
   }
 `
-
-export const TERMINAL_HTML_DOCUMENT_CLOSE = `})();
-</script>
-</body>
-</html>`
