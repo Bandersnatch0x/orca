@@ -566,14 +566,25 @@ describeRender(
       // bump the token it tests itself against — the frame still runs. Nothing but
       // `cancelDocumentFrames` takes it back.
       //
-      // Being owed at the moment of dispose is the whole precondition, so the frame and the
-      // dispose are put in one task rather than left to overlap: a resize refits through the
-      // document's own registry, synchronously, and the unmount is requested in the same discrete
-      // click, which React flushes before the event returns. Nothing the browser serves can run
-      // in between, so the count the observer reads is what dispose was holding. Left to timing
-      // instead — a refit on an interval — the retry loop commits on its first attempt whenever
-      // the grid still measures, and a dispose that lands between two refits owes nothing and
-      // agrees with an empty leak list for the reason under test. That run was one in five.
+      // Two things have to be pinned down for that to be readable, and the first version of this
+      // case had neither.
+      //
+      // The witness has to be owed whenever the dispose lands. A single refit is not: the retry
+      // loop commits on its first attempt whenever the grid still measures, so one resize buys
+      // one frame and a dispose after it owes nothing — which agrees with an empty leak list for
+      // exactly the reason under test, once in five runs. So the refit is re-armed from a frame
+      // of the test's own, which leaves the document owed a frame at the end of every frame the
+      // browser serves, and dispose cannot land inside one.
+      //
+      // And the leak has to be counted from the moment dispose returned, not from the moment the
+      // host element left the DOM. React unmounts in two steps: the mutation phase detaches the
+      // host, and the passive cleanup that calls `dispose` runs after it — 1 ms apart here, 20 to
+      // 35 ms apart with the CPU throttled 20x, which is the CI runner this failed on. A frame
+      // served in that gap runs with a detached container while the document is still live and
+      // has not been asked to stop, and no registry could take it back. It went through
+      // `scheduleDocumentFrame` like every other; the old oracle called it a leak because it
+      // judged by the container rather than by dispose. Only what runs after the last statement
+      // of `dispose` is the document keeping something it gave up.
       let documentChunk = null
       const { page } = await openPage(PROBE_ROUTE, {
         scheduler: true,
@@ -597,29 +608,35 @@ describeRender(
 
       await page.evaluate((chunk) => {
         const state = globalThis.__orcaScheduler
-        state.pendingAtDispose = null
+        state.disposed = null
         state.watching = true
-        // A microtask, so it runs after the synchronous dispose that emptied the host and before
-        // any frame the browser has yet to serve: what it reads is what dispose left owed. A
-        // cancelled frame never runs, so it is still owed here, which is the point.
+        // `dispose` empties the host and drops its class last, after `cancelDocumentFrames`, so
+        // the class going is the moment it returned. Observed on the element rather than on the
+        // tree because React may have detached it already.
+        const host = document.querySelector('.orca-terminal-document-host')
         const observer = new MutationObserver(() => {
-          if (document.getElementById('terminal-container') || state.pendingAtDispose !== null) {
+          if (state.disposed !== null || host.classList.contains('orca-terminal-document-host')) {
             return
           }
-          state.pendingAtDispose = state.scheduled.filter(
-            (entry) => entry.kind === 'frame' && !entry.fired && entry.caller.includes(chunk)
-          ).length
+          state.disposed = {
+            // A cancelled frame never runs, so it is still owed here. That is the point.
+            owed: state.scheduled.filter(
+              (entry) => entry.kind === 'frame' && !entry.fired && entry.caller.includes(chunk)
+            ).length,
+            leakedBefore: state.leaked.length
+          }
           observer.disconnect()
         })
-        observer.observe(document.body, { childList: true, subtree: true })
-        const trigger = document.createElement('button')
-        document.body.appendChild(trigger)
-        trigger.addEventListener('click', () => {
+        observer.observe(host, { attributes: true, attributeFilter: ['class'] })
+        const pulse = () => {
+          if (state.disposed !== null) {
+            return
+          }
           globalThis.dispatchEvent(new Event('resize'))
-          globalThis.__orcaTerminalProbe.setMounted(false)
-        })
-        trigger.click()
-        trigger.remove()
+          requestAnimationFrame(pulse)
+        }
+        requestAnimationFrame(pulse)
+        globalThis.setTimeout(() => globalThis.__orcaTerminalProbe.setMounted(false), 200)
       }, documentChunk)
       await page.locator('#terminal-container').waitFor({ state: 'detached', timeout: 30_000 })
       await page.evaluate(() => {
@@ -635,13 +652,13 @@ describeRender(
 
       const scheduler = await page.evaluate(() => globalThis.__orcaScheduler)
       expect(
-        scheduler.pendingAtDispose,
-        'the document owed at least one frame at the moment it was disposed'
+        scheduler.disposed?.owed,
+        'the document owed a frame at the moment dispose returned'
       ).toBeGreaterThan(0)
       expect(
-        scheduler.leaked.filter(
-          (entry) => entry.startsWith('frame ') && entry.includes(documentChunk)
-        )
+        scheduler.leaked
+          .slice(scheduler.disposed.leakedBefore)
+          .filter((entry) => entry.startsWith('frame ') && entry.includes(documentChunk))
       ).toEqual([])
       await page.unrouteAll({ behavior: 'ignoreErrors' })
       await page.close()
