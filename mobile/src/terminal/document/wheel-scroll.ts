@@ -1,5 +1,4 @@
 import {
-  dispatcherShouldBlockSurface,
   enqueueNormalBufferScrollDelta,
   getCellHeight,
   getTotalScale,
@@ -7,6 +6,7 @@ import {
   routeScrollLines,
   shouldRouteScrollToTerminalInput
 } from './document-externals'
+import { dispatcherShouldBlockSurface } from './tap-dispatch'
 import { scope } from './document-scope'
 
 scope.wheelAccumDeltaY = 0

@@ -36,9 +36,6 @@ export declare function updateScrollIndicator(visible: boolean): void
 /** `runtime-state-and-text-scaling`: one diagnostic line, forwarded to the host. */
 export declare function flog(name: string, detail: Record<string, unknown>): void
 
-/** `surface-touch-gestures`: whether a dispatcher above the surface is swallowing input. */
-export declare function dispatcherShouldBlockSurface(): boolean
-
 /** `mouse-report-and-scroll-routing`: whether scrolling should reach the TUI as input. */
 export declare function shouldRouteScrollToTerminalInput(): boolean
 
@@ -68,3 +65,22 @@ export declare function getLineText(row: number): string
 
 /** `selection-overlay`: the string index a cell column lands on, wide characters included. */
 export declare function cellColToStringIndex(row: number, col: number): number
+
+/** `selection-overlay`: starts a selection at a cell. */
+export declare function enterSelect(col: number, row: number): void
+
+/** `selection-overlay`: clears the selection and leaves select mode. */
+export declare function cancelSelect(): void
+
+/** `selection-overlay`: moves one selection handle to a viewport point. */
+export declare function handleDragMove(handle: string, clientX: number, clientY: number): void
+
+/** `selection-overlay`: stops the edge-scroll a handle drag may have started. */
+export declare function stopEdgeScroll(): void
+
+/** `surface-touch-gestures`: reports a surface tap to the host. */
+export declare function notifyTerminalSurfaceTap(
+  clientX: number,
+  clientY: number,
+  fromTouch: boolean
+): void

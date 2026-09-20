@@ -98,6 +98,30 @@ export type TerminalDocumentScope = {
   terminalTheme: TerminalDocumentTheme
   /** `terminal-theme`: the contrast floor in force, published or derived from the background. */
   terminalMinimumContrastRatio: number
+  /** `selection-overlay`: the press duration that starts a selection, in milliseconds. */
+  LONG_PRESS_MS: number
+  /** `selection-overlay`: the travel that cancels a pending long press, in pixels. */
+  LONG_PRESS_SLOP: number
+  /** `selection-overlay`: the travel that disqualifies a tap, in pixels. */
+  TAP_SLOP: number
+  /** `selection-overlay`: the longest press still counted as a tap, in milliseconds. */
+  TAP_MAX_MS: number
+  /** `selection-overlay`: the overlay element that carries the handles and the menu pill. */
+  selectionOverlay: HTMLElement | null
+  /** `selection-overlay`: the selection's leading handle element. */
+  handleStart: HTMLElement | null
+  /** `selection-overlay`: the selection's trailing handle element. */
+  handleEnd: HTMLElement | null
+  /** `selection-overlay`: `navigate` or `select`. */
+  selMode: string
+  /** `selection-overlay`: the live selection, or null when there is none. */
+  sel: TerminalDocumentSelection | null
+  /** `selection-overlay`: the pending long-press timer. */
+  longPressTimer: ReturnType<typeof setTimeout> | null
+  /** `selection-overlay`: where the pending long press started. */
+  longPressOrigin: TerminalDocumentTouchOrigin | null
+  /** `selection-overlay`: the touch that may still resolve as a tap. */
+  tapCandidate: TerminalDocumentTapCandidate | null
   /** `surface-swap`: the element xterm is currently mounted on. */
   surface: HTMLElement | null
   /** `surface-swap`: the terminal of a hidden replacement surface that has not committed. */
@@ -105,6 +129,15 @@ export type TerminalDocumentScope = {
 }
 
 /** An xterm listener handle, as the document disposes of one. */
+/** The live selection; only the dragged handle is read outside the overlay slice. */
+export type TerminalDocumentSelection = { activeHandle: string | null }
+
+/** Where a press began, and which finger began it. */
+export type TerminalDocumentTouchOrigin = { x: number; y: number; identifier: number }
+
+/** A touch that may still resolve as a tap: its origin, its start time and its finger. */
+export type TerminalDocumentTapCandidate = TerminalDocumentTouchOrigin & { t: number }
+
 export type TerminalDocumentDisposable = { dispose?: () => void }
 
 /** xterm's WebGL addon, as the document loads, repaints and disposes of it. */
@@ -134,6 +167,18 @@ export function createTerminalDocumentScope(): TerminalDocumentScope {
     defaultTheme: DEFAULT_TERMINAL_THEME,
     terminalTheme: DEFAULT_TERMINAL_THEME,
     terminalMinimumContrastRatio: 3,
+    LONG_PRESS_MS: 500,
+    LONG_PRESS_SLOP: 10,
+    TAP_SLOP: 24,
+    TAP_MAX_MS: 700,
+    selectionOverlay: null,
+    handleStart: null,
+    handleEnd: null,
+    selMode: 'navigate',
+    sel: null,
+    longPressTimer: null,
+    longPressOrigin: null,
+    tapCandidate: null,
     wheelAccumDeltaY: 0,
     surface: null,
     pendingTerm: null
