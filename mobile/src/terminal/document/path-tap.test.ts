@@ -20,7 +20,8 @@ describe('the path-tap module', () => {
         bracedBodies: 20,
         unboundCatches: 0,
         // Both `parseInt` calls take a digit run a capture group already matched.
-        numberProperties: 2
+        numberProperties: 2,
+        shorthandProperties: 0
       }
     })
   })

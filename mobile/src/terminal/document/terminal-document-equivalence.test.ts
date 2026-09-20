@@ -23,7 +23,8 @@ const NONE: TerminalDocumentNormalisations = {
   rebindings: 0,
   bracedBodies: 0,
   unboundCatches: 0,
-  numberProperties: 0
+  numberProperties: 0,
+  shorthandProperties: 0
 }
 
 function normalisationsOf(before: string, after: string): TerminalDocumentNormalisations | string {
@@ -90,7 +91,8 @@ describe('terminal document script equivalence', () => {
     expect(normalisationsOf('try { a(); } catch (e) {}', 'try {\n  a()\n} catch {}')).toEqual({
       ...NONE,
       unboundCatches: 1,
-      numberProperties: 0
+      numberProperties: 0,
+      shorthandProperties: 0
     })
   })
 
@@ -111,6 +113,12 @@ describe('terminal document script equivalence', () => {
 
   it('refuses a qualifier under a name it was not told to expect', () => {
     expect(normalisationsOf('a = 1;', 'state.a = 1')).toContain('token 0')
+  })
+
+  it('counts a shorthand property the qualifier had to spell out', () => {
+    expect(
+      normalisationsOf('var o = { alt: alt, n: 1 };', 'var o = { alt: scope.alt, n: 1 };')
+    ).toEqual({ ...NONE, shorthandProperties: 1 })
   })
 
   it('refuses a changed literal', () => {

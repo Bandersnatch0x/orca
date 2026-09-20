@@ -19,7 +19,8 @@ describe('the message-bridge module', () => {
         bracedBodies: 0,
         // The parse guard. The second catch names its error and reports it, so it keeps its binding.
         unboundCatches: 1,
-        numberProperties: 0
+        numberProperties: 0,
+        shorthandProperties: 0
       }
     })
   })

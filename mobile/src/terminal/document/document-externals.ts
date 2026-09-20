@@ -113,3 +113,9 @@ export declare function clampPan(): void
 
 /** `smooth-scroll-and-cell-geometry`: writes the pan and scale onto the surface transform. */
 export declare function updateTransform(): void
+
+/** `selection-state-and-eviction`: logs a line feed and evicts stale selection state. */
+export declare function logFeedAndEvict(): void
+
+/** `write-queue`: runs a callback once the write queue has drained. */
+export declare function afterWritesDrained(callback: () => void): void

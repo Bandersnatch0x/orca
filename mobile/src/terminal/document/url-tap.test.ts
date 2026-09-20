@@ -28,7 +28,8 @@ describe('the url-tap group', () => {
         // Every read of xterm's internals, the two URL parses and the text capture.
         unboundCatches: 6,
         // All four take a digit run a capture group already matched.
-        numberProperties: 4
+        numberProperties: 4,
+        shorthandProperties: 0
       }
     })
   })

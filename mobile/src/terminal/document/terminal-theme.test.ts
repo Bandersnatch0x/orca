@@ -21,7 +21,8 @@ describe('the terminal-theme module', () => {
         unboundCatches: 0,
         // Every `parseInt`, `parseFloat` and `isFinite` here is applied to a value already proved
         // numeric, or to a string the two forms agree on.
-        numberProperties: 9
+        numberProperties: 9,
+        shorthandProperties: 0
       }
     })
   })

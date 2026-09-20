@@ -45,6 +45,8 @@ export type TerminalDocumentNormalisations = {
   readonly unboundCatches: number
   /** A global numeric function became its `Number` property. */
   readonly numberProperties: number
+  /** `{ name: name }` was shorthand; qualifying the value spells the property out again. */
+  readonly shorthandProperties: number
 }
 
 /**
@@ -160,6 +162,7 @@ export function compareTerminalDocumentScripts(
   let bracedBodies = 0
   let unboundCatches = 0
   let numberProperties = 0
+  let shorthandProperties = 0
   // Braces arrive in pairs around one statement, so a counter is enough: a close is only ever
   // absorbed while an inserted open is outstanding, which bounds how far this can mask a real one.
   let openInsertedBraces = 0
@@ -173,6 +176,20 @@ export function compareTerminalDocumentScripts(
       lastMatched = expected
       left += 1
       right += 1
+      continue
+    }
+    // `{ name }` -> `{ name: <qualifier>.name }`: the printer writes the baseline's shorthand back
+    // as one token, and qualifying the value makes the property name unavoidable again.
+    if (
+      actual.label === ':' &&
+      lastMatched?.label === 'name' &&
+      after[right + 1]?.label === 'name' &&
+      after[right + 1]?.text === qualifier &&
+      after[right + 2]?.label === '.' &&
+      after[right + 3]?.text === lastMatched.text
+    ) {
+      shorthandProperties += 1
+      right += 4
       continue
     }
     // `name` -> `<qualifier>.name`, three tokens for one.
@@ -257,7 +274,8 @@ export function compareTerminalDocumentScripts(
       rebindings,
       bracedBodies,
       unboundCatches,
-      numberProperties
+      numberProperties,
+      shorthandProperties
     }
   }
 }

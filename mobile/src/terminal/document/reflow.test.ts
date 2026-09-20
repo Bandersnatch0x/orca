@@ -21,7 +21,8 @@ describe('the reflow module', () => {
         // The two early returns. The bottom-anchoring branch already had its braces.
         bracedBodies: 2,
         unboundCatches: 0,
-        numberProperties: 0
+        numberProperties: 0,
+        shorthandProperties: 0
       }
     })
   })

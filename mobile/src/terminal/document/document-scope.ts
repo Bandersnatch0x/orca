@@ -84,6 +84,10 @@ export type TerminalDocumentTerminal = {
   readonly buffer: { readonly active: TerminalDocumentBuffer }
   readonly options: TerminalDocumentTerminalOptions
   readonly _core?: TerminalDocumentCore
+  readonly modes?: { bracketedPasteMode?: boolean }
+  onLineFeed?: (listener: () => void) => TerminalDocumentDisposable
+  onScroll?: (listener: () => void) => TerminalDocumentDisposable
+  onWriteParsed?: (listener: () => void) => TerminalDocumentDisposable
   resize: (cols: number, rows: number) => void
   refresh: (start: number, end: number) => void
   dispose: () => void
@@ -124,6 +128,8 @@ export type TerminalDocumentScope = {
   initialOscLinkRowOffset: number
   /** `runtime-state`: the escape byte every report is prefixed with. */
   ESC: string
+  /** `mode-mirroring`: the last mode set published to the host, to suppress repeats. */
+  lastEmittedModes: TerminalDocumentModes
   /** `terminal-init-and-write`: whether the terminal has ever reached ready. */
   everReady: boolean
   /** `runtime-state`: the C1 form of the control sequence introducer. */
@@ -180,6 +186,15 @@ export type TerminalDocumentTouchOrigin = { x: number; y: number; identifier: nu
 /** A touch that may still resolve as a tap: its origin, its start time and its finger. */
 export type TerminalDocumentTapCandidate = TerminalDocumentTouchOrigin & { t: number }
 
+/** The terminal modes the host mirrors. */
+export type TerminalDocumentModes = {
+  bracketedPasteMode: boolean
+  altScreen: boolean
+  mouseTrackingMode: string
+  sgrMouseMode: boolean
+  sgrMousePixelsMode: boolean
+}
+
 export type TerminalDocumentDisposable = { dispose?: () => void }
 
 /** xterm's WebGL addon, as the document loads, repaints and disposes of it. */
@@ -212,6 +227,13 @@ export function createTerminalDocumentScope(): TerminalDocumentScope {
     initialOscLinks: [],
     initialOscLinkRowOffset: 0,
     ESC: String.fromCharCode(27),
+    lastEmittedModes: {
+      bracketedPasteMode: false,
+      altScreen: false,
+      mouseTrackingMode: 'none',
+      sgrMouseMode: false,
+      sgrMousePixelsMode: false
+    },
     everReady: false,
     C1_CSI: String.fromCharCode(155),
     mouseModeScanTail: '',
