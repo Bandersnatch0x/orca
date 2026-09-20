@@ -24,27 +24,29 @@ const emit = (relative: string) =>
 describe('the runtime-state and text-scaling slice', () => {
   it('emits the declaration it opens with', async () => {
     const [head] = sliceOn(TERMINAL_HTML_RUNTIME_STATE_AND_TEXT_SCALING, TERMINAL_QUERY_REPLY_JS)
-    expect(compareTerminalDocumentScripts(head, await emit('./terminal-handle.ts'), 'scope'))
-      .toEqual({
-        equivalent: true,
-        normalisations: {
-          qualifiedReferences: 0,
-          scopeFieldDeclarations: 2,
-          rebindings: 0,
-          bracedBodies: 0,
-          unboundCatches: 0,
-          numberProperties: 0,
-          shorthandProperties: 0
-        }
-      })
+    expect(
+      compareTerminalDocumentScripts(head, await emit('./terminal-handle.ts'), 'scope')
+    ).toEqual({
+      equivalent: true,
+      normalisations: {
+        qualifiedReferences: 0,
+        scopeFieldDeclarations: 2,
+        rebindings: 0,
+        bracedBodies: 0,
+        unboundCatches: 0,
+        numberProperties: 0,
+        shorthandProperties: 0
+      }
+    })
   })
 
   it('emits everything after the groups it interpolates', async () => {
     const [, rest] = sliceOn(TERMINAL_HTML_RUNTIME_STATE_AND_TEXT_SCALING, TERMINAL_QUERY_REPLY_JS)
     const [between, tail] = sliceOn(rest, TERMINAL_SURFACE_SWAP_JS)
     expect(between.trim()).toBe('')
-    const emitted = [await emit('./text-scaling.ts'), await emit('./viewport-transform.ts')]
-      .join('\n')
+    const emitted = [await emit('./text-scaling.ts'), await emit('./viewport-transform.ts')].join(
+      '\n'
+    )
     expect(compareTerminalDocumentScripts(tail, emitted, 'scope')).toEqual({
       equivalent: true,
       normalisations: {
