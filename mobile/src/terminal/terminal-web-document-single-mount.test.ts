@@ -35,6 +35,47 @@ describe('the page terminal document', () => {
     remounted.dispose()
   })
 
+  it('disposes the terminal a swap left behind, not only the live one', async () => {
+    // `beginTerminalSurfaceSwap` opens a hidden replacement and hands the committed terminal to
+    // `commitTerminalSurfaceSwap`, which disposes it. An unmount between the two is the case this
+    // covers: the committed terminal is nobody's, and a dispose that reached only `scope.term`
+    // would leave it holding its renderer, its observers and its buffers for the life of the tab.
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const mounted = await mountTerminalWebDocument(host, () => {})
+    const { scope } = await import('./document/page-document-modules')
+
+    const disposed: string[] = []
+    const fake = (name: string) => ({ dispose: () => disposed.push(name) })
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: dispose is the only member this case reaches, and the two doubles carry it.
+    scope.committedTerm = fake('committed') as unknown as typeof scope.committedTerm
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: as above; the mount's dispose calls nothing else on either.
+    scope.term = fake('live') as unknown as typeof scope.term
+
+    mounted.dispose()
+    expect(disposed.sort()).toEqual(['committed', 'live'])
+    expect(scope.term).toBe(null)
+    expect(scope.committedTerm).toBe(null)
+  })
+
+  it('disposes one terminal once when no swap is open', async () => {
+    // The other half: with no swap in flight the two fields are the same object, and disposing it
+    // twice is what the deduplication exists to stop.
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const mounted = await mountTerminalWebDocument(host, () => {})
+    const { scope } = await import('./document/page-document-modules')
+
+    let disposals = 0
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: dispose is the only member the mount's dispose reaches.
+    const only = { dispose: () => (disposals += 1) } as unknown as typeof scope.term
+    scope.term = only
+    scope.committedTerm = only
+
+    mounted.dispose()
+    expect(disposals).toBe(1)
+  })
+
   it('gives the page back when the mount itself fails, so Reload can try again', async () => {
     // The overlay's Reload path. A mount that threw holds nothing, and a flag left set would
     // refuse every later attempt — the document's chunk failing to load is exactly that case.

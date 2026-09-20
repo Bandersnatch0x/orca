@@ -180,10 +180,17 @@ async function buildTerminalWebDocument(
       liveDocumentHost = null
       window.removeEventListener('resize', onWindowResize)
       documentModules.stopPageDocumentModules()
-      try {
-        scope.term?.dispose()
-      } catch {}
+      // Both terminals, because a swap that never committed leaves two. `beginTerminalSurfaceSwap`
+      // opens a hidden replacement and `commitTerminalSurfaceSwap` disposes the one it replaced;
+      // an unmount between the two leaves the committed terminal live with nothing pointing at
+      // it. They are the same object whenever no swap is open, so the pair is deduplicated.
+      for (const terminal of new Set([scope.term, scope.committedTerm])) {
+        try {
+          terminal?.dispose()
+        } catch {}
+      }
       scope.term = null
+      scope.committedTerm = null
       host.innerHTML = ''
       // The sheet stays in the head; the class does not, so every rule in it matches nothing
       // again the moment the terminal is gone.

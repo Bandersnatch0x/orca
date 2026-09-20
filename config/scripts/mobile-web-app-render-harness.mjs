@@ -407,14 +407,16 @@ export function installPageErrorSentinel() {
 /**
  * Every animation frame and timer, tagged with the mount that scheduled it.
  *
- * Installed before the bundle loads, so the document's own scheduling goes through it. The test
- * bumps `mount` once the first terminal is off the page; a callback scheduled under the previous
- * number that still runs is a frame or timer of the first mount firing into the second, which is
- * the whole finding. Every schedule is kept, not just the ones still owed, so the test can say
- * that there was something to leak before it says that nothing did.
+ * Installed before the bundle loads, so the document's own scheduling goes through it. Each
+ * schedule remembers the `#terminal-container` that was on the page at the time; a callback that
+ * runs once that element has left the document is a frame or timer of the first mount firing
+ * into the second, which is the whole finding. The element rather than a counter the test bumps,
+ * because React unmounts on its own schedule and a callback that runs while the first terminal is
+ * still up is not a leak. Every schedule is kept, not just the ones still owed, so the test can
+ * say that there was something to leak before it says that nothing did.
  */
 export function installSchedulerRecorder() {
-  globalThis.__orcaScheduler = { mount: 0, watching: false, scheduled: [], leaked: [] }
+  globalThis.__orcaScheduler = { watching: false, scheduled: [], leaked: [] }
   const state = globalThis.__orcaScheduler
   const wrap = (schedule, kind) =>
     function (callback, ...rest) {
@@ -424,11 +426,11 @@ export function installSchedulerRecorder() {
       // The line that called this, which is the script the work belongs to. Line 0 is the error's
       // own header and line 1 is this wrapper.
       const caller = ((new Error('scheduled').stack ?? '').split('\n')[2] ?? '').trim()
-      const entry = { kind, caller, mount: state.mount }
-      state.scheduled.push(entry)
+      const container = document.getElementById('terminal-container')
+      state.scheduled.push({ kind, caller, owned: container !== null })
       return schedule(
         (...args) => {
-          if (entry.mount !== state.mount) {
+          if (container !== null && !container.isConnected) {
             state.leaked.push(`${kind} from ${caller}`)
           }
           return callback(...args)
@@ -451,5 +453,53 @@ export function installCspViolationRecorder() {
     globalThis.__orcaCspViolations.push(
       `${event.violatedDirective}: ${event.blockedURI || 'inline'} @ ${event.sourceFile ?? '?'}:${String(event.lineNumber ?? 0)}`
     )
+  })
+}
+
+/**
+ * Every computed property of `html` and `body`, as one string each.
+ *
+ * The oracle for "the page mount styles only what it owns" is a page of the same application with
+ * no terminal on it, so the comparison is against another page rather than against a list of
+ * properties someone chose. A rule that escaped the host would have to move one of these.
+ */
+export async function readRootComputedStyles(page) {
+  return await page.evaluate(() => {
+    const read = (element) => {
+      const computed = getComputedStyle(element)
+      const entries = []
+      for (const property of computed) {
+        entries.push(`${property}: ${computed.getPropertyValue(property)}`)
+      }
+      return entries.join('\n')
+    }
+    return { body: read(document.body), html: read(document.documentElement) }
+  })
+}
+
+/**
+ * What the terminal's injected sheet matches, and how much of it there is.
+ *
+ * The rule count is the precondition for the empty list: a sheet that was never planted, or one
+ * the browser refused, would match nothing for a reason that has nothing to do with scoping.
+ */
+export async function terminalStyleReach(page) {
+  return await page.evaluate(() => {
+    const sheet = [...document.styleSheets].find(
+      (one) => one.ownerNode?.id === 'orca-terminal-document-style'
+    )
+    if (!sheet) {
+      return { rules: 0, outside: ['the terminal stylesheet is not in the head'] }
+    }
+    const host = document.querySelector('.orca-terminal-document-host')
+    const outside = []
+    for (const rule of sheet.cssRules) {
+      for (const element of document.querySelectorAll(rule.selectorText)) {
+        if (!host || !host.contains(element)) {
+          outside.push(`${rule.selectorText} matched ${element.tagName}`)
+        }
+      }
+    }
+    return { rules: sheet.cssRules.length, outside }
   })
 }

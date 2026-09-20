@@ -151,7 +151,10 @@ function mutableBindings(name: string): string[] {
 }
 
 function parseTimeEffects(name: string): string[] {
-  const source = moduleSource(name)
+  return parseTimeEffectsIn(name, moduleSource(name))
+}
+
+function parseTimeEffectsIn(name: string, source: string): string[] {
   const { program, errors } = parseSync(`${name}.ts`, source, { lang: 'ts' })
   expect(errors).toEqual([])
   const effects: string[] = []
@@ -206,6 +209,26 @@ describe('the document modules at parse time', () => {
     // `let` in it is the exact shape the rule refuses, and the reader has to say so.
     const planted = `import { scope } from './document-scope'\nlet spent = 0\nexport function n() {\n  spent++\n  return scope.term\n}\n`
     expect(mutableBindingsIn('planted', planted)).toEqual(['planted: let spent = 0'])
+  })
+
+  it('would report a planted element read, which the statement filter cannot see', () => {
+    // The second reader has its own precondition. A `const` initialised from the document is a
+    // declaration by shape and a parse-time element read by effect — the exact form that survived
+    // a remount holding the first mount's node — and the statement-kind filter waves it through.
+    const planted =
+      "import { scope } from './document-scope'\n" +
+      "const indicator = document.getElementById('scroll-indicator')\n" +
+      'export function n() {\n  return indicator ?? scope.term\n}\n'
+    expect(parseTimeEffectsIn('planted', planted)).toEqual([
+      "planted: indicator = document.getElementById('scroll-indicator')"
+    ])
+    // And the other direction, because a reader that flagged every initialiser would agree with
+    // the empty list above only by refusing everything: a plain literal is not work.
+    const inert =
+      "import { scope } from './document-scope'\n" +
+      'const options = { capture: true, passive: false }\n' +
+      'export function n() {\n  return options.capture && scope.term !== null\n}\n'
+    expect(parseTimeEffectsIn('inert', inert)).toEqual([])
   })
 
   it('would report one, so the empty list above is a measurement', () => {

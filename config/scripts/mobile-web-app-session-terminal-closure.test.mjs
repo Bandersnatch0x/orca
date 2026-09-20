@@ -49,7 +49,7 @@ const SHED = [
   'src/terminal/terminal-webview-html/document-close.ts'
 ]
 
-/** The component, its mount, the stylesheet and the markup, and the two modules the split made. */
+/** The component, its mount, the stylesheet and the markup, and the modules the splits made. */
 const GAINED_OUTSIDE_THE_DOCUMENT = [
   'src/terminal/TerminalWebView.web.tsx',
   'src/terminal/terminal-web-document-mount.ts',
@@ -57,6 +57,9 @@ const GAINED_OUTSIDE_THE_DOCUMENT = [
   'src/terminal/terminal-webview-html.web.ts',
   'src/terminal/terminal-webview-html/document-markup.ts',
   'src/terminal/terminal-webview-html/document-style.ts',
+  // The page's half of the stylesheet: the document-level rules are dropped and the rest is held
+  // under the host, so what the page injects can only reach what the terminal owns.
+  'src/terminal/terminal-webview-html/document-style-scoping.ts',
   'src/terminal/terminal-webview-ready-promises.ts',
   'src/terminal/use-terminal-webview-controller.ts'
 ]

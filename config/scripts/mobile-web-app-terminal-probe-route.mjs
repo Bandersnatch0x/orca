@@ -41,15 +41,6 @@ export function escapeDenseStream() {
   return rows.join('')
 }
 
-/** Plain rows, enough of them to give the terminal a scrollback a wheel can move through. */
-export function scrollbackRows() {
-  const rows = []
-  for (let index = 0; index < 400; index++) {
-    rows.push(`orca-scrollback-row-${String(index)}\r\n`)
-  }
-  return rows.join('')
-}
-
 /**
  * The scratch route: the component under test, its handle and its notifies on `globalThis`.
  *

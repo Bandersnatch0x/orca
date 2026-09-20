@@ -16,11 +16,12 @@ import {
   LAYOUT_SOURCE,
   MIN_STREAM_BYTES,
   probeRouteSource,
-  ROWS,
-  scrollbackRows
+  ROWS
 } from './mobile-web-app-terminal-probe-route.mjs'
 import {
   createBundleServer,
+  readRootComputedStyles,
+  terminalStyleReach,
   installCspViolationRecorder,
   installPageErrorSentinel,
   installSchedulerRecorder,
@@ -520,10 +521,11 @@ describeRender(
       await page.close()
     }, 300_000)
 
-    it('cancels its frames and timers, so none of the first mount runs into the second', async () => {
-      // The other half of the same rule. A frame or timer the first terminal scheduled has no
-      // owner after dispose, and on the second mount it acts on the terminal that replaced it —
-      // refitting a grid nobody resized, scrolling a buffer nobody touched.
+    it('cancels the timers it armed, so none of the first mount fires into the second', async () => {
+      // The other half of the same rule. A timer the first terminal armed has no owner after
+      // dispose, and on the second mount it acts on the terminal that replaced it — hiding an
+      // indicator nobody raised. Frames are the case below, which provokes them deliberately;
+      // each asserts on its own witness so neither can stand in for the other.
       // The document is its own chunk, and the point is what *it* scheduled: xterm's renderer
       // schedules frames of its own that a disposed terminal simply ignores, and the browser
       // cannot unschedule those. So the chunk is identified on the wire, by a literal only
@@ -552,20 +554,26 @@ describeRender(
       // the document's longest-lived piece of scheduled work, a 550 ms timer to hide it again,
       // which outlives an unmount even on a loaded machine. The same wheel leaves the
       // smooth-scroll frame owed. Both are asked for in the task that tells the component to go.
-      await page.evaluate((rows) => globalThis.__orcaTerminalProbe.write(rows), scrollbackRows())
+      // One touch on the surface arms the long-press timer: 500 ms, held on the scope, cancelled
+      // by `stopTapDispatch`. It is the document's own timer and it needs nothing rendered, so
+      // the provocation cannot race the engine — the precondition below says whether it landed.
       await page.evaluate(() => {
         globalThis.__orcaScheduler.watching = true
         const surface = document.getElementById('terminal-surface')
         surface.dispatchEvent(
-          new WheelEvent('wheel', { deltaY: -400, bubbles: true, cancelable: true })
+          new TouchEvent('touchstart', {
+            bubbles: true,
+            cancelable: true,
+            touches: [new Touch({ identifier: 1, target: surface, clientX: 100, clientY: 400 })],
+            changedTouches: [
+              new Touch({ identifier: 1, target: surface, clientX: 100, clientY: 400 })
+            ]
+          })
         )
         globalThis.__orcaTerminalProbe.setMounted(false)
       })
       await page.locator('#terminal-container').waitFor({ state: 'detached', timeout: 30_000 })
-      // The boundary is drawn here rather than at `setMounted(false)`: React unmounts on its own
-      // schedule, and a callback that runs while the first terminal is still up is not a leak.
       await page.evaluate(() => {
-        globalThis.__orcaScheduler.mount += 1
         globalThis.__orcaTerminalReady = false
         globalThis.__orcaTerminalProbe.setMounted(true)
       })
@@ -574,22 +582,93 @@ describeRender(
         polling: 100
       })
       await openProbeTerminal(page)
-      // Long enough for any frame or timer of the first mount to have fired if it survived.
+      // Long enough for the slowest timer of the first mount to have fired if it survived.
       await page.evaluate(() => new Promise((resolve) => globalThis.setTimeout(resolve, 3000)))
       const scheduler = await page.evaluate(() => globalThis.__orcaScheduler)
       // The precondition: there was something to leak. A wheel that reached nothing would agree
       // with the empty list below for the wrong reason.
       expect(
         scheduler.scheduled.filter(
-          (entry) => entry.mount === 0 && entry.caller.includes(documentChunk)
+          (entry) => entry.owned && entry.kind === 'timer' && entry.caller.includes(documentChunk)
         ).length
       ).toBeGreaterThan(0)
-      expect(scheduler.leaked.filter((entry) => entry.includes(documentChunk))).toEqual([])
+      expect(
+        scheduler.leaked.filter(
+          (entry) => entry.startsWith('timer ') && entry.includes(documentChunk)
+        )
+      ).toEqual([])
       await page.unrouteAll({ behavior: 'ignoreErrors' })
       await page.close()
     }, 300_000)
 
-    it('styles only what it owns, and leaves the application alone', async () => {
+    it('takes back the frames it is owed, not only the timers', async () => {
+      // The timer case above is witnessed by a 550 ms timeout, which every module's own stop
+      // cancels by the handle the scope holds. A frame is the other shape: `applyFitScale` asks
+      // for one through the scope's registry and never holds its id, so `stopFitScale` can only
+      // bump the token it tests itself against — the frame still runs. Nothing but
+      // `cancelDocumentFrames` takes it back.
+      //
+      // The retry loop is what makes the timing certain. With the surface hidden the grid
+      // measures zero, so the fit never commits and re-asks for a frame every time, up to its own
+      // 60-frame cap: at the moment of dispose one is always owed.
+      let documentChunk = null
+      const { page } = await openPage(PROBE_ROUTE, {
+        scheduler: true,
+        beforeNavigate: async (opened) => {
+          await opened.route('**/*.js', async (route) => {
+            const response = await route.fetch()
+            const body = await response.text()
+            if (body.includes('terminal runtime error')) {
+              documentChunk = new URL(route.request().url()).pathname
+            }
+            await route.fulfill({ response, body })
+          })
+        }
+      })
+      await page.waitForFunction(() => globalThis.__orcaTerminalReady === true, {
+        timeout: 60_000,
+        polling: 100
+      })
+      await openProbeTerminal(page)
+      expect(documentChunk, 'the document was served as its own chunk').not.toBe(null)
+
+      await page.evaluate(() => {
+        globalThis.__orcaScheduler.watching = true
+        document.getElementById('terminal-surface').style.display = 'none'
+        globalThis.dispatchEvent(new Event('resize'))
+        globalThis.__orcaTerminalProbe.setMounted(false)
+      })
+      await page.locator('#terminal-container').waitFor({ state: 'detached', timeout: 30_000 })
+      await page.evaluate(() => {
+        globalThis.__orcaTerminalReady = false
+        globalThis.__orcaTerminalProbe.setMounted(true)
+      })
+      await page.waitForFunction(() => globalThis.__orcaTerminalReady === true, {
+        timeout: 60_000,
+        polling: 100
+      })
+      await openProbeTerminal(page)
+      await page.evaluate(() => new Promise((resolve) => globalThis.setTimeout(resolve, 3000)))
+
+      const scheduler = await page.evaluate(() => globalThis.__orcaScheduler)
+      // The precondition, stated as frames rather than as work of any kind: this case exists
+      // because the timer one cannot see a frame, so a run where the refit asked for none would
+      // agree with the empty list below for exactly the reason under test.
+      expect(
+        scheduler.scheduled.filter(
+          (entry) => entry.owned && entry.kind === 'frame' && entry.caller.includes(documentChunk)
+        ).length
+      ).toBeGreaterThan(0)
+      expect(
+        scheduler.leaked.filter(
+          (entry) => entry.startsWith('frame ') && entry.includes(documentChunk)
+        )
+      ).toEqual([])
+      await page.unrouteAll({ behavior: 'ignoreErrors' })
+      await page.close()
+    }, 300_000)
+
+    it('styles what it owns, and only that', async () => {
       // The document's sheet says `*`, `html` and `body` because inside a WebView it owns the
       // page. Appended to the head of a React Native Web application it owns nothing: those three
       // selectors set the application's background, its overflow and every element's box model,
@@ -598,58 +677,56 @@ describeRender(
       // Ruling 19's shape: the page mount may style only what it owns. So the document-level
       // rules are never injected and every remaining selector is held under the host's class.
       // The oracle is a page of the same application with no terminal on it.
-      const readRoots = (target) =>
-        target.evaluate(() => {
-          const read = (element) => {
-            const computed = getComputedStyle(element)
-            const entries = []
-            for (const property of computed) {
-              entries.push(`${property}: ${computed.getPropertyValue(property)}`)
-            }
-            return entries.join('\n')
-          }
-          return { body: read(document.body), html: read(document.documentElement) }
-        })
-
       const control = await openPage(CONTROL_ROUTE)
-      const expected = await readRoots(control.page)
+      const expected = await readRootComputedStyles(control.page)
       await control.page.close()
 
       const { page } = await openTerminal()
       await openProbeTerminal(page)
-      expect(await readRoots(page), 'roots while the terminal is mounted').toEqual(expected)
+      expect(await readRootComputedStyles(page), 'roots while the terminal is mounted').toEqual(
+        expected
+      )
 
       // And nothing in the sheet reaches past the host, which is the rule the comparison above
       // cannot see: a selector that matched something outside would not have to change `body`.
-      const reach = () =>
-        page.evaluate(() => {
-          const sheet = [...document.styleSheets].find(
-            (one) => one.ownerNode?.id === 'orca-terminal-document-style'
-          )
-          if (!sheet) {
-            return { rules: 0, outside: ['the terminal stylesheet is not in the head'] }
-          }
-          const host = document.querySelector('.orca-terminal-document-host')
-          const outside = []
-          for (const rule of sheet.cssRules) {
-            for (const element of document.querySelectorAll(rule.selectorText)) {
-              if (!host || !host.contains(element)) {
-                outside.push(`${rule.selectorText} matched ${element.tagName}`)
-              }
-            }
-          }
-          return { rules: sheet.cssRules.length, outside }
-        })
-      const mounted = await reach()
+      const mounted = await terminalStyleReach(page)
       // The precondition: there are rules to escape with.
       expect(mounted.rules).toBeGreaterThan(0)
       expect(mounted.outside).toEqual([])
 
+      // The positive half, which the two above cannot give: a sheet that reached nothing at all
+      // would satisfy both of them. These are four things the terminal looks like only because
+      // the rules arrive — one from xterm's sheet, three from the document's own — read off the
+      // live elements rather than off the stylesheet text.
+      expect(
+        await page.evaluate(() => {
+          const host = document.querySelector('.orca-terminal-document-host')
+          const xterm = host.querySelector('.xterm')
+          const viewport = host.querySelector('.xterm-viewport')
+          const overlay = host.querySelector('#selection-overlay')
+          return {
+            // xterm's own sheet: the grid is positioned against this, and its rows are absolute.
+            xtermPosition: getComputedStyle(xterm).position,
+            // The document's: the terminal scrolls itself, so the viewport shows no scrollbar
+            // and reserves no width for one.
+            viewportOverflowY: getComputedStyle(viewport).overflowY,
+            viewportReservesScrollbar: viewport.offsetWidth !== viewport.clientWidth,
+            // The document's: the overlay sits in unscaled viewport coordinates above the grid.
+            overlayPosition: getComputedStyle(overlay).position
+          }
+        })
+      ).toEqual({
+        xtermPosition: 'relative',
+        viewportOverflowY: 'hidden',
+        viewportReservesScrollbar: false,
+        overlayPosition: 'fixed'
+      })
+
       await page.evaluate(() => globalThis.__orcaTerminalProbe.setMounted(false))
       await page.locator('#terminal-container').waitFor({ state: 'detached', timeout: 30_000 })
-      expect(await readRoots(page), 'roots after dispose').toEqual(expected)
+      expect(await readRootComputedStyles(page), 'roots after dispose').toEqual(expected)
       // The sheet stays in the head for the next mount, and matches nothing until there is one.
-      const disposed = await reach()
+      const disposed = await terminalStyleReach(page)
       expect(disposed.rules).toBe(mounted.rules)
       expect(disposed.outside).toEqual([])
       await page.close()

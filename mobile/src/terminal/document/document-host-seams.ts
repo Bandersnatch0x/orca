@@ -60,14 +60,6 @@ export function createEngineWebglAddon() {
 }
 
 /**
- * The WebView's own installation: the document owns that page, so taking `window.onerror` is
- * taking nothing from anyone. A page mounting these modules must not, which is why this is a
- * field rather than a statement.
- *
- * It hands back its own undo, because ruling 20 makes the install a per-mount act and the page's
- * override is a listener that has to come off again.
- */
-/**
  * The WebView's own background: the document owns `html` and `body` there, and the terminal's
  * theme is the page's colour. A page mounting these modules owns neither, so this is a field —
  * painting the application's roots would recolour every screen the shell can show, and leave them
@@ -78,6 +70,14 @@ export function paintWindowDocumentBackground(background: string) {
   document.body.style.background = background
 }
 
+/**
+ * The WebView's own installation: the document owns that page, so taking `window.onerror` is
+ * taking nothing from anyone. A page mounting these modules must not, which is why this is a
+ * field rather than a statement.
+ *
+ * It hands back its own undo, because ruling 20 makes the install a per-mount act and the page's
+ * override is a listener that has to come off again.
+ */
 export function installWindowErrorReporter(report: TerminalDocumentErrorReporter) {
   window.onerror = report
   return function () {
