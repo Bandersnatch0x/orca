@@ -87,7 +87,10 @@ export function documentDeclaredFunction<T extends (...args: never[]) => unknown
  */
 export async function startDocumentModulesOverTheSharedScope() {
   for (const name of TERMINAL_DOCUMENT_MODULE_ORDER) {
-    const loaded: Record<string, unknown> = await import(`./${name}`)
+    // `@vite-ignore` because the specifier is a variable and these modules are this file's own
+    // neighbours: the analysis that would otherwise rewrite it as a glob refuses to glob the
+    // directory it is written in, and warns on every run of any suite that loads this file.
+    const loaded: Record<string, unknown> = await import(/* @vite-ignore */ `./${name}`)
     const start = loaded[terminalDocumentStartFunctionName(name)]
     if (typeof start === 'function') {
       start()
