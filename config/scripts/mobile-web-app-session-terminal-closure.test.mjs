@@ -30,6 +30,11 @@ import {
  * emitted file and its 41 inputs leave. The bytes barely move because it is the same program: what
  * goes is the import and export plumbing between the modules, and what the generator substitutes.
  *
+ * The two commits inside this reading, because only one of them is the factory arriving: making the
+ * document a factory put the `host` argument on `createTerminalDocumentScope`, the lane's only edit
+ * to a module this closure already carried, and cost 80 bytes on its own — 3,768,202 measured at
+ * that commit. The -1,890 from there is the page importing the emitted factory instead.
+ *
  * xterm was already a static import of the mount before this, so nothing here is xterm arriving: it
  * and its two addons are 607,945 bytes minified ESM on their own, and they are on both sides of the
  * reading above.
