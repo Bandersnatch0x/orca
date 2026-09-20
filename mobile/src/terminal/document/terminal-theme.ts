@@ -1,5 +1,5 @@
 import { terminalBackgroundFallback } from './document-constants'
-import { scope } from './document-scope'
+import { scope, type TerminalDocumentTheme } from './document-scope'
 
 /** A terminal colour with no alpha: what the contrast maths works on. */
 export type TerminalDocumentRgb = { r: number; g: number; b: number }
@@ -150,6 +150,14 @@ export function normalizeTerminalTheme(input: TerminalDocumentThemeMessage) {
     }
   }
   return Object.assign({}, scope.defaultTheme, next)
+}
+
+/**
+ * What `applyTerminalTheme` writes through. Both slots are written, so a target may arrive without
+ * a theme; nothing else on the terminal is touched.
+ */
+export type TerminalDocumentThemeTarget = {
+  options: { theme?: TerminalDocumentTheme; minimumContrastRatio: number }
 }
 
 export function applyTerminalTheme(input: TerminalDocumentThemeMessage) {

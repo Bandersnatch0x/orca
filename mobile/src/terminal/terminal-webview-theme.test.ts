@@ -6,6 +6,7 @@ import {
   documentScopePreamble,
   generatedDocumentModule
 } from './document/generated-document-region.test-support'
+import type { TerminalDocumentThemeTarget } from './document/terminal-theme'
 
 const themeSource = await generatedDocumentModule('terminal-theme')
 
@@ -31,7 +32,7 @@ function loadContrastFloorResolver(): (bg: unknown) => number {
   return documentDeclaredFunction(loadThemeInjected(), 'resolveTerminalContrastFloor')
 }
 
-function loadThemeApplier(term: object): (input: unknown) => void {
+function loadThemeApplier(term: TerminalDocumentThemeTarget): (input: unknown) => void {
   const context = loadThemeInjected({
     term,
     document: {
@@ -78,9 +79,7 @@ describe('mobile terminal-webview contrast floor gate', () => {
   })
 
   it('writes the resolved floor onto a live terminal when the theme changes', () => {
-    const term: { options: { theme?: unknown; minimumContrastRatio: number } } = {
-      options: { minimumContrastRatio: 1 }
-    }
+    const term: TerminalDocumentThemeTarget = { options: { minimumContrastRatio: 1 } }
     const applyTerminalTheme = loadThemeApplier(term)
 
     applyTerminalTheme({ theme: { background: '#ffffff' } })
@@ -93,7 +92,7 @@ describe('mobile terminal-webview contrast floor gate', () => {
   // #10754: the desktop user can lower or disable the floor. Mobile mirrors the desktop gate, so the
   // published value has to win here or the same session renders differently on the phone.
   describe('published desktop override', () => {
-    function applyOn(term: { options: { minimumContrastRatio: number } }, input: unknown): void {
+    function applyOn(term: TerminalDocumentThemeTarget, input: unknown): void {
       loadThemeApplier(term)(input)
     }
 
