@@ -353,6 +353,10 @@ const isScriptOutput = (path) => path.endsWith('.js')
  * C5.2 and C3.2 generate, derive theirs by the C1.6 method inside the mobile suite. The two are
  * not the same computation, and a divergence between them is a finding rather than noise.
  */
+export async function mobileWebAppRouteClosure(routeModule) {
+  return await mobileWebAppModuleClosure(['app/h/_layout', routeModule])
+}
+
 export async function mobileWebAppModuleClosure(entryModules, { absWorkingDir } = {}) {
   const base = mobileWebAppBuildOptions(MOBILE_WEB_PAGE_ROUTES)
   const result = await esbuild.build({
@@ -377,10 +381,6 @@ export async function mobileWebAppModuleClosure(entryModules, { absWorkingDir } 
     /** Everything outside `node_modules`: this repository's own source, which a census reads. */
     local: inputs.filter((input) => !input.includes('node_modules'))
   }
-}
-
-export async function mobileWebAppRouteClosure(routeModule) {
-  return await mobileWebAppModuleClosure(['app/h/_layout', routeModule])
 }
 
 export async function bundleMobileWebApp({ appDir = defaultAppDir } = {}) {
