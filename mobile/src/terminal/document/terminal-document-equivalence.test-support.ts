@@ -1,5 +1,8 @@
-import { tokenizer } from 'acorn'
-import { transformSync } from 'esbuild'
+import {
+  describeToken,
+  readScriptTokens,
+  type DocumentToken
+} from './terminal-document-tokens.test-support'
 
 /**
  * Whether two versions of the in-WebView document script are the same program, allowing only the
@@ -62,14 +65,28 @@ export type TerminalDocumentNormalisations = {
 }
 
 /**
- * Whether `printed` is the printer's disambiguated form of `original`: the same name with a decimal
- * suffix it appends when two bindings of that name are visible at once.
+ * The bindings the printer renamed on the baseline and leaves alone in the modules, listed.
+ *
+ * A parameter named for a document variable shadowed it while both lived in one function scope, so
+ * the printer gave the inner one a decimal suffix; once the outer name is a scope field there is no
+ * shadow and the inner one keeps its own name. Listed rather than matched by shape: a rule that
+ * accepted any `name2` facing `name` would also accept an unrelated rename that happens to end in a
+ * digit, which is a changed program, not a normalisation.
+ *
+ * One entry covers all seven sites the whole script has: the `term` parameter of
+ * `attachTerminalQueryReplyBridge` in `query-reply.ts` and its six uses.
  */
-function isPrinterDisambiguation(printed: string, original: string): boolean {
-  if (!printed.startsWith(original) || printed.length === original.length) {
-    return false
-  }
-  return /^[2-9][0-9]*$/.test(printed.slice(original.length))
+const UNSHADOWED_RENAMES: readonly {
+  readonly baseline: string
+  readonly generated: string
+  readonly module: string
+}[] = [{ baseline: 'term2', generated: 'term', module: 'query-reply' }]
+
+/** Whether this exact baseline-to-generated pair is one of the listed unshadowed renames. */
+function isListedUnshadowedRename(baseline: string, generated: string): boolean {
+  return UNSHADOWED_RENAMES.some(
+    (entry) => entry.baseline === baseline && entry.generated === generated
+  )
 }
 
 /**
@@ -86,98 +103,70 @@ export type TerminalDocumentEquivalence =
   | { readonly equivalent: true; readonly normalisations: TerminalDocumentNormalisations }
   | { readonly equivalent: false; readonly reason: string }
 
-/** One token as this comparison reads it: what kind it is, and the text it carried. */
-type DocumentToken = { readonly label: string; readonly text: string }
-
-/**
- * Acorn's `Token` class declares `type`, `start` and `end` and not `value`, which it does carry,
- * so the field is read through a narrowing check rather than asserted onto the declared type.
- */
-function readDocumentToken(token: unknown): DocumentToken | null {
-  if (typeof token !== 'object' || token === null || !('type' in token) || !('value' in token)) {
-    return null
-  }
-  const type: unknown = token.type
-  if (typeof type !== 'object' || type === null || !('label' in type)) {
-    return null
-  }
-  const label: unknown = type.label
-  if (typeof label !== 'string') {
-    return null
-  }
-  const value: unknown = token.value
-  return { label, text: value === undefined || value === null ? '' : String(value) }
-}
-
-/** The directive prepended to both sides, and checked to have survived printing. */
-const STRICT_DIRECTIVE = 'use strict'
-
-/**
- * Both sides are printed by the generator's own printer before being read.
- *
- * Otherwise every choice the printer makes — semicolons, property shorthand, quote style — reads as
- * a difference in the program, when it is a difference in who typed it. Printing both sides with
- * one printer removes that whole class by construction rather than by a rule per symptom, and
- * leaves only what the eight counted classes cover.
- */
-function significantTokens(source: string): DocumentToken[] {
-  // Read strict on both sides. A loose script has to defend Annex B's block-scoped function
-  // declarations, and the printer does that by hoisting a `var` and renaming the function; a module
-  // does not, so one side would carry a rename the other cannot. Neither name escapes its block, so
-  // the two readings agree on behaviour and only the strict one can be compared.
-  const printed = transformSync(`'${STRICT_DIRECTIVE}';\n${source}`, {
-    loader: 'js',
-    target: 'chrome74',
-    minify: false
-  }).code
-  const kept: DocumentToken[] = []
-  for (const raw of tokenizer(printed, { ecmaVersion: 2020 })) {
-    const token = readDocumentToken(raw)
-    if (token === null) {
-      throw new Error('acorn produced a token this comparison cannot read')
-    }
-    if (token.label === ';' || token.label === 'eof') {
-      continue
-    }
-    kept.push(token)
-  }
-  if (kept[0]?.text !== STRICT_DIRECTIVE) {
-    throw new Error('the strict directive this comparison prepends did not survive printing')
-  }
-  return kept.slice(1)
-}
-
-/**
- * The tokens of one side, or the reason it could not be read.
- *
- * A script that does not parse is a refusal with the printer's own message rather than an
- * exception out of the comparison: a generator that emitted something broken should say so where
- * the other differences are reported.
- */
-function readScriptTokens(
-  source: string,
-  side: string
-): { ok: true; tokens: DocumentToken[] } | { ok: false; reason: string } {
-  try {
-    return { ok: true, tokens: significantTokens(source) }
-  } catch (error) {
-    return {
-      ok: false,
-      reason: `${side} does not parse: ${error instanceof Error ? error.message.split('\n')[0] : String(error)}`
-    }
-  }
-}
-
-function describeToken(token: DocumentToken | undefined): string {
-  return token === undefined ? '(end of script)' : `${token.label} ${token.text}`.trim()
-}
-
 /**
  * `baseline` is the script as it stood before the move, `candidate` the one the modules generate.
  *
  * The qualifier is read from `qualifier`, not assumed, so the test names the object it expects and
  * a rename cannot quietly satisfy this.
  */
+/** The statement heads `curly` braces: everything whose body may be a single unbraced statement. */
+const BRACEABLE_HEAD_KEYWORDS = new Set(['if', 'for', 'while'])
+
+/**
+ * Whether the `{` at `open` is the body of a braceable head rather than some other block.
+ *
+ * `else` and `do` are followed by their body directly. The rest put a parenthesised head first, so
+ * the `)` is walked back to its `(` and the keyword before that is what decides. Without this a
+ * bare block anywhere in the generated script would be absorbed as a linter-added body, when it is
+ * a statement the baseline does not have.
+ */
+function isBraceableHeadBody(tokens: readonly DocumentToken[], open: number): boolean {
+  const previous = tokens[open - 1]
+  if (previous === undefined) {
+    return false
+  }
+  if (previous.label === 'else' || previous.label === 'do') {
+    return true
+  }
+  if (previous.label !== ')') {
+    return false
+  }
+  let depth = 0
+  for (let i = open - 1; i >= 0; i--) {
+    const label = tokens[i]?.label
+    if (label === ')') {
+      depth += 1
+      continue
+    }
+    if (label === '(') {
+      depth -= 1
+      if (depth === 0) {
+        return BRACEABLE_HEAD_KEYWORDS.has(tokens[i - 1]?.label ?? '')
+      }
+    }
+  }
+  return false
+}
+
+/** The index of the `}` closing the `{` at `open`, or -1 when the generated script has none. */
+function matchingCloseIndex(tokens: readonly DocumentToken[], open: number): number {
+  let depth = 0
+  for (let i = open; i < tokens.length; i++) {
+    const label = tokens[i]?.label
+    if (label === '{') {
+      depth += 1
+      continue
+    }
+    if (label === '}') {
+      depth -= 1
+      if (depth === 0) {
+        return i
+      }
+    }
+  }
+  return -1
+}
+
 export function compareTerminalDocumentScripts(
   baseline: string,
   candidate: string,
@@ -201,15 +190,23 @@ export function compareTerminalDocumentScripts(
   let numberProperties = 0
   let shorthandProperties = 0
   let unshadowedNames = 0
-  // Braces arrive in pairs around one statement, so a counter is enough: a close is only ever
-  // absorbed while an inserted open is outstanding, which bounds how far this can mask a real one.
-  let openInsertedBraces = 0
+  // The generated index each inserted `{` expects its `}` at, innermost last. Recording the index
+  // rather than counting means an absorbed close is the one that closes that body and no other.
+  const insertedBraceCloses: number[] = []
   let lastMatched: DocumentToken | undefined
   let left = 0
   let right = 0
   while (left < before.length && right < after.length) {
     const expected = before[left]
     const actual = after[right]
+    // Ahead of the equality check on purpose: the baseline's next token is a `}` too wherever a
+    // braced body ends a block, and this index is known to close the inserted body, so matching
+    // them as a pair would consume the wrong one and leave the counts right for the wrong reason.
+    if (actual.label === '}' && insertedBraceCloses.at(-1) === right) {
+      insertedBraceCloses.pop()
+      right += 1
+      continue
+    }
     if (expected.label === actual.label && expected.text === actual.text) {
       lastMatched = expected
       left += 1
@@ -221,7 +218,7 @@ export function compareTerminalDocumentScripts(
     if (
       expected.label === 'name' &&
       actual.label === 'name' &&
-      isPrinterDisambiguation(expected.text, actual.text)
+      isListedUnshadowedRename(expected.text, actual.text)
     ) {
       unshadowedNames += 1
       lastMatched = actual
@@ -299,16 +296,16 @@ export function compareTerminalDocumentScripts(
       left += 3
       continue
     }
-    if (actual.label === '{') {
-      bracedBodies += 1
-      openInsertedBraces += 1
-      right += 1
-      continue
-    }
-    if (actual.label === '}' && openInsertedBraces > 0) {
-      openInsertedBraces -= 1
-      right += 1
-      continue
+    // `if (a) b;` -> `if (a) { b; }`: the body the repository's `curly` rule braced. Only a
+    // braceable head's body qualifies, and only that body's own close is absorbed.
+    if (actual.label === '{' && isBraceableHeadBody(after, right)) {
+      const close = matchingCloseIndex(after, right)
+      if (close !== -1) {
+        bracedBodies += 1
+        insertedBraceCloses.push(close)
+        right += 1
+        continue
+      }
     }
     return {
       equivalent: false,
@@ -316,8 +313,8 @@ export function compareTerminalDocumentScripts(
     }
   }
   // A body braced at the very end of the script leaves its close after the baseline has run out.
-  while (openInsertedBraces > 0 && after[right]?.label === '}') {
-    openInsertedBraces -= 1
+  while (insertedBraceCloses.at(-1) === right && after[right]?.label === '}') {
+    insertedBraceCloses.pop()
     right += 1
   }
   if (left !== before.length || right !== after.length) {
@@ -326,8 +323,11 @@ export function compareTerminalDocumentScripts(
       reason: `length: ${before.length - left} token(s) left in the baseline, ${after.length - right} in the generated script`
     }
   }
-  if (openInsertedBraces !== 0) {
-    return { equivalent: false, reason: `${openInsertedBraces} inserted brace(s) never closed` }
+  if (insertedBraceCloses.length !== 0) {
+    return {
+      equivalent: false,
+      reason: `${insertedBraceCloses.length} inserted brace(s) never closed`
+    }
   }
   return {
     equivalent: true,
