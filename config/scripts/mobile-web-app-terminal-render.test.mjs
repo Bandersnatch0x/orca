@@ -172,6 +172,25 @@ export default function ProbeLayout() {
 }
 `
 
+/**
+ * A handler of the page's own, installed before the bundle so the terminal meets a `window.onerror`
+ * that belongs to someone else.
+ *
+ * Reading `null` three times would pass on a terminal that assigned `null` over a real handler,
+ * which is the failure this seam exists to prevent. The sentinel is identity-checked in the page
+ * rather than marshalled out of it — a function does not survive `evaluate` — and it returns
+ * false so the browser still reports the error normally.
+ */
+function installPageErrorSentinel() {
+  globalThis.__orcaSentinelCalls = []
+  const sentinel = (message) => {
+    globalThis.__orcaSentinelCalls.push(String(message))
+    return false
+  }
+  globalThis.__orcaSentinel = sentinel
+  window.onerror = sentinel
+}
+
 /** Recorded before anything else runs, so a refusal during the page's own boot is counted. */
 function installCspViolationRecorder() {
   globalThis.__orcaCspViolations = []
@@ -237,9 +256,12 @@ afterAll(async () => {
   }
 })
 
-async function openPage(pathname) {
+async function openPage(pathname, { errorSentinel = false } = {}) {
   const page = await browser.newPage({ viewport: { width: 390, height: 844 } })
   await page.addInitScript(installCspViolationRecorder)
+  if (errorSentinel) {
+    await page.addInitScript(installPageErrorSentinel)
+  }
   await page.addInitScript(installShellDouble, {
     version: bridgeVersion,
     sessionId: SHELL_SESSION_ID,
@@ -267,8 +289,8 @@ async function openPage(pathname) {
   return { errors, page }
 }
 
-async function openTerminal() {
-  const opened = await openPage(PROBE_ROUTE)
+async function openTerminal(options) {
+  const opened = await openPage(PROBE_ROUTE, options)
   await opened.page.waitForFunction(() => globalThis.__orcaTerminalReady === true, {
     timeout: 60_000,
     polling: 100
@@ -369,22 +391,25 @@ describeRender(
       await page.close()
     }, 300_000)
 
-    it('never takes window.onerror, and reports a runtime error anyway', async () => {
-      const { page } = await openTerminal()
-      // Null before, because nothing on this page installs one — which is the precondition that
-      // makes the two readings below mean anything.
-      expect(await page.evaluate(() => window.onerror)).toBe(null)
+    it('leaves the page its own window.onerror across mount and dispose', async () => {
+      // The page installs a handler before the bundle loads, so the terminal meets one that is
+      // not its to take. Identity is checked in the page: the same function object at all three
+      // points, not merely a non-null one and not merely the same shape.
+      const { page } = await openTerminal({ errorSentinel: true })
+      expect(await page.evaluate(() => window.onerror === globalThis.__orcaSentinel)).toBe(true)
       await openProbeTerminal(page)
-      expect(await page.evaluate(() => window.onerror)).toBe(null)
+      expect(await page.evaluate(() => window.onerror === globalThis.__orcaSentinel)).toBe(true)
 
-      // The reporter still works: the document's own listener catches a real uncaught error and
-      // the component's onEngineError prop receives it. Without this the case above would pass on
-      // a terminal that had simply stopped reporting.
+      // Both reporters see the same uncaught error: the page keeps the one it installed, and the
+      // terminal's own listener still works. Without the second half the readings above would
+      // pass on a terminal that had simply stopped reporting.
       await page.evaluate(() => {
         setTimeout(() => {
           throw new Error('orca-terminal-render-uncaught')
         }, 0)
       })
+      const sawIt = (entries) =>
+        entries.some((entry) => entry.includes('orca-terminal-render-uncaught'))
       await page.waitForFunction(
         () =>
           globalThis.__orcaTerminalEngineErrors.some((entry) =>
@@ -392,22 +417,40 @@ describeRender(
           ),
         { timeout: 30_000, polling: 100 }
       )
+      expect(sawIt(await page.evaluate(() => globalThis.__orcaSentinelCalls))).toBe(true)
 
-      // And dispose takes the listener back off without touching the handler either.
+      // Dispose takes the terminal's listener off and leaves the page's handler where it was.
       await page.evaluate(() => globalThis.__orcaTerminalProbe.setMounted(false))
       await page.locator('#terminal-container').waitFor({ state: 'detached', timeout: 30_000 })
-      expect(await page.evaluate(() => window.onerror)).toBe(null)
-      const afterDispose = await page.evaluate(() => {
-        const before = globalThis.__orcaTerminalEngineErrors.length
+      expect(await page.evaluate(() => window.onerror === globalThis.__orcaSentinel)).toBe(true)
+      const before = await page.evaluate(() => {
         setTimeout(() => {
           throw new Error('orca-terminal-render-after-dispose')
         }, 0)
-        return before
+        return globalThis.__orcaTerminalEngineErrors.length
       })
-      await page.waitForTimeout(500)
-      expect(await page.evaluate(() => globalThis.__orcaTerminalEngineErrors.length)).toBe(
-        afterDispose
+      await page.waitForFunction(
+        () =>
+          globalThis.__orcaSentinelCalls.some((entry) =>
+            entry.includes('orca-terminal-render-after-dispose')
+          ),
+        { timeout: 30_000, polling: 100 }
       )
+      // The page's handler saw it and the terminal's did not, which is what dispose has to mean.
+      expect(await page.evaluate(() => globalThis.__orcaTerminalEngineErrors.length)).toBe(before)
+      await page.close()
+    }, 300_000)
+
+    it('installs no window.onerror on a page that had none', async () => {
+      // The other half: with nothing installed the terminal must not leave one behind either, so
+      // a later consumer still finds the slot free.
+      const { page } = await openTerminal()
+      expect(await page.evaluate(() => window.onerror)).toBe(null)
+      await openProbeTerminal(page)
+      expect(await page.evaluate(() => window.onerror)).toBe(null)
+      await page.evaluate(() => globalThis.__orcaTerminalProbe.setMounted(false))
+      await page.locator('#terminal-container').waitFor({ state: 'detached', timeout: 30_000 })
+      expect(await page.evaluate(() => window.onerror)).toBe(null)
       await page.close()
     }, 300_000)
 
