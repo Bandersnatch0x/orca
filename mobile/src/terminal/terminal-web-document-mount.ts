@@ -200,6 +200,10 @@ export function mountTerminalWebDocument(
       if (started) {
         teardownStartedDocument(started)
       }
+      // Dropped, not just torn down. `send` reads this, and the modules it names are the page's one
+      // singleton — so a handle that kept them would route a command into whatever document is
+      // live next, which is the mount that replaced this one.
+      started = null
       host.innerHTML = ''
       host.classList.remove(HOST_CLASS)
     },

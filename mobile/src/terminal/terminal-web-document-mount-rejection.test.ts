@@ -47,34 +47,39 @@ describe('a page mount whose document chunk failed', () => {
       realRemove(...removed)
     }
 
-    const abandoned = mountTerminalWebDocument(host, () => {})
-    abandoned.dispose()
-    // The same element, as React hands it back on the overlay's Reload.
-    const live = mountTerminalWebDocument(host, () => {})
-    // The message is the mocking layer's, not the one thrown, so the two counters are what say
-    // which import did what: the abandoned mount's failed, and the live mount's did not.
-    await expect(abandoned.ready).rejects.toThrow()
-    expect(chunk.failures, 'the abandoned mount is the one whose chunk failed').toBe(1)
+    // Put back whatever happens, as the sibling case does: a failure part way through would
+    // otherwise leave the patched functions on `window` for everything that runs after it.
+    try {
+      const abandoned = mountTerminalWebDocument(host, () => {})
+      abandoned.dispose()
+      // The same element, as React hands it back on the overlay's Reload.
+      const live = mountTerminalWebDocument(host, () => {})
+      // The message is the mocking layer's, not the one thrown, so the two counters are what say
+      // which import did what: the abandoned mount's failed, and the live mount's did not.
+      await expect(abandoned.ready).rejects.toThrow()
+      expect(chunk.failures, 'the abandoned mount is the one whose chunk failed').toBe(1)
 
-    expect(host.querySelector('#terminal-container')).not.toBe(null)
-    expect(host.classList.contains(HOST_CLASS)).toBe(true)
-    // Still claimed, so the release did not hand the page back either.
-    expect(() => mountTerminalWebDocument(host, () => {})).toThrow(
-      'the terminal document is already mounted on this page'
-    )
+      expect(host.querySelector('#terminal-container')).not.toBe(null)
+      expect(host.classList.contains(HOST_CLASS)).toBe(true)
+      // Still claimed, so the release did not hand the page back either.
+      expect(() => mountTerminalWebDocument(host, () => {})).toThrow(
+        'the terminal document is already mounted on this page'
+      )
 
-    await live.ready
-    // The other half of the precondition: the mount that replaced it is a real started document,
-    // not a second casualty. Its resize listener is the one the start sequence adds.
-    expect(resizeListeners, 'the live mount started its document').toBe(1)
-    // And disposing the abandoned handle a second time changes nothing.
-    abandoned.dispose()
-    expect(host.querySelector('#terminal-container')).not.toBe(null)
-    expect(host.classList.contains(HOST_CLASS)).toBe(true)
-    live.dispose()
-    window.addEventListener = realAdd
-    window.removeEventListener = realRemove
-    expect(host.querySelector('#terminal-container')).toBe(null)
-    expect(resizeListeners, 'and it took its listener back on the way out').toBe(0)
+      await live.ready
+      // The other half of the precondition: the mount that replaced it is a real started document,
+      // not a second casualty. Its resize listener is the one the start sequence adds.
+      expect(resizeListeners, 'the live mount started its document').toBe(1)
+      // And disposing the abandoned handle a second time changes nothing.
+      abandoned.dispose()
+      expect(host.querySelector('#terminal-container')).not.toBe(null)
+      expect(host.classList.contains(HOST_CLASS)).toBe(true)
+      live.dispose()
+      expect(host.querySelector('#terminal-container')).toBe(null)
+      expect(resizeListeners, 'and it took its listener back on the way out').toBe(0)
+    } finally {
+      window.addEventListener = realAdd
+      window.removeEventListener = realRemove
+    }
   })
 })

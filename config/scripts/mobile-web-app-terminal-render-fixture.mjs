@@ -56,11 +56,29 @@ const SHELL_HOST = {
  * the file finishes keeps the vitest worker alive after its last test has reported.
  */
 async function closeTerminalRenderFixture({ browser, scratch, server }) {
-  await browser?.close()
-  if (server) {
-    await new Promise((resolve) => server.close(resolve))
+  // Each one is asked independently, because stopping at the first refusal is how the socket and
+  // the scratch tree survived in the first place: a browser that will not close would take the
+  // other two down with it. The first failure is what comes back, after all three have been tried.
+  const failures = []
+  const attempt = async (close) => {
+    try {
+      await close()
+    } catch (error) {
+      failures.push(error)
+    }
   }
-  await rm(scratch, { recursive: true, force: true })
+  await attempt(() => browser?.close())
+  await attempt(
+    () =>
+      server &&
+      new Promise((resolve, reject) => {
+        server.close((error) => (error ? reject(error) : resolve()))
+      })
+  )
+  await attempt(() => rm(scratch, { recursive: true, force: true }))
+  if (failures.length > 0) {
+    throw failures[0]
+  }
 }
 
 /**
@@ -106,7 +124,10 @@ export async function startTerminalRenderFixture() {
       ...(executablePath ? { executablePath } : {})
     })
   } catch (error) {
-    await closeTerminalRenderFixture({ browser, scratch, server: served?.server })
+    // Swallowed on purpose: what the caller needs is the reason the setup failed, and a cleanup
+    // that also refuses would replace it with something about a socket. The rollback is
+    // best-effort; the original error is the contract.
+    await closeTerminalRenderFixture({ browser, scratch, server: served?.server }).catch(() => {})
     throw error
   }
   const { origin } = served

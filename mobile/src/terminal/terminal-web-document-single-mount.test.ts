@@ -232,12 +232,14 @@ describe('the page terminal document', () => {
     const host = document.createElement('div')
     document.body.appendChild(host)
     const listeners = new Set<unknown>()
+    let adds = 0
     const realAdd = window.addEventListener.bind(window)
     const realRemove = window.removeEventListener.bind(window)
     // Parameters taken from the bound original, so the wrapper carries the real signature rather
     // than three implicit `any`s the tests typecheck refuses.
     window.addEventListener = (...added: Parameters<typeof realAdd>) => {
       if (added[0] === 'resize') {
+        adds += 1
         listeners.add(added[1])
       }
       realAdd(...added)
@@ -260,11 +262,10 @@ describe('the page terminal document', () => {
     }
 
     // The precondition: the document did start, so there was something to tear down. A build that
-    // bailed at the ownership check would add no listener and satisfy the emptiness below for the
-    // one reason this case exists to refuse.
-    expect(
-      listeners.size + Number(host.querySelector('#terminal-container') === null)
-    ).toBeGreaterThan(0)
+    // returned right after its ownership check would add nothing and satisfy the emptiness below
+    // for the one reason this case exists to refuse. Counted on the way in rather than read off
+    // the host afterwards — dispose empties the host on every path, so that told us nothing.
+    expect(adds, 'the document started and added its resize listener').toBe(1)
     expect(listeners.size, 'the resize listener the started document added').toBe(0)
     const { scope } = await import('./document/page-document-modules')
     expect(scope.term).toBe(null)
@@ -272,6 +273,31 @@ describe('the page terminal document', () => {
     const remounted = mountTerminalWebDocument(host, () => {})
     await remounted.ready
     remounted.dispose()
+  })
+
+  it('routes nothing into the document that replaced it', async () => {
+    // `send` reads what the mount adopted, and what it adopted names the page's one set of
+    // document modules. A handle that kept them after its dispose would hand a host command to
+    // whichever document is live next: same modules, same scope, a terminal that is not its own.
+    // `ping` is the cheapest way to see it, because the document answers it by posting through the
+    // scope's `postToHost` seam — which by then belongs to the mount that replaced this one.
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const stale = mountTerminalWebDocument(host, () => {})
+    await stale.ready
+    stale.dispose()
+
+    const posts: unknown[] = []
+    const live = mountTerminalWebDocument(host, (message) => posts.push(message.type))
+    await live.ready
+    stale.send({ id: 4242, type: 'ping' })
+    expect(posts).toEqual([])
+
+    // The precondition: the live document does answer a ping, so the silence above is the stale
+    // handle declining to speak rather than the command doing nothing.
+    live.send({ id: 4243, type: 'ping' })
+    expect(posts).toEqual(['pong'])
+    live.dispose()
   })
 
   it('gives the page back when the mount itself fails, so Reload can try again', async () => {
