@@ -1,35 +1,18 @@
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { chromium } from 'playwright-core'
-import { buildMobileWebAppBundle } from './build-mobile-web-app-bundle.mjs'
-import { MOBILE_WEB_APP_ROUTE_ROOT } from './mobile-web-app-route-manifest.mjs'
 import { mobileWebAppDependenciesPresent } from './mobile-web-app-bundle-dependencies.mjs'
 import {
-  COLS,
-  CONTROL_SOURCE,
   escapeDenseStream,
   FIRST_MARKER,
   LAST_MARKER,
-  LAYOUT_SOURCE,
-  MIN_STREAM_BYTES,
-  probeRouteSource,
-  ROWS
+  MIN_STREAM_BYTES
 } from './mobile-web-app-terminal-probe-route.mjs'
 import {
-  createBundleServer,
-  readRootComputedStyles,
-  terminalStyleReach,
-  installCspViolationRecorder,
-  installPageErrorSentinel,
-  installSchedulerRecorder,
-  installShellDouble,
-  readBridgeFaultGrant,
-  readBridgeProtocolVersion,
-  readShellCsp
-} from './mobile-web-app-render-harness.mjs'
+  CONTROL_ROUTE,
+  openProbeTerminal,
+  PROBE_ROUTE,
+  startTerminalRenderFixture
+} from './mobile-web-app-terminal-render-fixture.mjs'
+import { readRootComputedStyles, terminalStyleReach } from './mobile-web-app-render-harness.mjs'
 
 /**
  * The page's terminal, in a real browser, under the policy the shell sends.
@@ -51,124 +34,25 @@ import {
  * tree. That step retires the moment the session route is registered.
  */
 
-const projectDir = fileURLToPath(new URL('../..', import.meta.url))
-const mobileDir = join(projectDir, 'mobile')
-
-const PROBE_ROUTE = '/h/terminal-probe'
-const CONTROL_ROUTE = '/h/terminal-control'
-const PAGE_ROUTE_PATTERNS = [PROBE_ROUTE, CONTROL_ROUTE]
-const SHELL_SESSION_ID = 'terminal-render-session'
-const SHELL_BUILD_ID = 'terminal-render-build'
-const SHELL_HOST = {
-  id: 'terminal-render-host',
-  name: 'Terminal Render Host',
-  endpoint: 'ws://terminal-render',
-  lastConnected: 1
-}
-
 const bundles = mobileWebAppDependenciesPresent()
 const describeRender = bundles ? describe : describe.skip
 
-let scratch
-let server
-let browser
-let origin
-let cspHeader = null
-let bridgeVersion = null
-let faultGrant = null
+let fixture = null
 let controlCspViolations = []
 const stream = escapeDenseStream()
+const openPage = (pathname, options) => fixture.openPage(pathname, options)
+const openTerminal = (options) => fixture.openTerminal(options)
 
 beforeAll(async () => {
   if (!bundles) {
     return
   }
-  cspHeader = await readShellCsp()
-  bridgeVersion = await readBridgeProtocolVersion()
-  faultGrant = await readBridgeFaultGrant()
-  scratch = await mkdtemp(join(tmpdir(), 'orca-c75-terminal-render-'))
-  const appDir = join(scratch, 'app')
-  const routeDir = join(appDir, MOBILE_WEB_APP_ROUTE_ROOT)
-  await mkdir(routeDir, { recursive: true })
-  await writeFile(join(routeDir, '_layout.tsx'), LAYOUT_SOURCE)
-  // Extensionless, so the bundler resolves the `.web.tsx` sibling exactly as it would for a real
-  // route. Naming the `.tsx` would mount the WebView wrapper no browser can render.
-  await writeFile(
-    join(routeDir, 'terminal-probe.tsx'),
-    probeRouteSource(join(mobileDir, 'src', 'terminal', 'TerminalWebView'))
-  )
-  await writeFile(join(routeDir, 'terminal-control.tsx'), CONTROL_SOURCE)
-  const built = await buildMobileWebAppBundle({
-    appDir,
-    outDir: join(scratch, 'bundle'),
-    pageRoutes: [
-      { pathname: PROBE_ROUTE, grants: [] },
-      { pathname: CONTROL_ROUTE, grants: [] }
-    ]
-  })
-  const served = await createBundleServer({ outDir: built.outDir, cspHeader })
-  server = served.server
-  origin = served.origin
-  const executablePath = process.env.ORCA_MOBILE_WEB_RENDER_BROWSER
-  browser = await chromium.launch({ headless: true, ...(executablePath ? { executablePath } : {}) })
+  fixture = await startTerminalRenderFixture()
 }, 600_000)
 
 afterAll(async () => {
-  await browser?.close()
-  server?.close()
-  if (scratch) {
-    await rm(scratch, { recursive: true, force: true })
-  }
+  await fixture?.close()
 })
-
-async function openPage(
-  pathname,
-  { errorSentinel = false, scheduler = false, beforeNavigate } = {}
-) {
-  const page = await browser.newPage({ viewport: { width: 390, height: 844 } })
-  await beforeNavigate?.(page)
-  if (scheduler) {
-    await page.addInitScript(installSchedulerRecorder)
-  }
-  await page.addInitScript(installCspViolationRecorder)
-  if (errorSentinel) {
-    await page.addInitScript(installPageErrorSentinel)
-  }
-  await page.addInitScript(installShellDouble, {
-    version: bridgeVersion,
-    sessionId: SHELL_SESSION_ID,
-    buildId: SHELL_BUILD_ID,
-    route: { pathname, params: {} },
-    host: SHELL_HOST,
-    storage: {},
-    faultGrant,
-    grants: [faultGrant],
-    pageRoutes: PAGE_ROUTE_PATTERNS,
-    replies: {}
-  })
-  const errors = []
-  page.on('pageerror', (error) => errors.push(`${error.name}: ${error.message}`))
-  page.on('console', (message) => {
-    if (message.type() === 'error') {
-      errors.push(`console.error: ${message.text()}`)
-    }
-  })
-  await page.goto(`${origin}/`, { waitUntil: 'load' })
-  await page.waitForFunction(() => document.documentElement.dataset.orcaWebEntry === 'mounted', {
-    timeout: 60_000,
-    polling: 250
-  })
-  return { errors, page }
-}
-
-async function openTerminal(options) {
-  const opened = await openPage(PROBE_ROUTE, options)
-  await opened.page.waitForFunction(() => globalThis.__orcaTerminalReady === true, {
-    timeout: 60_000,
-    polling: 100
-  })
-  return opened
-}
 
 /** Violations this page recorded that the control did not, which is the terminal's own account. */
 async function terminalCspViolations(page) {
@@ -180,26 +64,6 @@ async function terminalCspViolations(page) {
 /** The asset name is a content hash and the port is per run; neither is part of the finding. */
 function stripAssetPath(entry) {
   return entry.replace(/ @ .*$/, '')
-}
-
-/**
- * The markup, then `init`, then the engine.
- *
- * xterm is opened by the document's `init`, not by the mount: the component plants the elements
- * and the modules read them, and the terminal appears on the first host command. So the order
- * here is the order a session screen uses, and each step is waited for rather than assumed —
- * `.xterm` before `init` would time out on a page that was working perfectly.
- */
-async function openProbeTerminal(page) {
-  await page.locator('#terminal-container').waitFor({ state: 'attached', timeout: 30_000 })
-  await page.evaluate(
-    ([cols, rows]) => globalThis.__orcaTerminalProbe.init(cols, rows, ''),
-    [COLS, ROWS]
-  )
-  // Attached rather than visible: the replacement surface is hidden until its writes drain, and
-  // the commit that reveals it is the last step of the same rAF chain `awaitReady` waits on.
-  await page.locator('#terminal-surface .xterm').waitFor({ state: 'attached', timeout: 30_000 })
-  await page.evaluate(() => globalThis.__orcaTerminalProbe.awaitReady())
 }
 
 describeRender(
@@ -471,6 +335,100 @@ describeRender(
       await page.close()
     }, 300_000)
 
+    it('comes back from Reload while the chunk it is waiting on is still in flight', async () => {
+      // The other end of the case above: the chunk does not fail, it is merely slow — a cold CDN
+      // edge, a phone on a train. The document is reached by a dynamic import, so the mount is in
+      // flight while the 15 s readiness watchdog runs out and puts the overlay on the screen, and
+      // ruling 20 names that overlay's Reload as the way back. Reload is a second mount, so it is
+      // refused outright unless the first mount's cleanup could give the page back while its
+      // import was still unresolved — which is what the handle being synchronous is for.
+      //
+      // Held past the watchdog rather than mocked past it, because the window under test is the
+      // one between the claim and the import resolving, and only a real pending request has it.
+      const HOLD_MS = 20_000
+      let held = null
+      const { page } = await openPage(PROBE_ROUTE, {
+        beforeNavigate: async (opened) => {
+          await opened.route('**/*.js', async (route) => {
+            const response = await route.fetch()
+            const body = await response.text()
+            if (held === null && body.includes('terminal runtime error')) {
+              held = route.request().url()
+              await new Promise((resolve) => setTimeout(resolve, HOLD_MS))
+            }
+            await route.fulfill({ response, body })
+          })
+        }
+      })
+      await expect.poll(() => held, { timeout: 60_000 }).not.toBe(null)
+      // The watchdog, named: the overlay has to be the one the stall raises, not an engine error
+      // from somewhere else, or Reload would be answering a different question.
+      await page.waitForFunction(
+        () =>
+          (globalThis.__orcaTerminalEngineErrors ?? []).some((entry) =>
+            entry.includes('no ready signal')
+          ),
+        undefined,
+        { timeout: 60_000, polling: 100 }
+      )
+      const reload = page.getByText('Reload')
+      await reload.waitFor({ timeout: 30_000 })
+      expect(
+        await page.evaluate(() => globalThis.__orcaTerminalReady === true),
+        'the first mount was still waiting on its chunk when Reload appeared'
+      ).toBe(false)
+
+      await reload.click()
+      await page.waitForFunction(() => globalThis.__orcaTerminalReady === true, {
+        timeout: 60_000,
+        polling: 100
+      })
+      await openProbeTerminal(page)
+      await assertLiveTerminal(page, 'reload-during-import')
+      await page.unrouteAll({ behavior: 'ignoreErrors' })
+      await page.close()
+    }, 300_000)
+
+    it('leaves the page the listeners it found, across a mount and a dispose', async () => {
+      // Ruling 20 moved every install into a start function and ruling 21 gave each one a stop,
+      // and the document installs on `window` and `document` both: the resize refit, the error
+      // reporter, the tap and gesture listeners the surface modules arm. A stop that forgets one
+      // does not fail anything visible — the next mount simply adds a second copy, and the page
+      // accumulates a listener per terminal it has ever shown.
+      //
+      // The comparison is drawn across a second mount rather than against the bare page: the
+      // component mounts as the route does, so there is no moment before the first terminal to
+      // photograph. Both readings are taken with no terminal on the page, so a mount that leaks
+      // once leaks again and the two disagree.
+      const { page } = await openTerminal({ listeners: true })
+      await openProbeTerminal(page)
+      const withNoTerminal = async () => {
+        await page.evaluate(() => globalThis.__orcaTerminalProbe.setMounted(false))
+        await page.locator('#terminal-container').waitFor({ state: 'detached', timeout: 30_000 })
+        return page.evaluate(() => globalThis.__orcaListeners.snapshot())
+      }
+      const before = await withNoTerminal()
+      await page.evaluate(() => {
+        globalThis.__orcaTerminalReady = false
+        globalThis.__orcaTerminalProbe.setMounted(true)
+      })
+      await page.waitForFunction(() => globalThis.__orcaTerminalReady === true, {
+        timeout: 60_000,
+        polling: 100
+      })
+      await openProbeTerminal(page)
+      const whileLive = await page.evaluate(() => globalThis.__orcaListeners.snapshot())
+      const after = await withNoTerminal()
+
+      // The precondition: a mount that installed nothing would satisfy the equality below for
+      // exactly the reason the case exists to refuse.
+      expect(whileLive, 'the mount installed listeners the dispose has to take back').not.toEqual(
+        before
+      )
+      expect(after).toEqual(before)
+      await page.close()
+    }, 300_000)
+
     it('still reports runtime errors after a first mount spent the non-fatal budget', async () => {
       // Ruling 21's finding, end to end. `reportEngineError` caps non-fatal notifies at five so a
       // per-frame thrower cannot flood the host. That counter is the document's, not the mount's:
@@ -608,9 +566,14 @@ describeRender(
       // bump the token it tests itself against — the frame still runs. Nothing but
       // `cancelDocumentFrames` takes it back.
       //
-      // The retry loop is what makes the timing certain. With the surface hidden the grid
-      // measures zero, so the fit never commits and re-asks for a frame every time, up to its own
-      // 60-frame cap: at the moment of dispose one is always owed.
+      // Being owed at the moment of dispose is the whole precondition, so the frame and the
+      // dispose are put in one task rather than left to overlap: a resize refits through the
+      // document's own registry, synchronously, and the unmount is requested in the same discrete
+      // click, which React flushes before the event returns. Nothing the browser serves can run
+      // in between, so the count the observer reads is what dispose was holding. Left to timing
+      // instead — a refit on an interval — the retry loop commits on its first attempt whenever
+      // the grid still measures, and a dispose that lands between two refits owes nothing and
+      // agrees with an empty leak list for the reason under test. That run was one in five.
       let documentChunk = null
       const { page } = await openPage(PROBE_ROUTE, {
         scheduler: true,
@@ -632,12 +595,32 @@ describeRender(
       await openProbeTerminal(page)
       expect(documentChunk, 'the document was served as its own chunk').not.toBe(null)
 
-      await page.evaluate(() => {
-        globalThis.__orcaScheduler.watching = true
-        document.getElementById('terminal-surface').style.display = 'none'
-        globalThis.dispatchEvent(new Event('resize'))
-        globalThis.__orcaTerminalProbe.setMounted(false)
-      })
+      await page.evaluate((chunk) => {
+        const state = globalThis.__orcaScheduler
+        state.pendingAtDispose = null
+        state.watching = true
+        // A microtask, so it runs after the synchronous dispose that emptied the host and before
+        // any frame the browser has yet to serve: what it reads is what dispose left owed. A
+        // cancelled frame never runs, so it is still owed here, which is the point.
+        const observer = new MutationObserver(() => {
+          if (document.getElementById('terminal-container') || state.pendingAtDispose !== null) {
+            return
+          }
+          state.pendingAtDispose = state.scheduled.filter(
+            (entry) => entry.kind === 'frame' && !entry.fired && entry.caller.includes(chunk)
+          ).length
+          observer.disconnect()
+        })
+        observer.observe(document.body, { childList: true, subtree: true })
+        const trigger = document.createElement('button')
+        document.body.appendChild(trigger)
+        trigger.addEventListener('click', () => {
+          globalThis.dispatchEvent(new Event('resize'))
+          globalThis.__orcaTerminalProbe.setMounted(false)
+        })
+        trigger.click()
+        trigger.remove()
+      }, documentChunk)
       await page.locator('#terminal-container').waitFor({ state: 'detached', timeout: 30_000 })
       await page.evaluate(() => {
         globalThis.__orcaTerminalReady = false
@@ -651,13 +634,9 @@ describeRender(
       await page.evaluate(() => new Promise((resolve) => globalThis.setTimeout(resolve, 3000)))
 
       const scheduler = await page.evaluate(() => globalThis.__orcaScheduler)
-      // The precondition, stated as frames rather than as work of any kind: this case exists
-      // because the timer one cannot see a frame, so a run where the refit asked for none would
-      // agree with the empty list below for exactly the reason under test.
       expect(
-        scheduler.scheduled.filter(
-          (entry) => entry.owned && entry.kind === 'frame' && entry.caller.includes(documentChunk)
-        ).length
+        scheduler.pendingAtDispose,
+        'the document owed at least one frame at the moment it was disposed'
       ).toBeGreaterThan(0)
       expect(
         scheduler.leaked.filter(

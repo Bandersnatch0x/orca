@@ -64,15 +64,6 @@ function moduleSource(name: string): string {
   return readFileSync(new URL(`./${name}.ts`, import.meta.url), 'utf8')
 }
 
-/**
- * The top-level statements that are not declarations, and the initialisers that run something.
- *
- * A declaration counts as work when its initialiser calls, constructs, awaits, or reaches into
- * `document` or `window`: `const scrollIndicator = document.getElementById(...)` is a declaration
- * by shape and a parse-time element read by effect, and it is the exact form that survived a
- * remount still holding the first mount's node. Object and regex literals are not work, which is
- * why this reads the tree rather than the text.
- */
 /** A node's own properties, or nothing when it is not one. Read rather than asserted. */
 function fieldsOf(node: unknown): [string, unknown][] {
   return node !== null && typeof node === 'object' && !Array.isArray(node)
@@ -150,6 +141,15 @@ function mutableBindings(name: string): string[] {
   return mutableBindingsIn(name, moduleSource(name))
 }
 
+/**
+ * The top-level statements that are not declarations, and the initialisers that run something.
+ *
+ * A declaration counts as work when its initialiser calls, constructs, awaits, or reaches into
+ * `document` or `window`: `const scrollIndicator = document.getElementById(...)` is a declaration
+ * by shape and a parse-time element read by effect, and it is the exact form that survived a
+ * remount still holding the first mount's node. Object and regex literals are not work, which is
+ * why this reads the tree rather than the text.
+ */
 function parseTimeEffects(name: string): string[] {
   return parseTimeEffectsIn(name, moduleSource(name))
 }

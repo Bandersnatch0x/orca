@@ -427,9 +427,13 @@ export function installSchedulerRecorder() {
       // own header and line 1 is this wrapper.
       const caller = ((new Error('scheduled').stack ?? '').split('\n')[2] ?? '').trim()
       const container = document.getElementById('terminal-container')
-      state.scheduled.push({ kind, caller, owned: container !== null })
+      // `fired` is what makes "owed" readable: a callback that has not run is still owed, whether
+      // it was cancelled or is merely waiting, and cancelling never sets it.
+      const entry = { kind, caller, owned: container !== null, fired: false }
+      state.scheduled.push(entry)
       return schedule(
         (...args) => {
+          entry.fired = true
           if (container !== null && !container.isConnected) {
             state.leaked.push(`${kind} from ${caller}`)
           }
@@ -447,6 +451,53 @@ export function installSchedulerRecorder() {
 }
 
 /** Recorded before anything else runs, so a refusal during the page's own boot is counted. */
+/**
+ * Every window and document listener the page holds, by target, type and phase.
+ *
+ * Identity, not a tally: `addEventListener` with a listener the target already holds is a no-op in
+ * the DOM, and `removeEventListener` with one it does not hold is too, so counting calls would
+ * report leaks a browser does not have. The set is the live listeners, which is what a snapshot
+ * before and after a mount can be compared on.
+ */
+export function installListenerRecorder() {
+  const live = new Map()
+  globalThis.__orcaListeners = {
+    snapshot: () =>
+      Object.fromEntries(
+        [...live.entries()]
+          .map(([key, listeners]) => [key, listeners.size])
+          .filter(([, n]) => n > 0)
+      )
+  }
+  const keyFor = (target, type, options) => {
+    const where = target === globalThis ? 'window' : target === document ? 'document' : null
+    if (where === null) {
+      return null
+    }
+    const capture = typeof options === 'object' && options !== null ? !!options.capture : !!options
+    return `${where} ${type}${capture ? ' capture' : ''}`
+  }
+  const add = EventTarget.prototype.addEventListener
+  const remove = EventTarget.prototype.removeEventListener
+  EventTarget.prototype.addEventListener = function (type, listener, options) {
+    const key = keyFor(this, type, options)
+    if (key !== null && listener) {
+      if (!live.has(key)) {
+        live.set(key, new Set())
+      }
+      live.get(key).add(listener)
+    }
+    return add.call(this, type, listener, options)
+  }
+  EventTarget.prototype.removeEventListener = function (type, listener, options) {
+    const key = keyFor(this, type, options)
+    if (key !== null && listener) {
+      live.get(key)?.delete(listener)
+    }
+    return remove.call(this, type, listener, options)
+  }
+}
+
 export function installCspViolationRecorder() {
   globalThis.__orcaCspViolations = []
   document.addEventListener('securitypolicyviolation', (event) => {

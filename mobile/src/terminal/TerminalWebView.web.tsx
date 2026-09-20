@@ -70,10 +70,36 @@ export const TerminalWebView = forwardRef<TerminalWebViewHandle, Props>(
       if (!host) {
         return
       }
-      void mountTerminalWebDocument(host, (message) => receiveRef.current?.(message)).then(
-        (mounted) => {
+      // The handle comes back before the document does, which is what makes the cleanup below
+      // able to answer for a mount whose import is still in flight. Without it a slow chunk left
+      // the page claimed by a mount that had already been torn down, and Reload — the way out the
+      // overlay offers — was refused as a second document.
+      const reportMountFailure = (error: unknown) => {
+        // The document is reached by a dynamic import, so its chunk can fail to load — offline, a
+        // stale hashed filename after a deploy, an evaluation error in a module body. No engine
+        // ever ran, so no `error` notify is coming. It goes down the document's own reporting
+        // path, which names the cause in the overlay instead of leaving the readiness watchdog to
+        // say "no ready after 15s".
+        receiveRef.current?.({
+          type: 'error',
+          fatal: true,
+          message: `terminal document failed to load - ${
+            error instanceof Error ? error.message : String(error)
+          }`
+        })
+      }
+      let mounted
+      try {
+        mounted = mountTerminalWebDocument(host, (message) => receiveRef.current?.(message))
+      } catch (error) {
+        // The mount refuses synchronously when the page is already taken, and the refusal is the
+        // overlay's to show rather than the tree's to crash on.
+        reportMountFailure(error)
+        return
+      }
+      void mounted.ready.then(
+        () => {
           if (cancelled) {
-            mounted.dispose()
             return
           }
           documentRef.current = mounted
@@ -89,24 +115,14 @@ export const TerminalWebView = forwardRef<TerminalWebViewHandle, Props>(
           if (cancelled) {
             return
           }
-          // The document is reached by a dynamic import, so its chunk can fail to load — offline,
-          // a stale hashed filename after a deploy, an evaluation error in a module body. That is
-          // a rejected promise and nothing else: no engine ever ran, so no `error` notify is
-          // coming. It goes down the document's own reporting path, which names the cause in the
-          // overlay instead of leaving the readiness watchdog to say "no ready after 15s".
-          receiveRef.current?.({
-            type: 'error',
-            fatal: true,
-            message: `terminal document failed to load - ${
-              error instanceof Error ? error.message : String(error)
-            }`
-          })
+          reportMountFailure(error)
         }
       )
+      const live = mounted
       return () => {
         cancelled = true
-        documentRef.current?.dispose()
         documentRef.current = null
+        live.dispose()
       }
       // Mounted once per generation: re-running this would throw away a live terminal and its
       // scrollback, and the controller's identity changes with every callback prop.

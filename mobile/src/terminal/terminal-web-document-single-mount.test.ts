@@ -24,13 +24,15 @@ describe('the page terminal document', () => {
     const second = document.createElement('div')
     document.body.appendChild(second)
 
-    const mounted = await mountTerminalWebDocument(host, () => {})
-    await expect(mountTerminalWebDocument(second, () => {})).rejects.toThrow(
+    const mounted = mountTerminalWebDocument(host, () => {})
+    await mounted.ready
+    expect(() => mountTerminalWebDocument(second, () => {})).toThrow(
       'the terminal document is already mounted on this page'
     )
 
     mounted.dispose()
-    const remounted = await mountTerminalWebDocument(second, () => {})
+    const remounted = mountTerminalWebDocument(second, () => {})
+    await remounted.ready
     expect(second.querySelector('#terminal-container')).not.toBe(null)
     remounted.dispose()
   })
@@ -42,7 +44,8 @@ describe('the page terminal document', () => {
     // would leave it holding its renderer, its observers and its buffers for the life of the tab.
     const host = document.createElement('div')
     document.body.appendChild(host)
-    const mounted = await mountTerminalWebDocument(host, () => {})
+    const mounted = mountTerminalWebDocument(host, () => {})
+    await mounted.ready
     const { scope } = await import('./document/page-document-modules')
 
     const disposed: string[] = []
@@ -63,7 +66,8 @@ describe('the page terminal document', () => {
     // twice is what the deduplication exists to stop.
     const host = document.createElement('div')
     document.body.appendChild(host)
-    const mounted = await mountTerminalWebDocument(host, () => {})
+    const mounted = mountTerminalWebDocument(host, () => {})
+    await mounted.ready
     const { scope } = await import('./document/page-document-modules')
 
     let disposals = 0
@@ -83,7 +87,8 @@ describe('the page terminal document', () => {
     // dispose, which is what the next mount does.
     const host = document.createElement('div')
     document.body.appendChild(host)
-    const mounted = await mountTerminalWebDocument(host, () => {})
+    const mounted = mountTerminalWebDocument(host, () => {})
+    await mounted.ready
     const { scope } = await import('./document/page-document-modules')
 
     mounted.dispose()
@@ -107,9 +112,11 @@ describe('the page terminal document', () => {
     const second = document.createElement('div')
     document.body.append(first, second)
 
-    const stale = await mountTerminalWebDocument(first, () => {})
+    const stale = mountTerminalWebDocument(first, () => {})
+    await stale.ready
     stale.dispose()
-    const live = await mountTerminalWebDocument(second, () => {})
+    const live = mountTerminalWebDocument(second, () => {})
+    await live.ready
     const { scope } = await import('./document/page-document-modules')
 
     let disposals = 0
@@ -122,7 +129,37 @@ describe('the page terminal document', () => {
     expect(second.querySelector('#terminal-container')).not.toBe(null)
     expect(scope.term).not.toBe(null)
     // And the page is still taken, so the live document is still the one that owns it.
-    await expect(mountTerminalWebDocument(first, () => {})).rejects.toThrow(
+    expect(() => mountTerminalWebDocument(first, () => {})).toThrow(
+      'the terminal document is already mounted on this page'
+    )
+    live.dispose()
+  })
+
+  it('tells two mounts of the same element apart, which a host comparison cannot', async () => {
+    // Why the claim is a token and not the host. React reuses elements, so the page can hand the
+    // second mount the very element the first one used — that is the ordinary remount, not a
+    // corner. A dispose that asked "is this my host?" would answer yes for both handles, and the
+    // stale one would tear down the live document while leaving the page claimed.
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+
+    const stale = mountTerminalWebDocument(host, () => {})
+    await stale.ready
+    stale.dispose()
+    const live = mountTerminalWebDocument(host, () => {})
+    await live.ready
+    const { scope } = await import('./document/page-document-modules')
+
+    let disposals = 0
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: dispose is the only member the mount's dispose reaches on a terminal.
+    scope.term = { dispose: () => (disposals += 1) } as unknown as typeof scope.term
+
+    stale.dispose()
+
+    expect(disposals).toBe(0)
+    expect(host.querySelector('#terminal-container')).not.toBe(null)
+    expect(host.classList.contains('orca-terminal-document-host')).toBe(true)
+    expect(() => mountTerminalWebDocument(host, () => {})).toThrow(
       'the terminal document is already mounted on this page'
     )
     live.dispose()
@@ -140,11 +177,12 @@ describe('the page terminal document', () => {
         return ''
       }
     })
-    await expect(mountTerminalWebDocument(detached, () => {})).rejects.toThrow('orca-mount-failed')
+    expect(() => mountTerminalWebDocument(detached, () => {})).toThrow('orca-mount-failed')
 
     const host = document.createElement('div')
     document.body.appendChild(host)
-    const mounted = await mountTerminalWebDocument(host, () => {})
+    const mounted = mountTerminalWebDocument(host, () => {})
+    await mounted.ready
     expect(host.querySelector('#terminal-container')).not.toBe(null)
     mounted.dispose()
   })

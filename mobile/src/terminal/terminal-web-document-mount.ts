@@ -28,6 +28,15 @@ export type TerminalWebDocument = {
   /** Hands one host command to the document, as `postMessage` does inside the WebView. */
   send: (command: TerminalWebViewCommand & { id: number }) => void
   dispose: () => void
+  /**
+   * Settles when the document is live, or rejects with what stopped it.
+   *
+   * The handle itself is returned before this: the document is reached by a dynamic import, and a
+   * caller that had to await the import to get a handle would have nothing to dispose while the
+   * import was in flight. That is not a corner — a slow chunk is what the readiness watchdog is
+   * for, and the overlay's Reload is what ruling 20 names as the way out of it.
+   */
+  ready: Promise<void>
 }
 
 const STYLE_ELEMENT_ID = 'orca-terminal-document-style'
@@ -96,40 +105,119 @@ function createPageWebglAddon(onFallback: (reason: string) => void) {
  */
 let liveDocument: symbol | null = null
 
-export async function mountTerminalWebDocument(
+/** What a mount has built so far, which is nothing until its import resolves. */
+type StartedDocument = {
+  modules: typeof import('./document/page-document-modules')
+  onWindowResize: () => void
+}
+
+/**
+ * The document, mounted. The handle comes back before the document exists.
+ *
+ * Synchronous on purpose. The modules arrive through a dynamic import, and the caller's cleanup
+ * can run while that import is still in flight — a slow chunk, a cold cache, a tab that was
+ * backgrounded. A caller that had to await the import to get a handle would have nothing to
+ * dispose in that window, and the claim below would outlive the mount that made it: the next
+ * mount, the one the error overlay's Reload asks for, would be refused as a second document and
+ * the terminal would never come back. So the claim and the handle are made here, together, and
+ * `dispose` answers for whichever state the mount is in when it is called.
+ */
+export function mountTerminalWebDocument(
   host: HTMLElement,
   receive: (message: Record<string, unknown>) => void
-): Promise<TerminalWebDocument> {
+): TerminalWebDocument {
   if (liveDocument) {
     throw new Error('the terminal document is already mounted on this page')
   }
   const token = Symbol('orca terminal document')
   liveDocument = token
-  try {
-    return await buildTerminalWebDocument(host, receive, token)
-  } catch (error) {
-    // A mount that never completed holds nothing, and the overlay's Reload has to be able to try
-    // again — the dynamic import below is exactly the step that can fail. Guarded all the same:
-    // this must not take the page back from a document that is not this one.
+  let started: StartedDocument | null = null
+  const release = () => {
     if (liveDocument === token) {
       liveDocument = null
     }
+    host.innerHTML = ''
+    // The sheet stays in the head; the class does not, so every rule in it matches nothing
+    // again the moment the terminal is gone.
+    host.classList.remove(HOST_CLASS)
+  }
+
+  try {
+    ensureDocumentStyle()
+    host.classList.add(HOST_CLASS)
+    host.innerHTML = TERMINAL_DOCUMENT_MARKUP
+    // The WebView's `<head>` declares this before anything runs, and the document's error
+    // reporter reads it unguarded. Without it the first report throws inside `window.onerror`.
+    window.__engineErrors = []
+  } catch (error) {
+    // The claim is made before this runs, so it has to come back if the planting fails.
+    release()
     throw error
   }
+
+  const ready = buildTerminalWebDocument(host, receive).then(
+    (built) => {
+      if (liveDocument !== token) {
+        // Disposed while the import was in flight. The page is already someone else's, so this
+        // releases nothing and starts nothing; the modules it resolved are inert until started.
+        return
+      }
+      started = built
+    },
+    (error: unknown) => {
+      // The import failed, so nothing was started and the page has to go back — the overlay's
+      // Reload is a second mount and it must be allowed to make one.
+      release()
+      throw error
+    }
+  )
+
+  return {
+    send: (command) => {
+      started?.modules.handleMsg(command)
+    },
+    dispose: () => {
+      // Once, and only by the document that is live. A handle outlives what it built — the
+      // component holds one in a ref and React may run a cleanup after a later mount has already
+      // started — so a second call, or a call from a handle whose document has been replaced,
+      // would tear down the terminal that is on the screen now. Everything below this line is
+      // shared: the scope, the module sequences, the `window.__engineErrors` array.
+      if (liveDocument !== token) {
+        return
+      }
+      liveDocument = null
+      if (started) {
+        teardownStartedDocument(started)
+      }
+      host.innerHTML = ''
+      host.classList.remove(HOST_CLASS)
+    },
+    ready
+  }
+}
+
+/** Undoes a document that did start: its listener, its module sequence and its terminals. */
+function teardownStartedDocument({ modules, onWindowResize }: StartedDocument) {
+  window.removeEventListener('resize', onWindowResize)
+  modules.stopPageDocumentModules()
+  const { scope } = modules
+  // Both terminals, because a swap that never committed leaves two. `beginTerminalSurfaceSwap`
+  // opens a hidden replacement and `commitTerminalSurfaceSwap` disposes the one it replaced; an
+  // unmount between the two leaves the committed terminal live with nothing pointing at it. They
+  // are the same object whenever no swap is open, so the pair is deduplicated.
+  for (const terminal of new Set([scope.term, scope.committedTerm])) {
+    try {
+      terminal?.dispose()
+    } catch {}
+  }
+  scope.term = null
+  scope.committedTerm = null
 }
 
 async function buildTerminalWebDocument(
   host: HTMLElement,
-  receive: (message: Record<string, unknown>) => void,
-  token: symbol
-): Promise<TerminalWebDocument> {
-  ensureDocumentStyle()
-  host.classList.add(HOST_CLASS)
-  host.innerHTML = TERMINAL_DOCUMENT_MARKUP
-  // The WebView's `<head>` declares this before anything runs, and the document's error reporter
-  // reads it unguarded. Without it the first report throws inside `window.onerror`.
-  window.__engineErrors = []
-
+  receive: (message: Record<string, unknown>) => void
+): Promise<StartedDocument> {
   const documentModules = await import('./document/page-document-modules')
   const { scope } = documentModules
 
@@ -182,37 +270,5 @@ async function buildTerminalWebDocument(
   }
   window.addEventListener('resize', onWindowResize)
 
-  return {
-    send: (command) => {
-      documentModules.handleMsg(command)
-    },
-    dispose: () => {
-      // Once, and only by the document that is live. A handle outlives what it built — the
-      // component holds one in a ref and React may run a cleanup after a later mount has already
-      // started — so a second call, or a call from a handle whose document has been replaced,
-      // would tear down the terminal that is on the screen now. Everything below this line is
-      // shared: the scope, the module sequences, the `window.__engineErrors` array.
-      if (liveDocument !== token) {
-        return
-      }
-      liveDocument = null
-      window.removeEventListener('resize', onWindowResize)
-      documentModules.stopPageDocumentModules()
-      // Both terminals, because a swap that never committed leaves two. `beginTerminalSurfaceSwap`
-      // opens a hidden replacement and `commitTerminalSurfaceSwap` disposes the one it replaced;
-      // an unmount between the two leaves the committed terminal live with nothing pointing at
-      // it. They are the same object whenever no swap is open, so the pair is deduplicated.
-      for (const terminal of new Set([scope.term, scope.committedTerm])) {
-        try {
-          terminal?.dispose()
-        } catch {}
-      }
-      scope.term = null
-      scope.committedTerm = null
-      host.innerHTML = ''
-      // The sheet stays in the head; the class does not, so every rule in it matches nothing
-      // again the moment the terminal is gone.
-      host.classList.remove(HOST_CLASS)
-    }
-  }
+  return { modules: documentModules, onWindowResize }
 }

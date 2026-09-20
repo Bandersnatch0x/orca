@@ -63,15 +63,31 @@ import { startSurfaceTouchGestures, stopSurfaceTouchGestures } from './surface-t
  */
 export function startPageDocumentModules() {
   resetTerminalDocumentScope()
-  startRuntimeConstants()
-  startSurfaceSwap()
-  startTextScaling()
-  startWebglRecovery()
-  startHostNotify()
-  startSelectionStateAndEviction()
-  startTapDispatch()
-  startSelectionMenuButtons()
-  startSurfaceTouchGestures()
+  // Unwound if one of them throws: a start that completed has already taken a listener or
+  // installed the reporter, and leaving those behind would outlive the mount that never happened.
+  // Only the starts with an undo need recording; the rest write scope fields the next reset
+  // overwrites.
+  const undo: (() => void)[] = []
+  try {
+    startRuntimeConstants()
+    startSurfaceSwap()
+    startTextScaling()
+    startWebglRecovery()
+    undo.unshift(stopWebglRecovery)
+    startHostNotify()
+    undo.unshift(stopHostNotify)
+    startSelectionStateAndEviction()
+    startTapDispatch()
+    undo.unshift(stopTapDispatch)
+    startSelectionMenuButtons()
+    startSurfaceTouchGestures()
+    undo.unshift(stopSurfaceTouchGestures)
+  } catch (error) {
+    for (const stop of undo) {
+      stop()
+    }
+    throw error
+  }
 }
 
 /**

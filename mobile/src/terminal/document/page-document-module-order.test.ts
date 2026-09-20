@@ -52,7 +52,7 @@ describe('the page entry for the terminal document', () => {
     // modules; what runs is the call sequence, and the generator writes its own from the same
     // sources. A module that grows a start function and is not called here would leave the page
     // with an element nobody read.
-    const sequence = [...pageEntry.matchAll(/^ {2}(start[A-Za-z]+)\(\)$/gm)].map(
+    const sequence = [...pageEntry.matchAll(/^ {2,4}(start[A-Za-z]+)\(\)$/gm)].map(
       (match) => match[1]!
     )
     const emitted = await terminalDocumentStartCalls([
