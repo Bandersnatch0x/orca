@@ -70,6 +70,15 @@ describe('terminal document script equivalence', () => {
     expect(normalisationsOf('var a = 1;', 'const a = 1')).toEqual({ ...NONE, rebindings: 1 })
   })
 
+  it('counts a var that became a let, which acorn reports as a name', () => {
+    // `let` is contextual outside strict mode, so a rule matching on the token label alone would
+    // refuse every reassigned local the linter rewrote.
+    expect(normalisationsOf('var a = 1;\na = 2;', 'let a = 1\na = 2')).toEqual({
+      ...NONE,
+      rebindings: 1
+    })
+  })
+
   it('counts braces the linter adds to a brace-less body', () => {
     const before = 'if (a) b();\nfor (;;) c();\n'
     const after = 'if (a) {\n  b()\n}\nfor (;;) {\n  c()\n}\n'
@@ -115,17 +124,15 @@ describe('terminal document script equivalence', () => {
     )
   })
 
-  it('refuses a brace the generated script opened and never closed', () => {
-    // Braces are absorbed in pairs; one left open means the generated script is not the same shape,
-    // and without this case the absorption would hide it.
-    expect(normalisationsOf('if (a) b();', 'if (a) {\n  b()')).toBe(
-      '1 inserted brace(s) never closed'
+  it('refuses a generated script the printer cannot parse', () => {
+    // Both sides go through the printer, so something broken is reported here with its own
+    // message rather than thrown out of the comparison.
+    expect(normalisationsOf('if (a) b();', 'if (a) {\n  b()')).toContain(
+      'the generated script does not parse'
     )
   })
 
-  it('refuses a brace inserted where none was opened', () => {
-    expect(normalisationsOf('a();\nb();', 'a()\n}\nb()')).toBe(
-      'token 3: expected name b, generated }'
-    )
+  it('refuses a baseline the printer cannot parse, naming that side', () => {
+    expect(normalisationsOf('a()\n}', 'a()')).toContain('the baseline does not parse')
   })
 })

@@ -1,4 +1,5 @@
 import { tokenizer } from 'acorn'
+import { transformSync } from 'esbuild'
 
 /**
  * Whether two versions of the in-WebView document script are the same program, allowing only the
@@ -71,10 +72,18 @@ function readDocumentToken(token: unknown): DocumentToken | null {
   return { label, text: value === undefined || value === null ? '' : String(value) }
 }
 
-/** Semicolons are the formatter's; every other token is the program's. */
+/**
+ * Both sides are printed by the generator's own printer before being read.
+ *
+ * Otherwise every choice the printer makes — semicolons, property shorthand, quote style — reads as
+ * a difference in the program, when it is a difference in who typed it. Printing both sides with
+ * one printer removes that whole class by construction rather than by a rule per symptom, and
+ * leaves only what the four normalisations and the qualifier cover.
+ */
 function significantTokens(source: string): DocumentToken[] {
+  const printed = transformSync(source, { loader: 'js', target: 'chrome74', minify: false }).code
   const kept: DocumentToken[] = []
-  for (const raw of tokenizer(source, { ecmaVersion: 2020 })) {
+  for (const raw of tokenizer(printed, { ecmaVersion: 2020 })) {
     const token = readDocumentToken(raw)
     if (token === null) {
       throw new Error('acorn produced a token this comparison cannot read')
@@ -85,6 +94,27 @@ function significantTokens(source: string): DocumentToken[] {
     kept.push(token)
   }
   return kept
+}
+
+/**
+ * The tokens of one side, or the reason it could not be read.
+ *
+ * A script that does not parse is a refusal with the printer's own message rather than an
+ * exception out of the comparison: a generator that emitted something broken should say so where
+ * the other differences are reported.
+ */
+function readScriptTokens(
+  source: string,
+  side: string
+): { ok: true; tokens: DocumentToken[] } | { ok: false; reason: string } {
+  try {
+    return { ok: true, tokens: significantTokens(source) }
+  } catch (error) {
+    return {
+      ok: false,
+      reason: `${side} does not parse: ${error instanceof Error ? error.message.split('\n')[0] : String(error)}`
+    }
+  }
 }
 
 function describeToken(token: DocumentToken | undefined): string {
@@ -102,8 +132,16 @@ export function compareTerminalDocumentScripts(
   candidate: string,
   qualifier: string
 ): TerminalDocumentEquivalence {
-  const before = significantTokens(baseline)
-  const after = significantTokens(candidate)
+  const baselineTokens = readScriptTokens(baseline, 'the baseline')
+  if (!baselineTokens.ok) {
+    return { equivalent: false, reason: baselineTokens.reason }
+  }
+  const candidateTokens = readScriptTokens(candidate, 'the generated script')
+  if (!candidateTokens.ok) {
+    return { equivalent: false, reason: candidateTokens.reason }
+  }
+  const before = baselineTokens.tokens
+  const after = candidateTokens.tokens
   let qualifiedReferences = 0
   let scopeFieldDeclarations = 0
   let rebindings = 0
@@ -142,7 +180,7 @@ export function compareTerminalDocumentScripts(
       right += 3
       continue
     }
-    if (expected.label === 'var' && (actual.label === 'const' || actual.label === 'let')) {
+    if (expected.label === 'var' && isBlockScopedKeyword(actual)) {
       rebindings += 1
       lastMatched = actual
       left += 1
@@ -201,6 +239,16 @@ export function compareTerminalDocumentScripts(
       unboundCatches
     }
   }
+}
+
+/**
+ * Whether a token is the `const` or `let` a `var` became.
+ *
+ * `let` is contextual outside strict mode, so acorn reports it as a name rather than as a keyword;
+ * matching on the label alone would refuse every `let` the linter introduced.
+ */
+function isBlockScopedKeyword(token: DocumentToken): boolean {
+  return token.label === 'const' || (token.label === 'name' && token.text === 'let')
 }
 
 /** Whether the generated stream reads `<qualifier>.<expected>` where the baseline read `expected`. */

@@ -1,0 +1,67 @@
+import { readFile } from 'node:fs/promises'
+import * as esbuild from 'esbuild'
+
+/**
+ * Turns one module of the in-WebView terminal document back into the script text the document
+ * carries.
+ *
+ * The document is a string the native WebView loads, so its parts cannot be imported by anything;
+ * the web page needs exactly those parts and must not re-implement them. So the parts are modules,
+ * and this is the other direction: the modules' declarations, with their imports removed and their
+ * exports unmarked, spliced into the one function scope the document has always been.
+ *
+ * Imports are dropped rather than resolved because inside the document every name is already in
+ * scope — that is what the single IIFE means. `document-externals.ts` declares the names that have
+ * not moved into modules yet, and it emits nothing at all.
+ *
+ * `esbuild` does the TypeScript, as it already does for the xterm engine beside this file. It is a
+ * transform and not a bundle: a bundler would order the output by its dependency graph, and the
+ * document's order is part of what the equivalence test holds fixed.
+ */
+const INDENT = '  '
+
+/** Whether a line opens an import the document does not need. */
+function isImportLine(line) {
+  return /^import[\s{'"]/.test(line)
+}
+
+/**
+ * The emitted text of one module: transpiled, unexported, un-imported and indented into the IIFE.
+ *
+ * Multi-line imports are handled by dropping through to the line that closes them, which esbuild's
+ * output makes safe: it prints one import per line.
+ */
+export async function emitTerminalDocumentModule(modulePath) {
+  const source = await readFile(modulePath, 'utf8')
+  const { code } = await esbuild.transform(source, {
+    loader: 'ts',
+    format: 'esm',
+    target: 'chrome74',
+    // The document is read by people as well as by a WebView, and the equivalence test compares
+    // tokens, so keeping the printer's own layout costs nothing and keeps the diff legible.
+    minify: false
+  })
+  const kept = []
+  let inExportList = false
+  for (const line of code.split('\n')) {
+    if (inExportList) {
+      inExportList = !line.startsWith('}')
+      continue
+    }
+    if (isImportLine(line)) {
+      continue
+    }
+    // esbuild prints an ESM module's exports as one trailing `export { … };` block. Dropping only
+    // the keyword would leave a bare block statement in the document.
+    if (line.startsWith('export {')) {
+      inExportList = !line.includes('}')
+      continue
+    }
+    kept.push(line.startsWith('export ') ? line.slice('export '.length) : line)
+  }
+  const body = kept.join('\n').trim()
+  return body
+    .split('\n')
+    .map((line) => (line.length === 0 ? line : `${INDENT}${line}`))
+    .join('\n')
+}
