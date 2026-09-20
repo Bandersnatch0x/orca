@@ -53,3 +53,9 @@ export declare function enqueueNormalBufferScrollDelta(deltaY: number): void
 
 /** `smooth-scroll-and-cell-geometry`: drops any sub-line smooth-scroll travel. */
 export declare function resetSmoothScrollOffset(): void
+
+/** `term-observers-and-mode-mirroring`: disposes every xterm listener the last terminal held. */
+export declare function disposeTermObservers(): void
+
+/** `surface-touch-gestures`: binds touch, wheel and tap handlers to a surface element. */
+export declare function attachSurfaceEventHandlers(target: HTMLElement): void

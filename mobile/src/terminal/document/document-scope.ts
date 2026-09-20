@@ -54,6 +54,7 @@ export type TerminalDocumentTerminal = {
   readonly buffer: { readonly active: TerminalDocumentBuffer }
   resize: (cols: number, rows: number) => void
   refresh: (start: number, end: number) => void
+  dispose: () => void
   loadAddon: (addon: TerminalDocumentWebglAddon) => void
   scrollToBottom: () => void
   scrollLines: (amount: number) => void
@@ -79,6 +80,10 @@ export type TerminalDocumentScope = {
   terminalThemeInput: unknown
   /** `wheel-scroll`: sub-line wheel travel carried between events; reset by a touch scroll. */
   wheelAccumDeltaY: number
+  /** `surface-swap`: the element xterm is currently mounted on. */
+  surface: HTMLElement | null
+  /** `surface-swap`: the terminal of a hidden replacement surface that has not committed. */
+  pendingTerm: TerminalDocumentTerminal | null
 }
 
 /** An xterm listener handle, as the document disposes of one. */
@@ -108,7 +113,9 @@ export function createTerminalDocumentScope(): TerminalDocumentScope {
     webglAddon: null,
     webglRecoveryTimer: null,
     terminalThemeInput: null,
-    wheelAccumDeltaY: 0
+    wheelAccumDeltaY: 0,
+    surface: null,
+    pendingTerm: null
   }
 }
 
