@@ -1,9 +1,9 @@
-import { readdir } from 'node:fs/promises'
-import { connect } from 'node:net'
+import { mkdtemp, readdir, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { describe, expect, it, vi } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { mobileWebAppDependenciesPresent } from './mobile-web-app-bundle-dependencies.mjs'
+import { startTerminalRenderFixture } from './mobile-web-app-terminal-render-fixture.mjs'
 
 /**
  * What the render fixture gives back when it never finishes starting.
@@ -18,53 +18,56 @@ import { mobileWebAppDependenciesPresent } from './mobile-web-app-bundle-depende
  * executable that is not there, rather than by standing a double in front of Playwright.
  */
 
+/** The name the fixture gives its scratch tree, which is the only thing in here it owns. */
 const SCRATCH_PREFIX = 'orca-c75-terminal-render-'
 const describeFixture = mobileWebAppDependenciesPresent() ? describe : describe.skip
 
-// The port the fixture served on, which it never hands out and which `close` makes unreachable.
-// Recorded through the real server rather than a double: what is under test is whether the thing
-// that was actually listening stopped.
-const { ports } = vi.hoisted(() => ({ ports: [] }))
-vi.mock('./mobile-web-app-render-harness.mjs', async (importOriginal) => {
-  const harness = await importOriginal()
-  return {
-    ...harness,
-    createBundleServer: async (options) => {
-      const served = await harness.createBundleServer(options)
-      ports.push(served.server.address().port)
-      return served
-    }
-  }
+let temporaryRoot = null
+let realTemporaryRoot = null
+
+beforeAll(async () => {
+  // The fixture names its scratch tree after `os.tmpdir()`, and the render check next door names
+  // its own the same way in a worker of its own — so reading the shared temp directory reports
+  // that one appearing and being swept up mid-case, which is not this case's business. Pointing
+  // `TMPDIR` at a directory of this worker's own makes the reading exact: whatever is left in
+  // here afterwards was left by the setup under test.
+  temporaryRoot = await mkdtemp(join(tmpdir(), 'orca-c75-fixture-rollback-'))
+  realTemporaryRoot = process.env.TMPDIR
+  process.env.TMPDIR = temporaryRoot
 })
 
-const { startTerminalRenderFixture } = await import('./mobile-web-app-terminal-render-fixture.mjs')
+afterAll(async () => {
+  if (realTemporaryRoot === undefined) {
+    delete process.env.TMPDIR
+  } else {
+    process.env.TMPDIR = realTemporaryRoot
+  }
+  await rm(temporaryRoot, { recursive: true, force: true })
+})
 
-/** Whether a connection to this port is refused, which is what a closed listener answers. */
-function refusesConnections(port) {
-  return new Promise((resolve) => {
-    const socket = connect({ host: '127.0.0.1', port })
-    socket.on('connect', () => {
-      socket.destroy()
-      resolve(false)
-    })
-    socket.on('error', () => resolve(true))
-  })
-}
-
-async function scratchDirectories() {
-  const entries = await readdir(tmpdir())
-  return entries.filter((entry) => entry.startsWith(SCRATCH_PREFIX)).sort()
+/**
+ * Listening sockets this process holds, which is the handle that keeps a worker alive.
+ *
+ * Spelled as Node spells it: filtering on `TCPSERVERWRAP` matches nothing and reads zero in both
+ * arms, which agrees with everything. And the handle is still listed while the close callback
+ * runs, so the reading is taken a tick later, once the loop has let it go.
+ */
+async function settledListeningSockets() {
+  await new Promise((resolve) => setTimeout(resolve, 50))
+  return process.getActiveResourcesInfo().filter((resource) => resource === 'TCPServerWrap').length
 }
 
 describeFixture('the terminal render fixture', () => {
   it('takes back the server and the scratch tree when the browser will not start', async () => {
-    const scratchBefore = await scratchDirectories()
+    const socketsBefore = await settledListeningSockets()
     const realBrowser = process.env.ORCA_MOBILE_WEB_RENDER_BROWSER
-    process.env.ORCA_MOBILE_WEB_RENDER_BROWSER = join(tmpdir(), 'orca-c75-no-such-browser')
+    process.env.ORCA_MOBILE_WEB_RENDER_BROWSER = join(temporaryRoot, 'orca-c75-no-such-browser')
     try {
-      // Named, not merely thrown: a build that broke for its own reason would also reject, and
-      // would satisfy a bare `toThrow` while saying nothing about the rollback under test. It
-      // also has to be the original error and not whatever the cleanup raised on its way out.
+      // Named, not merely thrown, and this is also the precondition the two readings below need.
+      // A bare `toThrow` passes for a build that broke for its own reason, which would leave
+      // nothing serving and nothing on disk and agree with both assertions for the wrong reason.
+      // Reaching the launch at all means `createBundleServer` returned, because it is the
+      // statement before it.
       await expect(startTerminalRenderFixture()).rejects.toThrow(
         /Failed to launch chromium because executable doesn't exist/
       )
@@ -76,10 +79,11 @@ describeFixture('the terminal render fixture', () => {
       }
     }
 
-    // The precondition: the launch has to have been reached with a server already listening, or
-    // there is nothing for the rollback to have released and the refusal below means nothing.
-    expect(ports, 'the setup got as far as serving the bundle').toHaveLength(1)
-    expect(await refusesConnections(ports[0])).toBe(true)
-    expect(await scratchDirectories()).toEqual(scratchBefore)
+    expect(await settledListeningSockets()).toBe(socketsBefore)
+    // The fixture's own trees, by the name it gives them. The launch that failed leaves Playwright
+    // artifacts and a browser profile in here too, and those are Playwright's to clean, not the
+    // rollback's.
+    const left = (await readdir(temporaryRoot)).filter((entry) => entry.startsWith(SCRATCH_PREFIX))
+    expect(left).toEqual([])
   }, 600_000)
 })
