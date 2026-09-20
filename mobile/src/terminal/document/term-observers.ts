@@ -1,8 +1,5 @@
-import {
-  afterWritesDrained,
-  disposeTermObservers,
-  updateScrollIndicator
-} from './document-externals'
+import { afterWritesDrained, disposeTermObservers } from './write-queue'
+import { updateScrollIndicator } from './document-externals'
 import { scope } from './document-scope'
 import { logFeedAndEvict } from './selection-state-and-eviction'
 import { emitKeyboardAvoidanceMetrics } from './keyboard-avoidance-metrics'

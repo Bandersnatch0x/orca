@@ -21,9 +21,6 @@ export declare function getTotalScale(): number
 /** `runtime-state-and-text-scaling`: posts one message to the native host. */
 export declare function notify(message: Record<string, unknown>): void
 
-/** `write-queue`: runs a callback when the replay queue reaches the point it was enqueued at. */
-export declare function enqueueWriteBoundary(callback: () => void): void
-
 /** `terminal-init-and-write`: whether xterm is showing the alternate screen buffer. */
 export declare function isAlternateBufferActive(): boolean
 
@@ -41,9 +38,6 @@ export declare function shouldRouteScrollToTerminalInput(): boolean
 
 /** `mouse-report-and-scroll-routing`: sends a line scroll to the terminal at a point. */
 export declare function routeScrollLines(lines: number, clientX: number, clientY: number): void
-
-/** `term-observers-and-mode-mirroring`: disposes every xterm listener the last terminal held. */
-export declare function disposeTermObservers(): void
 
 /** `surface-touch-gestures`: binds touch, wheel and tap handlers to a surface element. */
 export declare function attachSurfaceEventHandlers(target: HTMLElement): void
@@ -84,9 +78,6 @@ export declare function buildMouseClickInput(originX: number, originY: number): 
 /** `mouse-report-and-scroll-routing`: whether a tracking mode consumes plain clicks. */
 export declare function isClickMouseTrackingMode(mode: string): boolean
 
-/** `write-queue`: the trailing bytes a DECSET scan must carry into the next chunk. */
-export declare function extractMouseModeScanTail(input: string): string
-
 /** `host-message-router`: routes one decoded host message. */
 export declare function handleMsg(msg: unknown): void
 
@@ -101,6 +92,3 @@ export declare function clampPan(): void
 
 /** `smooth-scroll-and-cell-geometry`: writes the pan and scale onto the surface transform. */
 export declare function updateTransform(): void
-
-/** `write-queue`: runs a callback once the write queue has drained. */
-export declare function afterWritesDrained(callback: () => void): void

@@ -83,6 +83,7 @@ export type TerminalDocumentTerminal = {
   readonly rows: number
   readonly buffer: { readonly active: TerminalDocumentBuffer }
   readonly options: TerminalDocumentTerminalOptions
+  write: (data: string, callback?: () => void) => void
   readonly _core?: TerminalDocumentCore
   readonly modes?: { bracketedPasteMode?: boolean }
   onLineFeed?: (listener: () => void) => TerminalDocumentDisposable
@@ -142,6 +143,28 @@ export type TerminalDocumentScope = {
   sgrMouseMode: boolean
   /** `runtime-state`: whether the TUI asked for SGR pixel (1016) mouse reports. */
   sgrMousePixelsMode: boolean
+  /** `runtime-state`: Claude's record dot, which iOS WebKit would otherwise promote to emoji. */
+  CLAUDE_STATUS_DOT: string
+  /** `runtime-state`: the variation selector that forces the text glyph. */
+  TEXT_PRESENTATION_SELECTOR: string
+  /** `runtime-state`: the variation selector that forces the emoji glyph. */
+  EMOJI_PRESENTATION_SELECTOR: string
+  /** `runtime-state`: the dot with any trailing selectors, as one pattern. */
+  CLAUDE_STATUS_DOT_PATTERN: RegExp
+  /** `runtime-state`: whether a chunk ended mid-selector, so the next one starts inside it. */
+  statusDotPendingSelector: boolean
+  /** `runtime-state`: how far a split DECSET may be carried before the scan gives up. */
+  PRIVATE_MODE_SCAN_TAIL_LIMIT: number
+  /** `runtime-state`: chunks and boundaries waiting for xterm. */
+  writeQueue: TerminalWriteQueueEntry[]
+  /** `runtime-state`: how far the queue has been consumed, before compaction. */
+  writeQueueHead: number
+  /** `runtime-state`: whether a write is parsing right now. */
+  writesDraining: boolean
+  /** `runtime-state`: callbacks waiting for the queue to empty. */
+  afterDrainCallbacks: (() => void)[]
+  /** `runtime-state`: whether the terminal has been initialised. */
+  ready: boolean
   /** `normal-buffer-smooth-scroll`: sub-row scroll travel not yet committed to xterm. */
   smoothScrollOffsetY: number
   /** `normal-buffer-smooth-scroll`: scroll travel waiting for the next frame. */
@@ -223,6 +246,9 @@ export type TerminalDocumentModes = {
   sgrMousePixelsMode: boolean
 }
 
+/** One entry of the write queue: a chunk, a boundary callback, or a consumed slot. */
+export type TerminalWriteQueueEntry = string | (() => void) | undefined
+
 export type TerminalDocumentDisposable = { dispose?: () => void }
 
 /** xterm's WebGL addon, as the document loads, repaints and disposes of it. */
@@ -238,6 +264,10 @@ export type TerminalDocumentWebglAddon = {
  * A factory rather than a shared literal so a second document — a test, or a page that remounts —
  * starts from its own state instead of inheriting what the last one left.
  */
+const statusDot = String.fromCharCode(0x23fa)
+const textPresentationSelector = String.fromCharCode(0xfe0e)
+const emojiPresentationSelector = String.fromCharCode(0xfe0f)
+
 export function createTerminalDocumentScope(): TerminalDocumentScope {
   return {
     term: null,
@@ -268,6 +298,20 @@ export function createTerminalDocumentScope(): TerminalDocumentScope {
     trackedMouseTrackingMode: 'none',
     sgrMouseMode: false,
     sgrMousePixelsMode: false,
+    CLAUDE_STATUS_DOT: statusDot,
+    TEXT_PRESENTATION_SELECTOR: textPresentationSelector,
+    EMOJI_PRESENTATION_SELECTOR: emojiPresentationSelector,
+    CLAUDE_STATUS_DOT_PATTERN: new RegExp(
+      statusDot + '[' + textPresentationSelector + emojiPresentationSelector + ']*',
+      'g'
+    ),
+    statusDotPendingSelector: false,
+    PRIVATE_MODE_SCAN_TAIL_LIMIT: 4096,
+    writeQueue: [],
+    writeQueueHead: 0,
+    writesDraining: false,
+    afterDrainCallbacks: [],
+    ready: false,
     smoothScrollOffsetY: 0,
     pendingNormalScrollDeltaY: 0,
     normalScrollFrameId: null,

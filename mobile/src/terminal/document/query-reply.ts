@@ -1,4 +1,5 @@
-import { enqueueWriteBoundary, notify } from './document-externals'
+import { enqueueWriteBoundary } from './write-queue'
+import { notify } from './document-externals'
 import { scope, type TerminalDocumentDisposable } from './document-scope'
 
 /**

@@ -1,4 +1,4 @@
-import { extractMouseModeScanTail } from './document-externals'
+import { extractMouseModeScanTail } from './write-queue'
 import { scope } from './document-scope'
 
 export function isAltScreenActive(data: unknown): data is string {
