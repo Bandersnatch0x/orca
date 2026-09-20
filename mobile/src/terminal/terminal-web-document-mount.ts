@@ -81,37 +81,47 @@ function createPageWebglAddon(onFallback: (reason: string) => void) {
 }
 
 /**
- * One live document per page, because there is one scope per page.
+ * Which document is live, if any: one per page, because there is one scope per page.
  *
  * `document-scope` is a module singleton and every module reads it, so a second mount while the
  * first is up would not be a second terminal: both would drive the same fields, the same elements
  * and the same start sequence. The component mounts and disposes in one effect and cannot reach
  * this state, which is exactly why the refusal is named rather than left to surface as two
  * terminals writing over each other.
+ *
+ * A token per mount rather than the host element or the host's class. Two mounts can be handed
+ * the same element — the page remounts a terminal into a host React has reused — so an element is
+ * not an identity, and the class says only that *some* document is using this host. The token is
+ * what each handle holds, and it is what `dispose` checks before it touches anything shared.
  */
-let liveDocumentHost: HTMLElement | null = null
+let liveDocument: symbol | null = null
 
 export async function mountTerminalWebDocument(
   host: HTMLElement,
   receive: (message: Record<string, unknown>) => void
 ): Promise<TerminalWebDocument> {
-  if (liveDocumentHost) {
+  if (liveDocument) {
     throw new Error('the terminal document is already mounted on this page')
   }
-  liveDocumentHost = host
+  const token = Symbol('orca terminal document')
+  liveDocument = token
   try {
-    return await buildTerminalWebDocument(host, receive)
+    return await buildTerminalWebDocument(host, receive, token)
   } catch (error) {
     // A mount that never completed holds nothing, and the overlay's Reload has to be able to try
-    // again — the dynamic import below is exactly the step that can fail.
-    liveDocumentHost = null
+    // again — the dynamic import below is exactly the step that can fail. Guarded all the same:
+    // this must not take the page back from a document that is not this one.
+    if (liveDocument === token) {
+      liveDocument = null
+    }
     throw error
   }
 }
 
 async function buildTerminalWebDocument(
   host: HTMLElement,
-  receive: (message: Record<string, unknown>) => void
+  receive: (message: Record<string, unknown>) => void,
+  token: symbol
 ): Promise<TerminalWebDocument> {
   ensureDocumentStyle()
   host.classList.add(HOST_CLASS)
@@ -177,7 +187,15 @@ async function buildTerminalWebDocument(
       documentModules.handleMsg(command)
     },
     dispose: () => {
-      liveDocumentHost = null
+      // Once, and only by the document that is live. A handle outlives what it built — the
+      // component holds one in a ref and React may run a cleanup after a later mount has already
+      // started — so a second call, or a call from a handle whose document has been replaced,
+      // would tear down the terminal that is on the screen now. Everything below this line is
+      // shared: the scope, the module sequences, the `window.__engineErrors` array.
+      if (liveDocument !== token) {
+        return
+      }
+      liveDocument = null
       window.removeEventListener('resize', onWindowResize)
       documentModules.stopPageDocumentModules()
       // Both terminals, because a swap that never committed leaves two. `beginTerminalSurfaceSwap`

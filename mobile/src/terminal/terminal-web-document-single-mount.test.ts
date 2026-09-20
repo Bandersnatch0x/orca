@@ -76,6 +76,58 @@ describe('the page terminal document', () => {
     expect(disposals).toBe(1)
   })
 
+  it('tears down once, however many times the handle is disposed', async () => {
+    // A handle outlives what it built: the component keeps one in a ref, and React may run a
+    // cleanup twice. Everything dispose touches is shared, so what a second run would reach is
+    // whatever owns the scope by then — stood in for here by a terminal put back after the first
+    // dispose, which is what the next mount does.
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const mounted = await mountTerminalWebDocument(host, () => {})
+    const { scope } = await import('./document/page-document-modules')
+
+    mounted.dispose()
+
+    let disposals = 0
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: dispose is the only member the mount's dispose reaches on a terminal.
+    scope.term = { dispose: () => (disposals += 1) } as unknown as typeof scope.term
+
+    mounted.dispose()
+    mounted.dispose()
+    expect(disposals).toBe(0)
+    expect(scope.term).not.toBe(null)
+  })
+
+  it('does nothing when a stale handle is disposed after another document mounted', async () => {
+    // The case the idempotence check alone would miss. The first handle is spent, a second
+    // document is up, and the first handle's dispose arrives late — from a ref, from a cleanup
+    // React deferred. Comparing a token rather than the host or its class is what makes this
+    // answerable: the two mounts can be handed the same element.
+    const first = document.createElement('div')
+    const second = document.createElement('div')
+    document.body.append(first, second)
+
+    const stale = await mountTerminalWebDocument(first, () => {})
+    stale.dispose()
+    const live = await mountTerminalWebDocument(second, () => {})
+    const { scope } = await import('./document/page-document-modules')
+
+    let disposals = 0
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: as above; the live document's terminal is only ever disposed here.
+    scope.term = { dispose: () => (disposals += 1) } as unknown as typeof scope.term
+
+    stale.dispose()
+
+    expect(disposals).toBe(0)
+    expect(second.querySelector('#terminal-container')).not.toBe(null)
+    expect(scope.term).not.toBe(null)
+    // And the page is still taken, so the live document is still the one that owns it.
+    await expect(mountTerminalWebDocument(first, () => {})).rejects.toThrow(
+      'the terminal document is already mounted on this page'
+    )
+    live.dispose()
+  })
+
   it('gives the page back when the mount itself fails, so Reload can try again', async () => {
     // The overlay's Reload path. A mount that threw holds nothing, and a flag left set would
     // refuse every later attempt — the document's chunk failing to load is exactly that case.
