@@ -83,3 +83,6 @@ export declare function updateTransform(): void
 
 /** `runtime-state-and-text-scaling`: the scale that fits the grid to the viewport. */
 export declare function computeFitScale(): number
+
+/** `runtime-state-and-text-scaling`: the font size in pixels for a text-scale preset. */
+export declare function fontPxForScale(scale: number): number

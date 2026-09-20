@@ -1,4 +1,5 @@
 import { colors } from '../../theme/mobile-theme'
+import { MOBILE_TERMINAL_CARET_OPTIONS } from '../terminal-webview-html/theme'
 import {
   TERMINAL_FILE_URL_REGEX_SOURCE,
   TERMINAL_HTTP_URL_MAX_LENGTH,
@@ -27,3 +28,9 @@ export const terminalFileUrlRegexSource = TERMINAL_FILE_URL_REGEX_SOURCE
 
 /** The longest candidate a tap will open, matching desktop. */
 export const terminalHttpUrlMaxLength = TERMINAL_HTTP_URL_MAX_LENGTH
+
+/** The caret options, one export each because a substitution is keyed by name. */
+export const terminalCursorBlink = MOBILE_TERMINAL_CARET_OPTIONS.cursorBlink
+export const terminalCursorStyle = MOBILE_TERMINAL_CARET_OPTIONS.cursorStyle
+export const terminalShowCursorImmediately = MOBILE_TERMINAL_CARET_OPTIONS.showCursorImmediately
+export const terminalCursorInactiveStyle = MOBILE_TERMINAL_CARET_OPTIONS.cursorInactiveStyle

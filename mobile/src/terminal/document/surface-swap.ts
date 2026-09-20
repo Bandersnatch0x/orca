@@ -5,7 +5,7 @@ import { scope, type TerminalDocumentTerminal } from './document-scope'
 /** The surfaces and terminal a swap is replacing, handed back to whoever commits it. */
 export type TerminalSurfaceSwap = {
   oldTerm: TerminalDocumentTerminal | null
-  oldSurface: HTMLElement
+  oldSurface: HTMLElement | null
   nextSurface: HTMLElement
 }
 
@@ -58,7 +58,7 @@ export function commitTerminalSurfaceSwap(
   swap.nextSurface.style.position = ''
   swap.nextSurface.style.left = ''
   swap.nextSurface.style.top = ''
-  swap.oldSurface.remove()
+  swap.oldSurface!.remove()
   if (swap.oldTerm) {
     swap.oldTerm.dispose()
   }

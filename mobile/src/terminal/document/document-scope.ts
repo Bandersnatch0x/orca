@@ -85,6 +85,16 @@ export type TerminalDocumentTerminal = {
   readonly buffer: { readonly active: TerminalDocumentBuffer }
   readonly options: TerminalDocumentTerminalOptions
   write: (data: string, callback?: () => void) => void
+  open: (element: HTMLElement) => void
+  scrollToLine: (line: number) => void
+  readonly unicode: { activeVersion: string }
+  attachCustomKeyEventHandler: (handler: () => boolean) => void
+  onData: (listener: (data: string) => void) => TerminalDocumentDisposable
+  readonly textarea?: {
+    readOnly: boolean
+    tabIndex: number
+    setAttribute: (name: string, value: string) => void
+  }
   readonly element?: HTMLElement
   readonly _core?: TerminalDocumentCore
   readonly modes?: { bracketedPasteMode?: boolean }
@@ -145,6 +155,14 @@ export type TerminalDocumentScope = {
   sgrMouseMode: boolean
   /** `runtime-state`: whether the TUI asked for SGR pixel (1016) mouse reports. */
   sgrMousePixelsMode: boolean
+  /** `runtime-state`: the text scale the user picked, as a preset index. */
+  currentTextScale: number
+  /** `runtime-state`: the font stack xterm renders with. */
+  terminalFontFamily: string
+  /** `terminal-init-and-write`: whether the first live chunk since init is still pending. */
+  firstDataPending: boolean
+  /** `terminal-init-and-write`: whether the replayed snapshot was an alternate screen. */
+  activeAltScreenSnapshot: boolean
   /** `terminal-fit-scale`: the fit scale the document committed. */
   currentScale: number
   /** `runtime-state`: the pinch zoom the user applied on top of the fit scale. */
@@ -304,6 +322,10 @@ export function createTerminalDocumentScope(): TerminalDocumentScope {
     trackedMouseTrackingMode: 'none',
     sgrMouseMode: false,
     sgrMousePixelsMode: false,
+    currentTextScale: 1,
+    terminalFontFamily: '',
+    firstDataPending: true,
+    activeAltScreenSnapshot: false,
     currentScale: 1,
     userScale: 1,
     CLAUDE_STATUS_DOT: statusDot,
