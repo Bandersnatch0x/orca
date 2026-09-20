@@ -1,10 +1,10 @@
 import {
   afterWritesDrained,
   disposeTermObservers,
-  logFeedAndEvict,
   updateScrollIndicator
 } from './document-externals'
 import { scope } from './document-scope'
+import { logFeedAndEvict } from './selection-state-and-eviction'
 import { emitKeyboardAvoidanceMetrics } from './keyboard-avoidance-metrics'
 import { emitModesIfChanged } from './mode-mirroring'
 

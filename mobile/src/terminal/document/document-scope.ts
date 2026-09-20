@@ -142,6 +142,28 @@ export type TerminalDocumentScope = {
   sgrMouseMode: boolean
   /** `runtime-state`: whether the TUI asked for SGR pixel (1016) mouse reports. */
   sgrMousePixelsMode: boolean
+  /** `selection-state-and-eviction`: what counts as one word for select-all and word seeding. */
+  WORD_RE: RegExp
+  /** `selection-state-and-eviction`: how close to an edge a handle drag starts scrolling. */
+  EDGE_SCROLL_PX: number
+  /** `selection-state-and-eviction`: the edge-scroll tick, in milliseconds. */
+  EDGE_SCROLL_INTERVAL: number
+  /** `selection-state-and-eviction`: the menu pill element. */
+  selMenu: HTMLElement | null
+  /** `selection-state-and-eviction`: the pill's copy button. */
+  btnCopy: HTMLElement | null
+  /** `selection-state-and-eviction`: the pill's select-all button. */
+  btnSelAll: HTMLElement | null
+  /** `selection-state-and-eviction`: the running edge-scroll timer. */
+  edgeScrollTimer: ReturnType<typeof setInterval> | null
+  /** `selection-state-and-eviction`: which way the edge scroll is going. */
+  edgeScrollDir: number
+  /** `selection-state-and-eviction`: where the dragging finger last was. */
+  edgeScrollClientX: number
+  /** `selection-state-and-eviction`: where the dragging finger last was. */
+  edgeScrollClientY: number
+  /** `runtime-state`: whether captured OSC 8 rows may start shifting with eviction. */
+  initialOscLinkEvictionReady: boolean
   /** `selection-overlay`: the press duration that starts a selection, in milliseconds. */
   LONG_PRESS_MS: number
   /** `selection-overlay`: the travel that cancels a pending long press, in pixels. */
@@ -240,6 +262,17 @@ export function createTerminalDocumentScope(): TerminalDocumentScope {
     trackedMouseTrackingMode: 'none',
     sgrMouseMode: false,
     sgrMousePixelsMode: false,
+    WORD_RE: /[\p{L}\p{N}_./:@~+=?&#%-]/u,
+    EDGE_SCROLL_PX: 40,
+    EDGE_SCROLL_INTERVAL: 60,
+    selMenu: null,
+    btnCopy: null,
+    btnSelAll: null,
+    edgeScrollTimer: null,
+    edgeScrollDir: 0,
+    edgeScrollClientX: 0,
+    edgeScrollClientY: 0,
+    initialOscLinkEvictionReady: false,
     LONG_PRESS_MS: 500,
     LONG_PRESS_SLOP: 10,
     TAP_SLOP: 24,
