@@ -6,8 +6,8 @@ import { XTERM_HTML } from './terminal-webview-html'
 // uncovered region ships silently. A diff here means the emitted WebView source changed —
 // update these values only when that change is deliberate, and only after checking the
 // document still runs. Refactors that merely move slice boundaries must leave them alone.
-const EXPECTED_SHA256 = 'c7bbcb0b5d90aaaf29b429186fea12131d66f7f99b05782de4d81b1123e1103a'
-const EXPECTED_LENGTH = 726865
+const EXPECTED_SHA256 = '5f1b97ea4562e793c87170f4c340fe9472cb5fa2c014c4c06602844debe5d84b'
+const EXPECTED_LENGTH = 727945
 
 describe('terminal WebView payload', () => {
   it('composes the expected document', () => {

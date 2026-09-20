@@ -1,4 +1,8 @@
 import { emitDocumentedTerminalModule } from '../../../scripts/build-terminal-document-script.mjs'
+import {
+  TERMINAL_DOCUMENT_MODULE_ORDER,
+  terminalDocumentStartFunctionName
+} from '../../../scripts/terminal-document-module-order.mjs'
 import { XTERM_HTML } from '../terminal-webview-html'
 
 const SCOPE_OPEN = 'function createTerminalDocument(host) {\n'
@@ -68,4 +72,25 @@ export function documentDeclaredFunction<T extends (...args: never[]) => unknown
   }
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: checked callable above.
   return value as T
+}
+
+/**
+ * Every module's start, over the scope these modules import, in the order the generator calls them.
+ *
+ * Test support, and only that: a document starts inside the generated factory now, over a scope
+ * built for that one call (ruling 22). A test that drives these modules directly is driving the
+ * shared scope instead, and it still needs the element reads and listener installs the starts do.
+ *
+ * Derived from the generator's own order and naming convention rather than listed, so a module
+ * that gains a start is covered without this being edited — which is what the page's deleted entry
+ * module was for.
+ */
+export async function startDocumentModulesOverTheSharedScope() {
+  for (const name of TERMINAL_DOCUMENT_MODULE_ORDER) {
+    const loaded: Record<string, unknown> = await import(`./${name}`)
+    const start = loaded[terminalDocumentStartFunctionName(name)]
+    if (typeof start === 'function') {
+      start()
+    }
+  }
 }

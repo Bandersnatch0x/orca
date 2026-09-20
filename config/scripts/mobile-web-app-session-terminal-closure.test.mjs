@@ -16,22 +16,23 @@ import {
  * the terminal is by far the largest thing in it. Measured here so the trade is a number rather
  * than a claim, and so that a later change cannot quietly put the engine string back.
  *
- * Measured against `origin/main` at 9fbdfc592c, which is the merge base this branch now sits on:
+ * Measured against `origin/main` at ec82173130, which is C7.5 as it landed. The reading is
+ * re-anchored rather than adjusted: the base this note used to name is far enough back that main
+ * has moved 44,296 bytes below its number through changes that are not this lane's.
  *
- *   modules        4277 -> 4320   (+43)
- *   local modules   926 ->  970   (+44)
- *   minified bytes  3,868,833 -> 3,812,418   (-56,415)
+ *   modules        4320 -> 4280   (-40)
+ *   local modules   970 ->  930   (-40)
+ *   minified bytes  3,768,122 -> 3,766,312   (-1,810)
  *
- * The route gets smaller. It sheds six modules — the native component, the 612 KiB engine string,
- * the 105 KiB generated document script, the HTML module and the shell and close around it, all
- * string literals of a program the page cannot run — and gains fifty: the document's own 39, the
- * component, its mount, the stylesheet and markup, the two the controller split made, and xterm
- * with its two addons behind them at 607,945 bytes minified ESM on their own.
+ * What moved is which files carry the document, not whether the page carries it. C7.5 put the
+ * document's own source modules in this closure and started them per mount; ruling 23 gives the
+ * page the factory the WebView's script is generated from, so the same program arrives as one
+ * emitted file and its 41 inputs leave. The bytes barely move because it is the same program: what
+ * goes is the import and export plumbing between the modules, and what the generator substitutes.
  *
- * Two earlier readings of the same measurement, against the bases this branch sat on before:
- * -47,255 at 51ae7b1b03 and -55,561 at 0ce0fc99a2. They differ because C7.1's own round-1 fold
- * deleted `URL_TAP_WEBVIEW_JS` from a module only the page's component brings into this closure,
- * so the saving lands on the after side and no base can show it.
+ * xterm was already a static import of the mount before this, so nothing here is xterm arriving: it
+ * and its two addons are 607,945 bytes minified ESM on their own, and they are on both sides of the
+ * reading above.
  */
 
 const projectDir = fileURLToPath(new URL('../..', import.meta.url))
@@ -52,6 +53,7 @@ const SHED = [
 /** The component, its mount, the stylesheet and the markup, and the modules the splits made. */
 const GAINED_OUTSIDE_THE_DOCUMENT = [
   'src/terminal/TerminalWebView.web.tsx',
+  'src/terminal/terminal-webview-document-factory.generated.ts',
   'src/terminal/terminal-web-document-mount.ts',
   'src/terminal/terminal-webview-engine-css.generated.ts',
   'src/terminal/terminal-webview-html.web.ts',
@@ -95,12 +97,12 @@ describeClosure(
           `${name} is not in the closure`
         ).toBe(true)
       }
-      // The document, whole: every module the generator emits except the bridge, which ruling 19
-      // keeps off the page because those `message` frames belong to the shell.
-      const documentModules = local.filter((module) => module.startsWith('src/terminal/document/'))
-      expect(documentModules.length).toBeGreaterThanOrEqual(36)
-      expect(documentModules).not.toContain('src/terminal/document/message-bridge.ts')
-      expect(documentModules).toContain('src/terminal/document/page-document-modules.ts')
+      // The document, whole, and as one file: ruling 23 gives the page the factory the WebView's
+      // own script is generated from, so what the closure carries is that emitted text. The source
+      // modules are not in it at all — they are the factory's inputs, not the page's — and the one
+      // import the generated file makes is a type, which erases.
+      expect(local).toContain('src/terminal/terminal-webview-document-factory.generated.ts')
+      expect(local.filter((module) => module.startsWith('src/terminal/document/'))).toEqual([])
     }, 300_000)
 
     it('leaves the 16px seam census exactly where C7.2 left it', async () => {

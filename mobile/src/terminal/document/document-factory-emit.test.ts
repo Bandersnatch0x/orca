@@ -3,6 +3,7 @@ import {
   bindScopeToHost,
   buildTerminalDocumentScript,
   TERMINAL_DOCUMENT_FACTORY_NAME,
+  terminalDocumentStartCalls,
   terminalDocumentStopCalls
 } from '../../../scripts/build-terminal-document-script.mjs'
 import {
@@ -20,6 +21,21 @@ import {
  * stop sequence, the handle, and the one call the WebView makes. The body is the modules, and the
  * byte golden holds that.
  */
+/**
+ * The bare calls of one block of the factory, which both sequences are.
+ *
+ * The opener carries its newline and its exact indent: an emitted module's own `try` is deeper, and
+ * a bare substring search would find that one first.
+ */
+function callsInside(script: string, opener: string) {
+  const from = script.indexOf(opener)
+  expect(from).toBeGreaterThan(0)
+  const body = script.slice(from + opener.length)
+  return [...body.slice(0, body.indexOf('\n  }')).matchAll(/^ {4}(\w+)\(\);$/gm)].map(
+    (match) => match[1]
+  )
+}
+
 describe('the emitted terminal document factory', () => {
   it('declares one factory and calls it once, with no host', async () => {
     const script = await buildTerminalDocumentScript()
@@ -55,9 +71,23 @@ describe('the emitted terminal document factory', () => {
       ...TERMINAL_DOCUMENT_MODULE_ORDER
     ])
     expect(stops.length).toBeGreaterThan(0)
-    const body = script.slice(script.indexOf('  function stop() {'))
-    const called = [...body.matchAll(/^ {4}(\w+)\(\);$/gm)].map((match) => match[1])
+    const called = callsInside(script, '\n  function stop() {\n')
     expect(called).toEqual(stops.toReversed().concat('cancelDocumentFrames'))
+  })
+
+  it('runs every start inside the undo, so a throw leaves nothing installed', async () => {
+    // Ruling 24. A start that throws has left the ones before it standing, and some of them hold a
+    // document listener or the host's error reporter; the handle that carries `stop` is never
+    // returned, so the document's own undo is the only thing that can reach them.
+    const script = await buildTerminalDocumentScript()
+    const starts = await terminalDocumentStartCalls([
+      TERMINAL_DOCUMENT_HOST_SEAMS_MODULE,
+      TERMINAL_DOCUMENT_SCOPE_MODULE,
+      ...TERMINAL_DOCUMENT_MODULE_ORDER
+    ])
+    expect(starts.length).toBeGreaterThan(0)
+    expect(callsInside(script, '\n  try {\n')).toEqual(starts)
+    expect(script).toContain('  } catch (error) {\n    stop();\n    throw error;\n  }')
   })
 
   it('hands back the document own send and stop', async () => {

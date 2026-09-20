@@ -183,6 +183,20 @@ function createTerminalDocument(host) {
       window.onerror = null;
     };
   }
+  function installWindowHostTransport(receive) {
+    const listener = (event) => {
+      receive(event.data);
+    };
+    window.addEventListener("message", listener);
+    document.addEventListener("message", listener);
+    return function() {
+      window.removeEventListener("message", listener);
+      document.removeEventListener("message", listener);
+    };
+  }
+  function windowHasEngine() {
+    return window.Terminal !== void 0;
+  }
   const textScalePresets = [0.5, 0.75, 1, 1.25, 1.5, 2];
   const statusDot = String.fromCharCode(9210);
   const textPresentationSelector = String.fromCharCode(65038);
@@ -280,6 +294,8 @@ function createTerminalDocument(host) {
       linesEverWritten: 0,
       nonFatalErrorNotifies: 0,
       uninstallErrorReporter: null,
+      uninstallHostTransport: null,
+      removeViewportRefit: null,
       fitRetryToken: 0,
       mouseGesture: null,
       touchDispatch: {
@@ -312,19 +328,14 @@ function createTerminalDocument(host) {
       createUnicode11Addon: createEngineUnicode11Addon,
       createWebglAddon: createEngineWebglAddon,
       installErrorReporter: installWindowErrorReporter,
-      paintDocumentBackground: paintWindowDocumentBackground
+      paintDocumentBackground: paintWindowDocumentBackground,
+      installHostTransport: installWindowHostTransport,
+      hasEngine: windowHasEngine
     };
   }
   function createTerminalDocumentScope(host = {}) {
     const named = Object.fromEntries(Object.entries(host).filter(([, hook]) => hook !== void 0));
     return { ...createTerminalDocumentState(), ...createTerminalDocumentHostSeams(), ...named };
-  }
-  function resetTerminalDocumentScope() {
-    const generations = {
-      terminalGeneration: scope.terminalGeneration + 1,
-      fitRetryToken: scope.fitRetryToken + 1
-    };
-    Object.assign(scope, createTerminalDocumentState(), generations);
   }
   const scope = createTerminalDocumentScope(host);
   function scheduleDocumentFrame(callback) {
@@ -812,8 +823,25 @@ function createTerminalDocument(host) {
     }
     repositionOverlay();
   }
+  function startFitScale() {
+    const refit = () => {
+      applyFitScale("window-resize");
+      adjustRowsForViewport();
+      repositionOverlay();
+      clampPan();
+      updateTransform();
+    };
+    window.addEventListener("resize", refit);
+    scope.removeViewportRefit = () => {
+      window.removeEventListener("resize", refit);
+    };
+  }
   function stopFitScale() {
     scope.fitRetryToken++;
+    if (scope.removeViewportRefit) {
+      scope.removeViewportRefit();
+      scope.removeViewportRefit = null;
+    }
   }
   function isAltScreenActive(data) {
     if (typeof data !== "string") {
@@ -1232,6 +1260,14 @@ function createTerminalDocument(host) {
   }
   function stopTerminalInit() {
     scope.terminalGeneration++;
+    for (const terminal of /* @__PURE__ */ new Set([scope.term, scope.committedTerm])) {
+      try {
+        terminal == null ? void 0 : terminal.dispose();
+      } catch {
+      }
+    }
+    scope.term = null;
+    scope.committedTerm = null;
   }
   function reflow(cols, rows) {
     if (!scope.term || isAlternateBufferActive()) {
@@ -3306,10 +3342,10 @@ function createTerminalDocument(host) {
       scope.touchGesture.momentumId = null;
     }
   }
-  function handleIncomingMessage(e) {
+  function handleIncomingMessage(frame) {
     let msg;
     try {
-      msg = typeof e.data === "string" ? JSON.parse(e.data) : e.data;
+      msg = typeof frame === "string" ? JSON.parse(frame) : frame;
     } catch {
       return;
     }
@@ -3324,33 +3360,21 @@ function createTerminalDocument(host) {
     }
   }
   function startMessageBridge() {
-    window.addEventListener("message", handleIncomingMessage);
-    document.addEventListener("message", handleIncomingMessage);
-    window.addEventListener("resize", function() {
-      applyFitScale("window-resize");
-      adjustRowsForViewport();
-      repositionOverlay();
-      clampPan();
-      updateTransform();
-    });
-    if (window.Terminal) {
+    scope.uninstallHostTransport = scope.installHostTransport(handleIncomingMessage);
+    if (scope.hasEngine()) {
       notify({ type: "web-ready" });
     } else {
       reportEngineError("terminal engine missing", "xterm failed to load", true);
     }
   }
-  resetTerminalDocumentScope();
-  startRuntimeConstants();
-  startSurfaceSwap();
-  startTextScaling();
-  startWebglRecovery();
-  startHostNotify();
-  startSelectionStateAndEviction();
-  startTapDispatch();
-  startSelectionMenuButtons();
-  startSurfaceTouchGestures();
-  startMessageBridge();
+  function stopMessageBridge() {
+    if (scope.uninstallHostTransport) {
+      scope.uninstallHostTransport();
+      scope.uninstallHostTransport = null;
+    }
+  }
   function stop() {
+    stopMessageBridge();
     stopSurfaceTouchGestures();
     stopTapDispatch();
     stopSelectionOverlay();
@@ -3361,6 +3385,22 @@ function createTerminalDocument(host) {
     stopFitScale();
     stopViewportTransform();
     cancelDocumentFrames();
+  }
+  try {
+    startRuntimeConstants();
+    startSurfaceSwap();
+    startTextScaling();
+    startFitScale();
+    startWebglRecovery();
+    startHostNotify();
+    startSelectionStateAndEviction();
+    startTapDispatch();
+    startSelectionMenuButtons();
+    startSurfaceTouchGestures();
+    startMessageBridge();
+  } catch (error) {
+    stop();
+    throw error;
   }
   return { send: handleMsg, stop: stop };
 }

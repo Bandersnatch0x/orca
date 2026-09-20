@@ -4,10 +4,10 @@ import type {
 } from './document-terminal-shape'
 
 /**
- * The six seams between the document and whatever is hosting it, as the document's own
- * defaults. The document reads them at seven places: `postToHost` twice, `createTerminal`,
- * `createUnicode11Addon`, `createWebglAddon`, `installErrorReporter` and
- * `paintDocumentBackground` once each.
+ * The eight seams between the document and whatever is hosting it, as the document's own
+ * defaults. The document reads them at nine places: `postToHost` twice, `createTerminal`,
+ * `createUnicode11Addon`, `createWebglAddon`, `installErrorReporter`,
+ * `paintDocumentBackground`, `installHostTransport` and `hasEngine` once each.
  *
  * Inside the WebView the host is React Native and the engine is an IIFE that hangs its
  * constructors off `window`; on the page the host is the component that mounted these modules and
@@ -28,9 +28,12 @@ export type TerminalDocumentErrorReporter = (
   error?: TerminalEngineError
 ) => void
 
+/** A frame from the host, as its transport delivers it: JSON text from a bridge, or the object. */
+export type TerminalDocumentHostFrame = string | Record<string, unknown> | undefined
+
 /**
- * The six host seams, kept out of the state above because they are the one thing a reset must
- * not touch: the page sets them once per mount, before the start sequence runs.
+ * The eight host seams, kept apart from the state because the host sets them once when it builds
+ * the scope, before the start sequence runs, and no module writes them afterwards.
  */
 export type TerminalDocumentHostSeams = {
   /** `host-notify`, `viewport-transform`: where a message for the host goes. */
@@ -45,13 +48,17 @@ export type TerminalDocumentHostSeams = {
   installErrorReporter: (report: TerminalDocumentErrorReporter) => () => void
   /** `terminal-theme`: paints the terminal's background behind the grid. */
   paintDocumentBackground: (background: string) => void
+  /** `message-bridge`: installs the host's transport for the frames it sends, handing back its removal. */
+  installHostTransport: (receive: (frame: TerminalDocumentHostFrame) => void) => () => void
+  /** `message-bridge`: whether the engine is here, which is what readiness is reported on. */
+  hasEngine: () => boolean
 }
 
 /**
  * What a host may hand the document instead of a window read.
  *
  * Every seam has a default, so a host names only the ones it owns differently: inside the WebView
- * that is none of them, and the page names all six. Absent and present-but-undefined mean the same
+ * that is none of them, and the page names all eight. Absent and present-but-undefined mean the same
  * thing, which is why the scope's spread filters rather than trusting key order.
  */
 export type TerminalDocumentHost = Partial<TerminalDocumentHostSeams>
@@ -73,6 +80,7 @@ declare global {
     ReactNativeWebView?: { postMessage: (message: string) => void }
     Unicode11Addon?: { Unicode11Addon: new () => TerminalDocumentWebglAddon }
     WebglAddon?: { WebglAddon?: new () => TerminalDocumentWebglAddon }
+    Terminal?: unknown
   }
   const Terminal: new (options: Record<string, unknown>) => TerminalDocumentTerminal
 }
@@ -123,4 +131,38 @@ export function installWindowErrorReporter(report: TerminalDocumentErrorReporter
   return function () {
     window.onerror = null
   }
+}
+
+/**
+ * The WebView's transport: the shell posts frames as `message` events, on `window` from the
+ * injected bridge and on `document` from Android's dispatch, so the document listens for both.
+ *
+ * A page has no such frames — its host holds the document's `send` and calls it — and listening
+ * there would take the shell's own messages, which belong to the page's bridge and not to a
+ * terminal. So this is a field, and the page's transport installs nothing.
+ */
+export function installWindowHostTransport(receive: (frame: TerminalDocumentHostFrame) => void) {
+  const listener = (event: Event & { data?: TerminalDocumentHostFrame }) => {
+    receive(event.data)
+  }
+  window.addEventListener('message', listener)
+  document.addEventListener('message', listener)
+  return function () {
+    window.removeEventListener('message', listener)
+    document.removeEventListener('message', listener)
+  }
+}
+
+/**
+ * Whether the engine is here, as the WebView can know it: the engine is an IIFE that hangs
+ * `Terminal` off `window`, and a script tag that failed to load leaves it undefined, which is the
+ * one failure the document reports before it has run anything.
+ *
+ * On the page the engine is an import that already resolved by the time the document is built, so
+ * the page answers yes rather than reading a global it never writes.
+ */
+export function windowHasEngine() {
+  // `!== undefined` rather than a `typeof` guard: the global is declared optional, so the lint rule
+  // that forbids the guard is right that there is nothing to guard against here.
+  return window.Terminal !== undefined
 }

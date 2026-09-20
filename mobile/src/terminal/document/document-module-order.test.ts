@@ -28,11 +28,7 @@ const NOT_EMITTED = [
   'document-constants',
   // Types only. esbuild emits nothing for it, and an empty emission would add a blank line to the
   // document rather than a program.
-  'document-terminal-shape',
-  // The page's entry, not the WebView's: it imports the modules below in the order the generator
-  // emits them, because on the page nothing splices them into one scope.
-  // `page-document-module-order.test.ts` holds its list against this one.
-  'page-document-modules'
+  'document-terminal-shape'
 ]
 
 function documentModuleNames(): string[] {

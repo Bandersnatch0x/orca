@@ -5,7 +5,6 @@ import { importTypeScriptModule } from './import-typescript-module.mjs'
 import {
   TERMINAL_DOCUMENT_HOST_SEAMS_MODULE,
   TERMINAL_DOCUMENT_MODULE_ORDER,
-  TERMINAL_DOCUMENT_RESET_CALL,
   TERMINAL_DOCUMENT_SCOPE_MODULE,
   terminalDocumentStartFunctionName,
   terminalDocumentStopFunctionName
@@ -265,12 +264,6 @@ export async function buildTerminalDocumentFactoryBody() {
   for (const name of order) {
     emitted.push(await emitDocumentedTerminalModule(name))
   }
-  // Rulings 20 and 21: the modules above only declare. The scope's reset comes first, so the
-  // state every module reads is the state a fresh parse has; then every element read, listener
-  // and reporter install runs, once here and per mount on the page, in the order both hosts share.
-  const calls = [TERMINAL_DOCUMENT_RESET_CALL, ...(await terminalDocumentStartCalls(order))].map(
-    (name) => `${INDENT}${name}();`
-  )
   // Ruling 21's cancellation, in reverse module order: a stop undoes what its own start did, and
   // the frames the document is still owed go last because the stops above may schedule nothing
   // more. `stop` is what the page's dispose calls; the WebView never calls it.
@@ -283,10 +276,26 @@ export async function buildTerminalDocumentFactoryBody() {
     `${INDENT}${INDENT}cancelDocumentFrames();`,
     `${INDENT}}`
   ]
+  // Ruling 20: the modules above only declare. Every element read, listener and reporter install
+  // runs here, in module order, and the state they read is the state the scope above was built
+  // with — a call of this factory is a document, so there is nothing to reset first (ruling 22).
+  //
+  // A start that throws leaves the ones before it standing, and some of them hold a document
+  // listener or the host's error reporter. `stop` above is the undo the document already has, and
+  // every one of its calls is a no-op against a start that never ran (ruling 21), so it is what
+  // unwinds a failed build — for both hosts, rather than for whichever one remembered to.
+  const startBody = [
+    `${INDENT}try {`,
+    ...(await terminalDocumentStartCalls(order)).map((name) => `${INDENT}${INDENT}${name}();`),
+    `${INDENT}} catch (error) {`,
+    `${INDENT}${INDENT}stop();`,
+    `${INDENT}${INDENT}throw error;`,
+    `${INDENT}}`
+  ]
   return [
     ...emitted,
-    ...calls,
     ...stopBody,
+    ...startBody,
     `${INDENT}return { send: handleMsg, stop: stop };`
   ].join('\n')
 }

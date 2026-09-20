@@ -246,14 +246,14 @@ describe('the document modules at parse time', () => {
 
   it('still start and stop: the functions holding what was moved out are exported', () => {
     // The other half. Moving an effect out is only correct if something calls it, and the caller
-    // is pinned by `page-document-module-order.test.ts` against the generator's own sequence;
-    // this holds the shape of the names so that sequence can be derived rather than listed.
+    // is the generator's own sequence, derived from these names by convention rather than listed;
+    // this holds the shape of the names so that derivation keeps working.
     const declaring = (keyword: string) =>
       EMITTED.filter((name) =>
         new RegExp(`^export function ${keyword}[A-Za-z]+\\(\\) \\{$`, 'm').test(moduleSource(name))
       )
-    expect(declaring('start').length).toBe(10)
+    expect(declaring('start').length).toBe(11)
     // Ruling 21: a module that schedules a frame, a timer or a retry owes an undo for it.
-    expect(declaring('stop').length).toBe(9)
+    expect(declaring('stop').length).toBe(10)
   })
 })
