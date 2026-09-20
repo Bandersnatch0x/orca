@@ -19,8 +19,33 @@ import { tokenizer } from 'acorn'
  * dropped `!`, a renamed local, all diverge here and are reported with the token index and both
  * sides, so the flip commit is reviewed by running this rather than by reading a 515-line diff.
  */
+/**
+ * The differences moving the script into modules is allowed to make, each counted on its own.
+ *
+ * Four classes and no others. Three are the repository's own rules rewriting the document's ES5
+ * style the moment its source is a linted module — measured, not assumed: `curly` braces 279
+ * brace-less bodies, `no-unused-vars` unbinds 38 catch clauses, and 446 `var` declarators become
+ * `const`, `let` or a scope field. The fourth is the move itself. Semicolons and whitespace are the
+ * formatter's and never reach the token stream at all.
+ *
+ * Counted separately because the flip commit pins each number: a total would let one class absorb
+ * another, which is exactly the drift the pin exists to catch.
+ */
+export type TerminalDocumentNormalisations = {
+  /** `name` became `<qualifier>.name`; the declaration stayed where it was. */
+  readonly qualifiedReferences: number
+  /** `var name` became `<qualifier>.name`; the declaration moved onto the scope object. */
+  readonly scopeFieldDeclarations: number
+  /** `var` became `const` or `let`, the binding staying local to the emitted script. */
+  readonly rebindings: number
+  /** A brace-less `if`/`else`/`for`/`while` body gained its braces. */
+  readonly bracedBodies: number
+  /** `catch (e)` became `catch`, the unused binding dropped. */
+  readonly unboundCatches: number
+}
+
 export type TerminalDocumentEquivalence =
-  | { readonly equivalent: true; readonly qualifiedSites: number }
+  | { readonly equivalent: true; readonly normalisations: TerminalDocumentNormalisations }
   | { readonly equivalent: false; readonly reason: string }
 
 /** One token as this comparison reads it: what kind it is, and the text it carried. */
@@ -79,33 +104,83 @@ export function compareTerminalDocumentScripts(
 ): TerminalDocumentEquivalence {
   const before = significantTokens(baseline)
   const after = significantTokens(candidate)
-  let qualifiedSites = 0
+  let qualifiedReferences = 0
+  let scopeFieldDeclarations = 0
+  let rebindings = 0
+  let bracedBodies = 0
+  let unboundCatches = 0
+  // Braces arrive in pairs around one statement, so a counter is enough: a close is only ever
+  // absorbed while an inserted open is outstanding, which bounds how far this can mask a real one.
+  let openInsertedBraces = 0
+  let lastMatched: DocumentToken | undefined
   let left = 0
   let right = 0
   while (left < before.length && right < after.length) {
     const expected = before[left]
     const actual = after[right]
     if (expected.label === actual.label && expected.text === actual.text) {
+      lastMatched = expected
       left += 1
       right += 1
       continue
     }
-    // The one allowed difference: `name` became `<qualifier>.name`, three tokens for one.
-    const qualified =
-      actual.label === 'name' &&
-      actual.text === qualifier &&
-      after[right + 1]?.label === '.' &&
-      after[right + 2]?.label === expected.label &&
-      after[right + 2]?.text === expected.text
-    if (!qualified) {
-      return {
-        equivalent: false,
-        reason: `token ${left}: expected ${describeToken(expected)}, generated ${describeToken(actual)}`
-      }
+    // `name` -> `<qualifier>.name`, three tokens for one.
+    if (isQualified(after, right, expected, qualifier)) {
+      qualifiedReferences += 1
+      left += 1
+      right += 3
+      continue
     }
-    qualifiedSites += 1
-    left += 1
-    right += 3
+    // `var name` -> `<qualifier>.name`: the declaration itself moved onto the scope object.
+    if (
+      expected.label === 'var' &&
+      before[left + 1] !== undefined &&
+      isQualified(after, right, before[left + 1], qualifier)
+    ) {
+      scopeFieldDeclarations += 1
+      left += 2
+      right += 3
+      continue
+    }
+    if (expected.label === 'var' && (actual.label === 'const' || actual.label === 'let')) {
+      rebindings += 1
+      lastMatched = actual
+      left += 1
+      right += 1
+      continue
+    }
+    // `catch (e) {` -> `catch {`: three baseline tokens the linted form does not carry.
+    if (
+      lastMatched?.label === 'catch' &&
+      expected.label === '(' &&
+      before[left + 1]?.label === 'name' &&
+      before[left + 2]?.label === ')' &&
+      actual.label === '{'
+    ) {
+      unboundCatches += 1
+      left += 3
+      continue
+    }
+    if (actual.label === '{') {
+      bracedBodies += 1
+      openInsertedBraces += 1
+      right += 1
+      continue
+    }
+    if (actual.label === '}' && openInsertedBraces > 0) {
+      openInsertedBraces -= 1
+      right += 1
+      continue
+    }
+    return {
+      equivalent: false,
+      reason: `token ${left}: expected ${describeToken(expected)}, generated ${describeToken(actual)}`
+    }
+  }
+  // A body braced at the very end of the script leaves its close after the baseline has run out.
+  while (openInsertedBraces > 0 && after[right]?.label === '}') {
+    openInsertedBraces -= 1
+    right += 1
   }
   if (left !== before.length || right !== after.length) {
     return {
@@ -113,7 +188,35 @@ export function compareTerminalDocumentScripts(
       reason: `length: ${before.length - left} token(s) left in the baseline, ${after.length - right} in the generated script`
     }
   }
-  return { equivalent: true, qualifiedSites }
+  if (openInsertedBraces !== 0) {
+    return { equivalent: false, reason: `${openInsertedBraces} inserted brace(s) never closed` }
+  }
+  return {
+    equivalent: true,
+    normalisations: {
+      qualifiedReferences,
+      scopeFieldDeclarations,
+      rebindings,
+      bracedBodies,
+      unboundCatches
+    }
+  }
+}
+
+/** Whether the generated stream reads `<qualifier>.<expected>` where the baseline read `expected`. */
+function isQualified(
+  after: DocumentToken[],
+  right: number,
+  expected: DocumentToken,
+  qualifier: string
+): boolean {
+  return (
+    after[right]?.label === 'name' &&
+    after[right]?.text === qualifier &&
+    after[right + 1]?.label === '.' &&
+    after[right + 2]?.label === expected.label &&
+    after[right + 2]?.text === expected.text
+  )
 }
 
 /**

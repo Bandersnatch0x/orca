@@ -3,18 +3,32 @@ import { XTERM_ENGINE_JS } from '../terminal-webview-engine.generated'
 import { XTERM_HTML } from '../terminal-webview-html'
 import {
   compareTerminalDocumentScripts,
-  readTerminalDocumentScript
+  readTerminalDocumentScript,
+  type TerminalDocumentNormalisations
 } from './terminal-document-equivalence.test-support'
 
 /**
  * The instrument the C7.1 flip commit is reviewed with, exercised on what it will be asked.
  *
- * Each case below is one way the move could go wrong. The refusals matter more than the
- * acceptances: a comparison that accepted a reordered statement or a changed literal would pass
- * the flip while the document had silently become a different program.
+ * Each refusal below is one way the move could go wrong, and they matter more than the
+ * acceptances: a comparison that let a reordered statement or a changed literal through would pass
+ * the flip while the document had quietly become a different program.
  */
 const QUALIFIER = 'scope'
 const script = readTerminalDocumentScript(XTERM_HTML, XTERM_ENGINE_JS)
+
+const NONE: TerminalDocumentNormalisations = {
+  qualifiedReferences: 0,
+  scopeFieldDeclarations: 0,
+  rebindings: 0,
+  bracedBodies: 0,
+  unboundCatches: 0
+}
+
+function normalisationsOf(before: string, after: string): TerminalDocumentNormalisations | string {
+  const result = compareTerminalDocumentScripts(before, after, QUALIFIER)
+  return result.equivalent ? result.normalisations : result.reason
+}
 
 describe('terminal document script equivalence', () => {
   it('reads the hand-written script out of the real document', () => {
@@ -22,87 +36,96 @@ describe('terminal document script equivalence', () => {
     expect(script.trimEnd().endsWith('})();')).toBe(true)
   })
 
-  it('accepts the real script against itself, with nothing qualified', () => {
-    // The instrument on the real 2,758-line program rather than on a toy, which is the only way
-    // to know it survives everything the document actually contains.
-    expect(compareTerminalDocumentScripts(script, script, QUALIFIER)).toEqual({
-      equivalent: true,
-      qualifiedSites: 0
+  it('accepts the real script against itself, normalising nothing', () => {
+    // The instrument on the real 2,758-line program rather than on a toy, which is the only way to
+    // know it survives everything the document actually contains.
+    expect(normalisationsOf(script, script)).toEqual(NONE)
+  })
+
+  it('ignores the semicolons the formatter drops and the comments it keeps', () => {
+    const before = '// one\nvar a = 1;\nfunction f() {\n  b(a);\n}\n'
+    const after = '/* other */\nvar a = 1\nfunction f() {\n  b(a)\n}\n'
+    expect(normalisationsOf(before, after)).toEqual(NONE)
+  })
+
+  it('counts a reference that gained the qualifier', () => {
+    expect(
+      normalisationsOf(
+        'function f() { return a + a; }',
+        'function f() { return scope.a + scope.a }'
+      )
+    ).toEqual({ ...NONE, qualifiedReferences: 2 })
+  })
+
+  it('counts a declaration that moved onto the scope object', () => {
+    // `var a = 1` and `a = 1` are different sites: one dropped a `var`, the other never had one.
+    expect(normalisationsOf('var a = 1;\na = 2;', 'scope.a = 1\nscope.a = 2')).toEqual({
+      ...NONE,
+      scopeFieldDeclarations: 1,
+      qualifiedReferences: 1
     })
   })
 
-  it('ignores the semicolons the formatter drops', () => {
-    // The reason this is a token comparison at all: `oxfmt` writes the repository style, so the
-    // generated script cannot carry the hand-written one's semicolons.
-    const before = 'var a = 1;\nfunction f() {\n  a = 2;\n}\n'
-    const after = 'var a = 1\nfunction f() {\n  a = 2\n}\n'
-    expect(compareTerminalDocumentScripts(before, after, QUALIFIER)).toEqual({
-      equivalent: true,
-      qualifiedSites: 0
+  it('counts a var that stayed local and only changed keyword', () => {
+    expect(normalisationsOf('var a = 1;', 'const a = 1')).toEqual({ ...NONE, rebindings: 1 })
+  })
+
+  it('counts braces the linter adds to a brace-less body', () => {
+    const before = 'if (a) b();\nfor (;;) c();\n'
+    const after = 'if (a) {\n  b()\n}\nfor (;;) {\n  c()\n}\n'
+    expect(normalisationsOf(before, after)).toEqual({ ...NONE, bracedBodies: 2 })
+  })
+
+  it('counts a catch clause the linter unbound', () => {
+    expect(normalisationsOf('try { a(); } catch (e) {}', 'try {\n  a()\n} catch {}')).toEqual({
+      ...NONE,
+      unboundCatches: 1
     })
   })
 
-  it('ignores comments, which are not the program', () => {
-    const before = '// one\nvar a = 1;\n'
-    const after = '/* another thing entirely */\nvar a = 1\n'
-    expect(compareTerminalDocumentScripts(before, after, QUALIFIER)).toEqual({
-      equivalent: true,
-      qualifiedSites: 0
-    })
-  })
-
-  it('counts every site the qualifier was applied to', () => {
-    const before = 'function f() {\n  a = a + 1;\n  return b;\n}\n'
-    const after = 'function f() {\n  scope.a = scope.a + 1\n  return scope.b\n}\n'
-    expect(compareTerminalDocumentScripts(before, after, QUALIFIER)).toEqual({
-      equivalent: true,
-      qualifiedSites: 3
-    })
-  })
-
-  it('refuses a qualifier that is not the one it was told to expect', () => {
-    // Without this a rename of the scope object would read as an ordinary qualification.
-    const result = compareTerminalDocumentScripts('a = 1;', 'state.a = 1', QUALIFIER)
-    expect(result.equivalent).toBe(false)
+  it('refuses a qualifier under a name it was not told to expect', () => {
+    expect(normalisationsOf('a = 1;', 'state.a = 1')).toContain('token 0')
   })
 
   it('refuses a changed literal', () => {
-    const result = compareTerminalDocumentScripts('var a = 1;', 'var a = 2', QUALIFIER)
-    expect(result).toEqual({
-      equivalent: false,
-      reason: 'token 3: expected num 1, generated num 2'
-    })
+    expect(normalisationsOf('var a = 1;', 'var a = 2')).toBe(
+      'token 3: expected num 1, generated num 2'
+    )
   })
 
   it('refuses a dropped operator', () => {
-    const result = compareTerminalDocumentScripts('if (!a) return;', 'if (a) return', QUALIFIER)
-    expect(result.equivalent).toBe(false)
+    expect(normalisationsOf('if (!a) return;', 'if (a) return')).toBe(
+      'token 2: expected !/~ !, generated name a'
+    )
   })
 
   it('refuses a reordered pair of statements', () => {
-    const result = compareTerminalDocumentScripts('a();\nb();', 'b()\na()', QUALIFIER)
-    expect(result.equivalent).toBe(false)
+    expect(normalisationsOf('a();\nb();', 'b()\na()')).toContain('token 0')
   })
 
   it('refuses a dropped statement', () => {
-    const result = compareTerminalDocumentScripts('a();\nb();', 'a()', QUALIFIER)
-    expect(result).toEqual({
-      equivalent: false,
-      reason: 'length: 3 token(s) left in the baseline, 0 in the generated script'
-    })
-  })
-
-  it('refuses an added statement', () => {
-    const result = compareTerminalDocumentScripts('a();', 'a()\nb()', QUALIFIER)
-    expect(result.equivalent).toBe(false)
+    expect(normalisationsOf('a();\nb();', 'a()')).toBe(
+      'length: 3 token(s) left in the baseline, 0 in the generated script'
+    )
   })
 
   it('refuses a renamed local', () => {
-    const result = compareTerminalDocumentScripts(
-      'function f(x) { return x; }',
-      'function f(y) { return y }',
-      QUALIFIER
+    expect(normalisationsOf('function f(x) { return x; }', 'function f(y) { return y }')).toBe(
+      'token 3: expected name x, generated name y'
     )
-    expect(result.equivalent).toBe(false)
+  })
+
+  it('refuses a brace the generated script opened and never closed', () => {
+    // Braces are absorbed in pairs; one left open means the generated script is not the same shape,
+    // and without this case the absorption would hide it.
+    expect(normalisationsOf('if (a) b();', 'if (a) {\n  b()')).toBe(
+      '1 inserted brace(s) never closed'
+    )
+  })
+
+  it('refuses a brace inserted where none was opened', () => {
+    expect(normalisationsOf('a();\nb();', 'a()\n}\nb()')).toBe(
+      'token 3: expected name b, generated }'
+    )
   })
 })
