@@ -87,6 +87,15 @@ function escapeDenseStream() {
   return rows.join('')
 }
 
+/** Plain rows, enough of them to give the terminal a scrollback a wheel can move through. */
+function scrollbackRows() {
+  const rows = []
+  for (let index = 0; index < 400; index++) {
+    rows.push(`orca-scrollback-row-${String(index)}\r\n`)
+  }
+  return rows.join('')
+}
+
 /**
  * The scratch route: the component under test, its handle and its notifies on `globalThis`.
  *
@@ -658,18 +667,24 @@ describeRender(
       })
       await openProbeTerminal(page)
       expect(documentChunk, 'the document was served as its own chunk').not.toBe(null)
-      // One task, so the frame cannot run before the dispose that should take it back. A resize
-      // refits synchronously — the mount arms that listener itself — and the refit asks for a
-      // frame on the spot. React unmounts after this task, so at dispose the frame is owed.
+      // Enough rows for a scrollback, so the wheel below reveals the scroll indicator: that is
+      // the document's longest-lived piece of scheduled work, a 550 ms timer to hide it again,
+      // which outlives an unmount even on a loaded machine. The same wheel leaves the
+      // smooth-scroll frame owed. Both are asked for in the task that tells the component to go.
+      await page.evaluate((rows) => globalThis.__orcaTerminalProbe.write(rows), scrollbackRows())
       await page.evaluate(() => {
         globalThis.__orcaScheduler.watching = true
-        globalThis.dispatchEvent(new Event('resize'))
-        globalThis.__orcaScheduler.pendingAtDispose = globalThis.__orcaScheduler.pending.length
-        globalThis.__orcaScheduler.mount += 1
+        const surface = document.getElementById('terminal-surface')
+        surface.dispatchEvent(
+          new WheelEvent('wheel', { deltaY: -400, bubbles: true, cancelable: true })
+        )
         globalThis.__orcaTerminalProbe.setMounted(false)
       })
       await page.locator('#terminal-container').waitFor({ state: 'detached', timeout: 30_000 })
+      // The boundary is drawn here rather than at `setMounted(false)`: React unmounts on its own
+      // schedule, and a callback that runs while the first terminal is still up is not a leak.
       await page.evaluate(() => {
+        globalThis.__orcaScheduler.mount += 1
         globalThis.__orcaTerminalReady = false
         globalThis.__orcaTerminalProbe.setMounted(true)
       })
@@ -681,9 +696,13 @@ describeRender(
       // Long enough for any frame or timer of the first mount to have fired if it survived.
       await page.evaluate(() => new Promise((resolve) => globalThis.setTimeout(resolve, 3000)))
       const scheduler = await page.evaluate(() => globalThis.__orcaScheduler)
-      // The precondition: there was something to leak. A run where the refit asked for no frame
-      // would agree with the empty list below for the wrong reason.
-      expect(scheduler.pendingAtDispose).toBeGreaterThan(0)
+      // The precondition: there was something to leak. A wheel that reached nothing would agree
+      // with the empty list below for the wrong reason.
+      expect(
+        scheduler.scheduled.filter(
+          (entry) => entry.mount === 0 && entry.caller.includes(documentChunk)
+        ).length
+      ).toBeGreaterThan(0)
       expect(scheduler.leaked.filter((entry) => entry.includes(documentChunk))).toEqual([])
       await page.unrouteAll({ behavior: 'ignoreErrors' })
       await page.close()

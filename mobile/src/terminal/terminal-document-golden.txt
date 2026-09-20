@@ -285,6 +285,7 @@ window.onerror = function(msg) {
         longPressFingerInsideOverlay: false
       },
       scheduledFrames: [],
+      framesStopped: false,
       touchGesture: {
         lastX: 0,
         lastY: 0,
@@ -321,6 +322,9 @@ window.onerror = function(msg) {
   }
   const scope = createTerminalDocumentScope();
   function scheduleDocumentFrame(callback) {
+    if (scope.framesStopped) {
+      return -1;
+    }
     const id = requestAnimationFrame(function(time) {
       const at = scope.scheduledFrames.indexOf(id);
       if (at !== -1) {
@@ -332,6 +336,7 @@ window.onerror = function(msg) {
     return id;
   }
   function cancelDocumentFrames() {
+    scope.framesStopped = true;
     for (const id of scope.scheduledFrames) {
       cancelAnimationFrame(id);
     }

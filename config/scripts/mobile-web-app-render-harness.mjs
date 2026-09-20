@@ -408,13 +408,13 @@ export function installPageErrorSentinel() {
  * Every animation frame and timer, tagged with the mount that scheduled it.
  *
  * Installed before the bundle loads, so the document's own scheduling goes through it. The test
- * bumps `mount` at dispose; a callback that was scheduled under the previous number and still runs
- * is a frame or timer of the first mount firing into the second, which is the whole finding. React
- * schedules its work on the microtask queue rather than on frames, and xterm's frames belong to the
- * terminal being disposed, so what this records is the document's.
+ * bumps `mount` once the first terminal is off the page; a callback scheduled under the previous
+ * number that still runs is a frame or timer of the first mount firing into the second, which is
+ * the whole finding. Every schedule is kept, not just the ones still owed, so the test can say
+ * that there was something to leak before it says that nothing did.
  */
 export function installSchedulerRecorder() {
-  globalThis.__orcaScheduler = { mount: 0, watching: false, pending: [], leaked: [] }
+  globalThis.__orcaScheduler = { mount: 0, watching: false, scheduled: [], leaked: [] }
   const state = globalThis.__orcaScheduler
   const wrap = (schedule, kind) =>
     function (callback, ...rest) {
@@ -425,13 +425,9 @@ export function installSchedulerRecorder() {
       // own header and line 1 is this wrapper.
       const caller = ((new Error('scheduled').stack ?? '').split('\n')[2] ?? '').trim()
       const entry = { kind, caller, mount: state.mount }
-      state.pending.push(entry)
+      state.scheduled.push(entry)
       return schedule(
         (...args) => {
-          const at = state.pending.indexOf(entry)
-          if (at !== -1) {
-            state.pending.splice(at, 1)
-          }
           if (entry.mount !== state.mount) {
             state.leaked.push(`${kind} from ${caller}`)
           }

@@ -218,6 +218,8 @@ export type TerminalDocumentState = {
   touchGesture: TerminalTouchState
   /** Every animation frame the document has asked for and not yet run. */
   scheduledFrames: number[]
+  /** Whether the document has been stopped, and so asks for no more frames. */
+  framesStopped: boolean
 }
 
 /**
@@ -378,6 +380,7 @@ function createTerminalDocumentState(): TerminalDocumentState {
       longPressFingerInsideOverlay: false
     },
     scheduledFrames: [],
+    framesStopped: false,
     touchGesture: {
       lastX: 0,
       lastY: 0,
@@ -443,6 +446,13 @@ export const scope: TerminalDocumentScope = createTerminalDocumentScope()
  * holds only what is still owed.
  */
 export function scheduleDocumentFrame(callback: FrameRequestCallback) {
+  // A stopped document asks for nothing. Tearing the terminal down runs the engine's own
+  // disposal, which calls back into these modules, and a frame asked for on the way out would be
+  // owed by nobody — the cancel has already run. `-1` is not a live frame id, so a caller that
+  // holds one and cancels it later is cancelling nothing.
+  if (scope.framesStopped) {
+    return -1
+  }
   const id = requestAnimationFrame(function (time) {
     const at = scope.scheduledFrames.indexOf(id)
     if (at !== -1) {
@@ -454,8 +464,9 @@ export function scheduleDocumentFrame(callback: FrameRequestCallback) {
   return id
 }
 
-/** Takes back every frame the document is still owed. */
+/** Takes back every frame the document is still owed, and stops it asking for more. */
 export function cancelDocumentFrames() {
+  scope.framesStopped = true
   for (const id of scope.scheduledFrames) {
     cancelAnimationFrame(id)
   }
