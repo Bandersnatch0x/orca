@@ -53,6 +53,8 @@ export type TerminalDocumentTerminal = {
   readonly rows: number
   readonly buffer: { readonly active: TerminalDocumentBuffer }
   resize: (cols: number, rows: number) => void
+  refresh: (start: number, end: number) => void
+  loadAddon: (addon: TerminalDocumentWebglAddon) => void
   scrollToBottom: () => void
   scrollLines: (amount: number) => void
 }
@@ -69,10 +71,23 @@ export type TerminalDocumentScope = {
   termObserverDisposables: TerminalDocumentDisposable[]
   /** `terminal-init-and-write`: the row count the last init or reflow settled on. */
   initRows: number
+  /** `webgl-recovery`: the loaded WebGL addon, or null on the DOM renderer. */
+  webglAddon: TerminalDocumentWebglAddon | null
+  /** `webgl-recovery`: the pending single retry after a context loss. */
+  webglRecoveryTimer: ReturnType<typeof setTimeout> | null
+  /** `runtime-state-and-text-scaling`: the theme the host last sent, replayed on visibility. */
+  terminalThemeInput: unknown
 }
 
 /** An xterm listener handle, as the document disposes of one. */
 export type TerminalDocumentDisposable = { dispose?: () => void }
+
+/** xterm's WebGL addon, as the document loads, repaints and disposes of it. */
+export type TerminalDocumentWebglAddon = {
+  onContextLoss?: (listener: () => void) => void
+  clearTextureAtlas?: () => void
+  dispose: () => void
+}
 
 /**
  * The initial values, which are the ones the document's own declarations carried.
@@ -87,7 +102,10 @@ export function createTerminalDocumentScope(): TerminalDocumentScope {
     panY: 0,
     terminalGeneration: 0,
     termObserverDisposables: [],
-    initRows: 24
+    initRows: 24,
+    webglAddon: null,
+    webglRecoveryTimer: null,
+    terminalThemeInput: null
   }
 }
 

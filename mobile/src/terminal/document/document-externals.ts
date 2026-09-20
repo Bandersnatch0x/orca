@@ -32,3 +32,9 @@ export declare function applyFitScale(reason: string): void
 
 /** `smooth-scroll-and-cell-geometry`: shows or hides the scroll indicator. */
 export declare function updateScrollIndicator(visible: boolean): void
+
+/** `runtime-state-and-text-scaling`: one diagnostic line, forwarded to the host. */
+export declare function flog(name: string, detail: Record<string, unknown>): void
+
+/** `terminal-fit-scale`: applies a theme the host sent to the live terminal. */
+export declare function applyTerminalTheme(input: unknown): void
