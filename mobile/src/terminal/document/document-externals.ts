@@ -98,3 +98,18 @@ export declare function isClickMouseTrackingMode(mode: string): boolean
 
 /** `write-queue`: the trailing bytes a DECSET scan must carry into the next chunk. */
 export declare function extractMouseModeScanTail(input: string): string
+
+/** `host-message-router`: routes one decoded host message. */
+export declare function handleMsg(msg: unknown): void
+
+/** `terminal-init-and-write`: reports an engine failure to the host. */
+export declare function reportEngineError(summary: string, cause: unknown, fatal: unknown): void
+
+/** `terminal-init-and-write`: re-fits the row count to the current viewport. */
+export declare function adjustRowsForViewport(): void
+
+/** `smooth-scroll-and-cell-geometry`: clamps the pan offsets to the scaled surface. */
+export declare function clampPan(): void
+
+/** `smooth-scroll-and-cell-geometry`: writes the pan and scale onto the surface transform. */
+export declare function updateTransform(): void

@@ -124,6 +124,8 @@ export type TerminalDocumentScope = {
   initialOscLinkRowOffset: number
   /** `runtime-state`: the escape byte every report is prefixed with. */
   ESC: string
+  /** `terminal-init-and-write`: whether the terminal has ever reached ready. */
+  everReady: boolean
   /** `runtime-state`: the C1 form of the control sequence introducer. */
   C1_CSI: string
   /** `runtime-state`: the tail of the last chunk, in case a DECSET straddles two writes. */
@@ -210,6 +212,7 @@ export function createTerminalDocumentScope(): TerminalDocumentScope {
     initialOscLinks: [],
     initialOscLinkRowOffset: 0,
     ESC: String.fromCharCode(27),
+    everReady: false,
     C1_CSI: String.fromCharCode(155),
     mouseModeScanTail: '',
     trackedMouseTrackingMode: 'none',

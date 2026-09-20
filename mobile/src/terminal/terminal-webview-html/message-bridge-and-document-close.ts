@@ -1,4 +1,5 @@
-export const TERMINAL_HTML_MESSAGE_BRIDGE_AND_DOCUMENT_CLOSE = `  function handleIncomingMessage(e) {
+// The script ends here and the document ends below: the boundary is where the IIFE closes.
+export const TERMINAL_HTML_MESSAGE_BRIDGE = `  function handleIncomingMessage(e) {
     var msg;
     try {
       msg = typeof e.data === 'string' ? JSON.parse(e.data) : e.data;
@@ -37,7 +38,9 @@ export const TERMINAL_HTML_MESSAGE_BRIDGE_AND_DOCUMENT_CLOSE = `  function handl
   } else {
     reportEngineError('terminal engine missing', 'xterm failed to load', true);
   }
-})();
+`
+
+export const TERMINAL_HTML_DOCUMENT_CLOSE = `})();
 </script>
 </body>
 </html>`
