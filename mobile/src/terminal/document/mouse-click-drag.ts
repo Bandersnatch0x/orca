@@ -1,10 +1,5 @@
-import {
-  applyXtermSelection,
-  cancelSelect,
-  handleDragMove,
-  repositionOverlay,
-  stopEdgeScroll
-} from './document-externals'
+import { handleDragMove, repositionOverlay, stopEdgeScroll } from './selection-overlay'
+import { applyXtermSelection, cancelSelect } from './selection-range'
 import { notify } from './host-notify'
 import { getMouseTrackingMode, isSafeSgrMouseCoordinate } from './mouse-input-encoding'
 import { viewportToCell } from './viewport-cell'

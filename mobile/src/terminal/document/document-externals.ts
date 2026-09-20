@@ -11,21 +11,3 @@
 
 /** `surface-touch-gestures`: binds touch, wheel and tap handlers to a surface element. */
 export declare function attachSurfaceEventHandlers(target: HTMLElement): void
-
-/** `selection-overlay`: starts a selection at a cell. */
-export declare function enterSelect(col: number, row: number): void
-
-/** `selection-overlay`: clears the selection and leaves select mode. */
-export declare function cancelSelect(): void
-
-/** `selection-overlay`: moves one selection handle to a viewport point. */
-export declare function handleDragMove(handle: string, clientX: number, clientY: number): void
-
-/** `selection-overlay`: stops the edge-scroll a handle drag may have started. */
-export declare function stopEdgeScroll(): void
-
-/** `selection-overlay`: mirrors the document selection into xterm's own selection. */
-export declare function applyXtermSelection(): void
-
-/** `selection-overlay`: moves the handles and the menu pill to the current selection. */
-export declare function repositionOverlay(): void

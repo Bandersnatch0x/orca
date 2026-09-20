@@ -1,4 +1,5 @@
-import { cancelSelect, enterSelect, handleDragMove, stopEdgeScroll } from './document-externals'
+import { handleDragMove, stopEdgeScroll } from './selection-overlay'
+import { cancelSelect, enterSelect } from './selection-range'
 import { notify } from './host-notify'
 import { viewportToCell } from './viewport-cell'
 import { scope } from './document-scope'

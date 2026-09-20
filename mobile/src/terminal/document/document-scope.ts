@@ -93,6 +93,8 @@ export type TerminalDocumentTerminal = {
   clear: () => void
   reset: () => void
   selectAll: () => void
+  select: (col: number, row: number, length: number) => void
+  clearSelection: () => void
   readonly unicode: { activeVersion: string }
   attachCustomKeyEventHandler: (handler: () => boolean) => void
   onData: (listener: (data: string) => void) => TerminalDocumentDisposable

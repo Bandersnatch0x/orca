@@ -1,5 +1,5 @@
 import { adjustRowsForViewport, applyFitScale, clampPan } from './fit-scale'
-import { repositionOverlay } from './document-externals'
+import { repositionOverlay } from './selection-overlay'
 import { handleMsg, type TerminalHostMessage } from './host-message-router'
 import { notify, reportEngineError, type TerminalEngineError } from './host-notify'
 import { updateTransform } from './viewport-transform'

@@ -1,4 +1,4 @@
-import { repositionOverlay } from './document-externals'
+import { repositionOverlay } from './selection-overlay'
 import {
   computeFitScale,
   flog,
