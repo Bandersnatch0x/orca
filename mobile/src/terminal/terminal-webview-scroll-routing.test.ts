@@ -6,6 +6,8 @@ import { XTERM_HTML } from './terminal-webview-html'
 // TerminalWebView.tsx. Concatenate both so assertions resolve regardless of file.
 const source =
   readFileSync(new URL('./TerminalWebView.tsx', import.meta.url), 'utf8') +
+  readFileSync(new URL('./use-terminal-webview-controller.ts', import.meta.url), 'utf8') +
+  readFileSync(new URL('./terminal-webview-ready-promises.ts', import.meta.url), 'utf8') +
   readFileSync(new URL('./terminal-webview-pending-messages.ts', import.meta.url), 'utf8') +
   readFileSync(new URL('./terminal-webview-url-tap.ts', import.meta.url), 'utf8') +
   XTERM_HTML
@@ -138,13 +140,15 @@ describe('TerminalWebView scroll routing', () => {
   })
 
   it('clears WebView await timers when the real response wins', () => {
-    const measureBlock = sliceBetween('measureFitDimensions(', 'resetZoom()')
+    // C7.5 moved both promises into `terminal-webview-ready-promises.ts`, which both components
+    // reach through the controller; the two blocks are the same code in their new home.
+    const measureBlock = sliceBetween('function measure(', 'function resolveMeasure')
     expect(measureBlock).toContain('clearTimeout(timeout)')
-    expect(measureBlock).toContain('measureResolveRef.current === finish')
+    expect(measureBlock).toContain('measureResolve === finish')
 
-    const readyBlock = sliceBetween('async awaitReady()', '})')
+    const readyBlock = sliceBetween('async function awaitReady()', 'function measure(')
     expect(readyBlock).toContain('clearTimeout(timeout)')
-    expect(readyBlock).toContain('void p.finally')
+    expect(readyBlock).toContain('void pending.finally')
   })
 
   it('hides xterm scrollbars and drives the mobile scroll indicator from committed rows', () => {

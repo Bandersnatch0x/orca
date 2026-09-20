@@ -9,7 +9,11 @@ import { XTERM_HTML } from './terminal-webview-html'
 const reflowSource = await generatedDocumentModule('reflow')
 // Use the assembled document so the test covers what the WebView actually runs.
 const htmlSource = XTERM_HTML
-const handleSource = readFileSync(new URL('./TerminalWebView.tsx', import.meta.url), 'utf8')
+// The handle is built by the controller both components share, which is where the wiring is read.
+const handleSource = readFileSync(
+  new URL('./use-terminal-webview-controller.ts', import.meta.url),
+  'utf8'
+)
 
 function reflowFnBody(): string {
   const start = reflowSource.indexOf('function reflow(cols, rows) {')

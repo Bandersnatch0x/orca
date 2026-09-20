@@ -60,8 +60,24 @@ describeClosure(
       expect(local).toContain('src/terminal/document/terminal-init.ts')
     }, 180_000)
 
+    it('is in no closure of the page terminal component either', async () => {
+      const { local } = await mobileWebAppEntryClosure(['src/terminal/TerminalWebView'])
+      expect(local).not.toContain(ENGINE_MODULE)
+      // The extensionless specifier is what the bundle ships, so this is the page's component and
+      // its `.web.ts` half of the HTML — naming the `.tsx` would measure the WebView no browser
+      // loads. Both are asserted, because the assertion above holds vacuously for the native pair.
+      expect(local).toContain('src/terminal/TerminalWebView.web.tsx')
+      expect(local).toContain('src/terminal/terminal-webview-html.web.ts')
+      expect(local).toContain(ENGINE_CSS_MODULE)
+      expect(local).not.toContain('src/terminal/terminal-webview-html.ts')
+      expect(local).not.toContain('src/terminal/document/message-bridge.ts')
+    }, 180_000)
+
     it('is still what the native document reads its CSS beside', async () => {
-      const { local } = await mobileWebAppEntryClosure(['src/terminal/terminal-webview-html'])
+      // Named with its extension, because extensionless would resolve the `.web.ts` sibling and
+      // measure the page's half — the opposite of the claim. The native document holds both
+      // generated modules, so the cases above cannot pass by the CSS having gone missing.
+      const { local } = await mobileWebAppEntryClosure(['src/terminal/terminal-webview-html.ts'])
       expect(local).toContain(ENGINE_MODULE)
       expect(local).toContain(ENGINE_CSS_MODULE)
     }, 180_000)
