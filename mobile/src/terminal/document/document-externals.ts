@@ -84,3 +84,15 @@ export declare function notifyTerminalSurfaceTap(
   clientY: number,
   fromTouch: boolean
 ): void
+
+/** `mouse-report-and-scroll-routing`: the tracking mode the TUI last asked for. */
+export declare function getMouseTrackingMode(): string
+
+/** `mouse-report-and-scroll-routing`: whether a coordinate fits an SGR report. */
+export declare function isSafeSgrMouseCoordinate(value: number): boolean
+
+/** `selection-overlay`: mirrors the document selection into xterm's own selection. */
+export declare function applyXtermSelection(): void
+
+/** `selection-overlay`: moves the handles and the menu pill to the current selection. */
+export declare function repositionOverlay(): void

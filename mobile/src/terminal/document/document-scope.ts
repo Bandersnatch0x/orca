@@ -98,6 +98,12 @@ export type TerminalDocumentScope = {
   terminalTheme: TerminalDocumentTheme
   /** `terminal-theme`: the contrast floor in force, published or derived from the background. */
   terminalMinimumContrastRatio: number
+  /** `runtime-state`: the escape byte every report is prefixed with. */
+  ESC: string
+  /** `runtime-state`: whether the TUI asked for SGR (1006) mouse reports. */
+  sgrMouseMode: boolean
+  /** `runtime-state`: whether the TUI asked for SGR pixel (1016) mouse reports. */
+  sgrMousePixelsMode: boolean
   /** `selection-overlay`: the press duration that starts a selection, in milliseconds. */
   LONG_PRESS_MS: number
   /** `selection-overlay`: the travel that cancels a pending long press, in pixels. */
@@ -130,7 +136,11 @@ export type TerminalDocumentScope = {
 
 /** An xterm listener handle, as the document disposes of one. */
 /** The live selection; only the dragged handle is read outside the overlay slice. */
-export type TerminalDocumentSelection = { activeHandle: string | null }
+export type TerminalDocumentSelection = {
+  anchor: { row: number; col: number }
+  focus: { row: number; col: number }
+  activeHandle: string | null
+}
 
 /** Where a press began, and which finger began it. */
 export type TerminalDocumentTouchOrigin = { x: number; y: number; identifier: number }
@@ -167,6 +177,9 @@ export function createTerminalDocumentScope(): TerminalDocumentScope {
     defaultTheme: DEFAULT_TERMINAL_THEME,
     terminalTheme: DEFAULT_TERMINAL_THEME,
     terminalMinimumContrastRatio: 3,
+    ESC: String.fromCharCode(27),
+    sgrMouseMode: false,
+    sgrMousePixelsMode: false,
     LONG_PRESS_MS: 500,
     LONG_PRESS_SLOP: 10,
     TAP_SLOP: 24,
