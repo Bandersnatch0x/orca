@@ -30,7 +30,8 @@ describe('the mouse-report and scroll-routing slice', () => {
         // Three reads of xterm's mode state, each of which may not exist.
         unboundCatches: 3,
         numberProperties: 0,
-        shorthandProperties: 0
+        shorthandProperties: 0,
+        unshadowedNames: 0
       }
     })
   })

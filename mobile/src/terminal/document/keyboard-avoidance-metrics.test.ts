@@ -23,7 +23,8 @@ describe('the keyboard-avoidance metrics module', () => {
         // The row scan and the alternate-screen probe.
         unboundCatches: 2,
         numberProperties: 0,
-        shorthandProperties: 0
+        shorthandProperties: 0,
+        unshadowedNames: 0
       }
     })
   })

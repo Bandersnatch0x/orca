@@ -27,7 +27,8 @@ describe('the surface-touch-gestures slice', () => {
         bracedBodies: 57,
         unboundCatches: 2,
         numberProperties: 2,
-        shorthandProperties: 0
+        shorthandProperties: 0,
+        unshadowedNames: 0
       }
     })
   })

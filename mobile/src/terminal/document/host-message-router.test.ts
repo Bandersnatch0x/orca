@@ -23,7 +23,8 @@ describe('the host-message-router slice', () => {
         bracedBodies: 12,
         unboundCatches: 2,
         numberProperties: 0,
-        shorthandProperties: 0
+        shorthandProperties: 0,
+        unshadowedNames: 0
       }
     })
   })

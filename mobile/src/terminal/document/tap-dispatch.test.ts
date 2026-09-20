@@ -20,7 +20,8 @@ describe('the tap-dispatch module', () => {
         bracedBodies: 11,
         unboundCatches: 0,
         numberProperties: 0,
-        shorthandProperties: 0
+        shorthandProperties: 0,
+        unshadowedNames: 0
       }
     })
   })

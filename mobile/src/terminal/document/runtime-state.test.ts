@@ -35,7 +35,8 @@ describe('the runtime-state and text-scaling slice', () => {
         bracedBodies: 0,
         unboundCatches: 0,
         numberProperties: 0,
-        shorthandProperties: 0
+        shorthandProperties: 0,
+        unshadowedNames: 0
       }
     })
   })
@@ -57,7 +58,8 @@ describe('the runtime-state and text-scaling slice', () => {
         bracedBodies: 13,
         unboundCatches: 1,
         numberProperties: 0,
-        shorthandProperties: 0
+        shorthandProperties: 0,
+        unshadowedNames: 0
       }
     })
   })

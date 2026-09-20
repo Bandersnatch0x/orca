@@ -23,7 +23,8 @@ describe('the terminal init-and-write slice', () => {
         bracedBodies: 18,
         unboundCatches: 7,
         numberProperties: 0,
-        shorthandProperties: 0
+        shorthandProperties: 0,
+        unshadowedNames: 0
       }
     })
   })

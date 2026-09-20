@@ -19,7 +19,8 @@ describe('the WebGL recovery module', () => {
         // Five of the six catch clauses; the attach failure reads its error and keeps its binding.
         unboundCatches: 5,
         numberProperties: 0,
-        shorthandProperties: 0
+        shorthandProperties: 0,
+        unshadowedNames: 0
       }
     })
   })

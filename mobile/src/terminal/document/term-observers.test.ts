@@ -31,7 +31,8 @@ describe('the term-observers slice', () => {
         numberProperties: 0,
         // The two SGR mode flags, written twice each: the document's shorthand cannot survive a
         // qualified value.
-        shorthandProperties: 4
+        shorthandProperties: 4,
+        unshadowedNames: 0
       }
     })
   })

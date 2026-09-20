@@ -23,7 +23,8 @@ describe('the wheel-scroll module', () => {
         // The one `isFinite`, behind a `typeof delta !== 'number'` check that makes the two forms
         // the same test.
         numberProperties: 1,
-        shorthandProperties: 0
+        shorthandProperties: 0,
+        unshadowedNames: 0
       }
     })
   })

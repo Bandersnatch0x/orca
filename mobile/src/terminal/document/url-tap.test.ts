@@ -29,7 +29,8 @@ describe('the url-tap group', () => {
         unboundCatches: 6,
         // All four take a digit run a capture group already matched.
         numberProperties: 4,
-        shorthandProperties: 0
+        shorthandProperties: 0,
+        unshadowedNames: 0
       }
     })
   })

@@ -50,6 +50,11 @@ export type TerminalDocumentNormalisations = {
   readonly numberProperties: number
   /** `{ name: name }` was shorthand; qualifying the value spells the property out again. */
   readonly shorthandProperties: number
+  /**
+   * An inner binding that shadowed a document variable stopped being a shadow once that variable
+   * moved onto the scope, so the printer stopped renaming it.
+   */
+  readonly unshadowedNames: number
 }
 
 /**
@@ -60,6 +65,17 @@ export type TerminalDocumentNormalisations = {
  * behind a `typeof … === 'number'` check or is parsing a string, which is what the `Number` form
  * does with no coercion of its own.
  */
+/**
+ * Whether `printed` is the printer's disambiguated form of `original`: the same name with a decimal
+ * suffix it appends when two bindings of that name are visible at once.
+ */
+function isPrinterDisambiguation(printed: string, original: string): boolean {
+  if (!printed.startsWith(original) || printed.length === original.length) {
+    return false
+  }
+  return /^[2-9][0-9]*$/.test(printed.slice(original.length))
+}
+
 const NUMBER_GLOBALS = new Set(['isFinite', 'isNaN', 'parseInt', 'parseFloat'])
 
 export type TerminalDocumentEquivalence =
@@ -179,6 +195,7 @@ export function compareTerminalDocumentScripts(
   let unboundCatches = 0
   let numberProperties = 0
   let shorthandProperties = 0
+  let unshadowedNames = 0
   // Braces arrive in pairs around one statement, so a counter is enough: a close is only ever
   // absorbed while an inserted open is outstanding, which bounds how far this can mask a real one.
   let openInsertedBraces = 0
@@ -190,6 +207,19 @@ export function compareTerminalDocumentScripts(
     const actual = after[right]
     if (expected.label === actual.label && expected.text === actual.text) {
       lastMatched = expected
+      left += 1
+      right += 1
+      continue
+    }
+    // `term2` -> `term`: the printer disambiguated a shadowed binding on the baseline side, and
+    // qualifying the outer name removed the shadow, so the inner one keeps its own name.
+    if (
+      expected.label === 'name' &&
+      actual.label === 'name' &&
+      isPrinterDisambiguation(expected.text, actual.text)
+    ) {
+      unshadowedNames += 1
+      lastMatched = actual
       left += 1
       right += 1
       continue
@@ -303,7 +333,8 @@ export function compareTerminalDocumentScripts(
       bracedBodies,
       unboundCatches,
       numberProperties,
-      shorthandProperties
+      shorthandProperties,
+      unshadowedNames
     }
   }
 }

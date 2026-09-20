@@ -22,7 +22,8 @@ describe('the mouse-click-drag module', () => {
         // The pointer-capture call, which throws when capture is unavailable.
         unboundCatches: 1,
         numberProperties: 0,
-        shorthandProperties: 0
+        shorthandProperties: 0,
+        unshadowedNames: 0
       }
     })
   })

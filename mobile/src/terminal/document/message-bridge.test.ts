@@ -20,7 +20,8 @@ describe('the message-bridge module', () => {
         // The parse guard. The second catch names its error and reports it, so it keeps its binding.
         unboundCatches: 1,
         numberProperties: 0,
-        shorthandProperties: 0
+        shorthandProperties: 0,
+        unshadowedNames: 0
       }
     })
   })

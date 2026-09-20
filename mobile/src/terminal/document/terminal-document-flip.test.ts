@@ -1,0 +1,51 @@
+import { fileURLToPath } from 'node:url'
+import { describe, expect, it } from 'vitest'
+import { emitTerminalDocumentModule } from '../../../scripts/build-terminal-document-script.mjs'
+import { TERMINAL_DOCUMENT_MODULE_ORDER } from '../../../scripts/terminal-document-module-order.mjs'
+import { XTERM_ENGINE_JS } from '../terminal-webview-engine.generated'
+import { XTERM_HTML } from '../terminal-webview-html'
+import {
+  compareTerminalDocumentScripts,
+  readTerminalDocumentScript
+} from './terminal-document-equivalence.test-support'
+
+/**
+ * The review of the move, as one number per difference class.
+ *
+ * Every line of the document's script is now a module, and this says the two are the same program
+ * modulo the qualifier and the repository's own rules rewriting an ES5 document the moment its
+ * source is a linted module. Anything outside those classes refuses with the token index and both
+ * sides, so a reordered statement, a changed literal or a renamed local cannot pass here.
+ */
+describe('the whole terminal document script', () => {
+  it('is what the modules emit, modulo the seven normalisations', async () => {
+    const emitted = await Promise.all(
+      TERMINAL_DOCUMENT_MODULE_ORDER.map((name) =>
+        emitTerminalDocumentModule(fileURLToPath(new URL(`./${name}.ts`, import.meta.url)))
+      )
+    )
+    const candidate = `(function() {\n${emitted.join('\n')}\n})();`
+    const baseline = readTerminalDocumentScript(XTERM_HTML, XTERM_ENGINE_JS)
+    expect(compareTerminalDocumentScripts(baseline, candidate, 'scope')).toEqual({
+      equivalent: true,
+      normalisations: {
+        // The qualifier, partitioned: 609 reads and writes of a name whose declaration stayed put,
+        // and 73 declarations that moved onto the scope object. 682 sites in all.
+        qualifiedReferences: 609,
+        scopeFieldDeclarations: 73,
+        // The document's 446 `var` declarators, less the 73 that became scope fields.
+        rebindings: 373,
+        // `curly`, measured over the whole script before any of this started.
+        bracedBodies: 279,
+        // Of the document's 38 catch clauses, two name their error and report it, so they keep it.
+        unboundCatches: 36,
+        // `unicorn/prefer-number-properties`, also measured up front.
+        numberProperties: 17,
+        // Two SGR mode flags written twice each: shorthand cannot survive a qualified value.
+        shorthandProperties: 4,
+        // Names the printer had to disambiguate while an outer binding of the same name existed.
+        unshadowedNames: 7
+      }
+    })
+  })
+})

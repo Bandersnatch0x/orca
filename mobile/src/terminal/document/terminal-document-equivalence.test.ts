@@ -24,7 +24,8 @@ const NONE: TerminalDocumentNormalisations = {
   bracedBodies: 0,
   unboundCatches: 0,
   numberProperties: 0,
-  shorthandProperties: 0
+  shorthandProperties: 0,
+  unshadowedNames: 0
 }
 
 function normalisationsOf(before: string, after: string): TerminalDocumentNormalisations | string {
@@ -92,7 +93,8 @@ describe('terminal document script equivalence', () => {
       ...NONE,
       unboundCatches: 1,
       numberProperties: 0,
-      shorthandProperties: 0
+      shorthandProperties: 0,
+      unshadowedNames: 0
     })
   })
 
@@ -131,6 +133,15 @@ describe('terminal document script equivalence', () => {
   it('reads a block-scoped function declaration the same way on both sides', () => {
     const script = 'function f() { if (a) { function g() { return 1; } return g(); } }'
     expect(normalisationsOf(script, script)).toEqual(NONE)
+  })
+
+  it('counts a name the printer no longer has to disambiguate', () => {
+    expect(
+      normalisationsOf(
+        'var term = null; function f(term) { return term; }',
+        'scope.term = null; function f(term) { return term; }'
+      )
+    ).toEqual({ ...NONE, scopeFieldDeclarations: 1, unshadowedNames: 2 })
   })
 
   it('refuses a changed literal', () => {

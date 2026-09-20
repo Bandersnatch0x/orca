@@ -23,7 +23,8 @@ describe('the query-reply module', () => {
         // Both `catch (e) {}` clauses, whose binding was never read.
         unboundCatches: 2,
         numberProperties: 0,
-        shorthandProperties: 0
+        shorthandProperties: 0,
+        unshadowedNames: 0
       }
     })
   })

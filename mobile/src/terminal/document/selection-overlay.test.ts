@@ -28,7 +28,8 @@ describe('the selection-overlay slice', () => {
         bracedBodies: 63,
         unboundCatches: 9,
         numberProperties: 6,
-        shorthandProperties: 0
+        shorthandProperties: 0,
+        unshadowedNames: 0
       }
     })
   })

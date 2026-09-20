@@ -22,7 +22,8 @@ describe('the reflow module', () => {
         bracedBodies: 2,
         unboundCatches: 0,
         numberProperties: 0,
-        shorthandProperties: 0
+        shorthandProperties: 0,
+        unshadowedNames: 0
       }
     })
   })

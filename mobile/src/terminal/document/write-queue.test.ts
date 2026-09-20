@@ -21,7 +21,8 @@ describe('the write-queue module', () => {
         // Disposing an observer that is already gone.
         unboundCatches: 1,
         numberProperties: 0,
-        shorthandProperties: 0
+        shorthandProperties: 0,
+        unshadowedNames: 0
       }
     })
   })

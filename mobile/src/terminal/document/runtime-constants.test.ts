@@ -21,7 +21,8 @@ describe('the runtime-constants module', () => {
         bracedBodies: 0,
         unboundCatches: 0,
         numberProperties: 0,
-        shorthandProperties: 0
+        shorthandProperties: 0,
+        unshadowedNames: 0
       }
     })
   })

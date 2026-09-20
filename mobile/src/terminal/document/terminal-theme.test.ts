@@ -22,7 +22,8 @@ describe('the terminal-theme module', () => {
         // Every `parseInt`, `parseFloat` and `isFinite` here is applied to a value already proved
         // numeric, or to a string the two forms agree on.
         numberProperties: 9,
-        shorthandProperties: 0
+        shorthandProperties: 0,
+        unshadowedNames: 0
       }
     })
   })

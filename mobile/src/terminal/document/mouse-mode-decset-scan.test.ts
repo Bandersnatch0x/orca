@@ -21,7 +21,8 @@ describe('the mouse-mode DECSET scan module', () => {
         bracedBodies: 9,
         unboundCatches: 0,
         numberProperties: 0,
-        shorthandProperties: 0
+        shorthandProperties: 0,
+        unshadowedNames: 0
       }
     })
   })

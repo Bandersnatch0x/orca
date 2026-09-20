@@ -21,7 +21,8 @@ describe('the terminal fit-scale slice', () => {
         bracedBodies: 20,
         unboundCatches: 0,
         numberProperties: 9,
-        shorthandProperties: 0
+        shorthandProperties: 0,
+        unshadowedNames: 0
       }
     })
   })

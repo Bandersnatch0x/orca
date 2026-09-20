@@ -28,7 +28,8 @@ describe('the smooth-scroll and cell-geometry slice', () => {
         bracedBodies: 16,
         unboundCatches: 0,
         numberProperties: 0,
-        shorthandProperties: 0
+        shorthandProperties: 0,
+        unshadowedNames: 0
       }
     })
   })

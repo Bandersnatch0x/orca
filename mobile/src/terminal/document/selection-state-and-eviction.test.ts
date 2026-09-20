@@ -23,7 +23,8 @@ describe('the selection-state-and-eviction module', () => {
         bracedBodies: 3,
         unboundCatches: 0,
         numberProperties: 0,
-        shorthandProperties: 0
+        shorthandProperties: 0,
+        unshadowedNames: 0
       }
     })
   })

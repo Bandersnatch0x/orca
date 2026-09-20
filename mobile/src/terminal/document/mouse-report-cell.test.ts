@@ -29,7 +29,8 @@ describe('the mouse-report cell module', () => {
           bracedBodies: 13,
           unboundCatches: 0,
           numberProperties: 0,
-          shorthandProperties: 0
+          shorthandProperties: 0,
+          unshadowedNames: 0
         }
       }
     )

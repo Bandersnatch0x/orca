@@ -22,7 +22,8 @@ describe('the surface-swap module', () => {
         bracedBodies: 2,
         unboundCatches: 2,
         numberProperties: 0,
-        shorthandProperties: 0
+        shorthandProperties: 0,
+        unshadowedNames: 0
       }
     })
   })
