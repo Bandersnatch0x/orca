@@ -4,6 +4,7 @@ import {
   createEngineUnicode11Addon,
   createEngineWebglAddon,
   installWindowErrorReporter,
+  paintWindowDocumentBackground,
   postToReactNativeWebView,
   type TerminalDocumentErrorReporter
 } from './document-host-seams'
@@ -223,7 +224,7 @@ export type TerminalDocumentState = {
 }
 
 /**
- * The five host seams, kept out of the state above because they are the one thing a reset must
+ * The six host seams, kept out of the state above because they are the one thing a reset must
  * not touch: the page sets them once per mount, before the start sequence runs.
  */
 export type TerminalDocumentHostSeams = {
@@ -237,6 +238,8 @@ export type TerminalDocumentHostSeams = {
   createWebglAddon: () => TerminalDocumentWebglAddon | null
   /** `host-notify`: installs the document's runtime error reporter with the host. */
   installErrorReporter: (report: TerminalDocumentErrorReporter) => () => void
+  /** `terminal-theme`: paints the terminal's background behind the grid. */
+  paintDocumentBackground: (background: string) => void
 }
 
 /** The document's whole scope: its state, and the seams to whatever is hosting it. */
@@ -404,7 +407,8 @@ function createTerminalDocumentHostSeams(): TerminalDocumentHostSeams {
     createTerminal: createEngineTerminal,
     createUnicode11Addon: createEngineUnicode11Addon,
     createWebglAddon: createEngineWebglAddon,
-    installErrorReporter: installWindowErrorReporter
+    installErrorReporter: installWindowErrorReporter,
+    paintDocumentBackground: paintWindowDocumentBackground
   }
 }
 

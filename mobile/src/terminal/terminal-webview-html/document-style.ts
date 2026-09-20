@@ -1,20 +1,32 @@
 import { colors } from '../../theme/mobile-theme'
 
 /**
- * The terminal document's own stylesheet, beside xterm's.
+ * The rules that style the document itself, which only the WebView's document may carry.
  *
- * Split out of the document shell because the page needs exactly this and must not reach the
- * engine string the shell also splices in. The rules are addressed at the ids and classes
- * `document-markup.ts` declares, which is the other half of the same pair.
+ * Inside the WebView this is the terminal's own page and these say so. On the page the document
+ * is a guest in a React Native Web application, and the same three selectors would set that
+ * application's background, its overflow and every element's box model — and keep doing it after
+ * the terminal is gone. So the page never injects them; `document-style-scoping.ts` is what
+ * separates them from the rules below, and it recognises them by their selectors rather than by
+ * this split, so a fourth one added here is still caught there.
  */
-export const TERMINAL_DOCUMENT_STYLE = `  * { margin: 0; padding: 0; box-sizing: border-box; }
+export const TERMINAL_DOCUMENT_ROOT_STYLE = `  * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body {
     background: ${colors.terminalBg};
     overflow: hidden;
     width: 100%;
     height: 100%;
-  }
-  #terminal-container {
+  }`
+
+/**
+ * The terminal's own elements, beside xterm's sheet.
+ *
+ * Split out of the document shell because the page needs exactly this and must not reach the
+ * engine string the shell also splices in. The rules are addressed at the ids and classes
+ * `document-markup.ts` declares, which is the other half of the same pair; the page holds every
+ * one of them under its host element rather than letting them loose in the application.
+ */
+export const TERMINAL_DOCUMENT_ELEMENT_STYLE = `  #terminal-container {
     overflow: hidden;
     position: relative;
     width: 100%;
@@ -135,3 +147,12 @@ export const TERMINAL_DOCUMENT_STYLE = `  * { margin: 0; padding: 0; box-sizing:
   }
   #sel-menu button:active { background: #414868; }
   #sel-menu button + button { border-left: 1px solid #414868; }`
+
+/**
+ * Both halves, in the order the WebView's `<head>` has always carried them.
+ *
+ * The concatenation is what the document shell splices in, so the emitted document does not move
+ * for this split — the byte golden says whether that held.
+ */
+export const TERMINAL_DOCUMENT_STYLE = `${TERMINAL_DOCUMENT_ROOT_STYLE}
+${TERMINAL_DOCUMENT_ELEMENT_STYLE}`

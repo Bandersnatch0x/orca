@@ -173,6 +173,10 @@ window.onerror = function(msg) {
   function createEngineWebglAddon() {
     return window.WebglAddon && window.WebglAddon.WebglAddon ? new window.WebglAddon.WebglAddon() : null;
   }
+  function paintWindowDocumentBackground(background) {
+    document.documentElement.style.background = background;
+    document.body.style.background = background;
+  }
   function installWindowErrorReporter(report) {
     window.onerror = report;
     return function() {
@@ -307,7 +311,8 @@ window.onerror = function(msg) {
       createTerminal: createEngineTerminal,
       createUnicode11Addon: createEngineUnicode11Addon,
       createWebglAddon: createEngineWebglAddon,
-      installErrorReporter: installWindowErrorReporter
+      installErrorReporter: installWindowErrorReporter,
+      paintDocumentBackground: paintWindowDocumentBackground
     };
   }
   function createTerminalDocumentScope() {
@@ -686,8 +691,7 @@ window.onerror = function(msg) {
     scope.terminalThemeInput = input;
     scope.terminalTheme = normalizeTerminalTheme(input);
     const background = scope.terminalTheme.background || "#1a1b26";
-    document.documentElement.style.background = background;
-    document.body.style.background = background;
+    scope.paintDocumentBackground(background);
     const publishedFloor = normalizeTerminalContrastOverride(
       input && typeof input === "object" ? input.minimumContrastRatio : void 0
     );

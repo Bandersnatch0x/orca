@@ -200,7 +200,7 @@ export async function buildTerminalDocumentScript() {
   // The scope object goes first: every module below reads it, and the document is one function
   // scope, so it has to exist before any of them run. It is the only part of the emitted script
   // the hand-written document did not have, and the host seams come ahead of it because its
-  // defaults are those five functions.
+  // defaults are those six functions.
   const order = [
     TERMINAL_DOCUMENT_HOST_SEAMS_MODULE,
     TERMINAL_DOCUMENT_SCOPE_MODULE,

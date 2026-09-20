@@ -8,6 +8,18 @@ import { buildMobileWebAppBundle } from './build-mobile-web-app-bundle.mjs'
 import { MOBILE_WEB_APP_ROUTE_ROOT } from './mobile-web-app-route-manifest.mjs'
 import { mobileWebAppDependenciesPresent } from './mobile-web-app-bundle-dependencies.mjs'
 import {
+  COLS,
+  CONTROL_SOURCE,
+  escapeDenseStream,
+  FIRST_MARKER,
+  LAST_MARKER,
+  LAYOUT_SOURCE,
+  MIN_STREAM_BYTES,
+  probeRouteSource,
+  ROWS,
+  scrollbackRows
+} from './mobile-web-app-terminal-probe-route.mjs'
+import {
   createBundleServer,
   installCspViolationRecorder,
   installPageErrorSentinel,
@@ -52,137 +64,6 @@ const SHELL_HOST = {
   endpoint: 'ws://terminal-render',
   lastConnected: 1
 }
-
-const COLS = 80
-const ROWS = 24
-/** Design §2 measured the host's own chunker at 48 KiB, so the sample is at least one full one. */
-const MIN_STREAM_BYTES = 48 * 1024
-/** Printed at the top of the stream and again at the end, so the read-back covers both edges. */
-const FIRST_MARKER = 'ORCA-TERMINAL-RENDER-FIRST'
-const LAST_MARKER = 'ORCA-TERMINAL-RENDER-LAST'
-
-/**
- * An escape-dense sample of at least 48 KiB: an SGR colour change every cell, an erase-to-end and
- * an absolute cursor position per row. Built here rather than committed because it is a function
- * of the grid, and a fixture sized from the constant it is meant to exercise proves nothing.
- */
-function escapeDenseStream() {
-  const esc = '\u001b'
-  const rows = []
-  rows.push(`${esc}[2J${esc}[H${FIRST_MARKER}\r\n`)
-  let row = 2
-  let bytes = rows[0].length
-  while (bytes < MIN_STREAM_BYTES) {
-    const cells = []
-    for (let column = 0; column < COLS - 1; column++) {
-      const colour = 31 + ((row + column) % 7)
-      cells.push(`${esc}[${String(colour)};1m${String.fromCharCode(97 + ((row + column) % 26))}`)
-    }
-    const line = `${esc}[${String(row)};1H${esc}[K${cells.join('')}${esc}[0m\r\n`
-    rows.push(line)
-    bytes += line.length
-    row += 1
-  }
-  rows.push(`${LAST_MARKER}\r\n`)
-  return rows.join('')
-}
-
-/** Plain rows, enough of them to give the terminal a scrollback a wheel can move through. */
-function scrollbackRows() {
-  const rows = []
-  for (let index = 0; index < 400; index++) {
-    rows.push(`orca-scrollback-row-${String(index)}\r\n`)
-  }
-  return rows.join('')
-}
-
-/**
- * The scratch route: the component under test, its handle and its notifies on `globalThis`.
- *
- * Written rather than committed because it is the bundler's entry and nothing else — a file under
- * `mobile/app` would register a route the shell could open. `beforeinput` is recorded off the
- * xterm helper textarea, which is design §8's cheap half of the IME question: it says what the
- * browser reports for text entering a terminal on the page, and leaves a composing IME on a real
- * keyboard to the device step it cannot answer.
- */
-function probeRouteSource(componentPath) {
-  return `import { useCallback, useEffect, useRef, useState } from 'react'
-import { TextInput, View } from 'react-native'
-import { TerminalWebView } from ${JSON.stringify(componentPath)}
-
-export default function TerminalProbeRoute() {
-  const handleRef = useRef(null)
-  const [mounted, setMounted] = useState(true)
-  const onSelectionCopy = useCallback((text) => {
-    globalThis.__orcaTerminalCopied = text
-  }, [])
-  const onWebReady = useCallback(() => {
-    globalThis.__orcaTerminalReady = true
-  }, [])
-  const onEngineError = useCallback((message) => {
-    globalThis.__orcaTerminalEngineErrors.push(message)
-  }, [])
-  useEffect(() => {
-    globalThis.__orcaTerminalEngineErrors = globalThis.__orcaTerminalEngineErrors ?? []
-    globalThis.__orcaTerminalBeforeInput = []
-    globalThis.__orcaTerminalProbe = {
-      init: (cols, rows, data) => handleRef.current?.init(cols, rows, data, false, []),
-      write: (data) => handleRef.current?.write(data),
-      selectAll: () => handleRef.current?.doSelectAll(),
-      measure: () => handleRef.current?.measureFitDimensions(),
-      awaitReady: () => handleRef.current?.awaitReady(),
-      setMounted: (next) => setMounted(next)
-    }
-    const onBeforeInput = (event) => {
-      globalThis.__orcaTerminalBeforeInput.push({
-        inputType: event.inputType,
-        data: event.data === null ? null : String(event.data),
-        isComposing: !!event.isComposing
-      })
-    }
-    document.addEventListener('beforeinput', onBeforeInput, true)
-    return () => document.removeEventListener('beforeinput', onBeforeInput, true)
-  }, [])
-  return (
-    <View testID="terminal-probe" style={{ flex: 1 }}>
-      {mounted ? (
-        <TerminalWebView
-          ref={handleRef}
-          onWebReady={onWebReady}
-          onEngineError={onEngineError}
-          onSelectionCopy={onSelectionCopy}
-        />
-      ) : null}
-      {/* The shape the terminal's live input takes on the page: xterm's own textarea is inert by
-          the document's design, so this is where typed text arrives. */}
-      <TextInput testID="terminal-live-input" style={{ fontSize: 16 }} />
-    </View>
-  )
-}
-`
-}
-
-/**
- * The same page with no terminal on it.
- *
- * The page entry already carries Zod, which probes for `new Function` and swallows the
- * `EvalError`, so the shell's `script-src 'self'` records one refusal on any route before a line
- * of terminal code runs. Comparing against this control is what makes "zero violations" a
- * statement about the terminal rather than about the bundle it lives in.
- */
-const CONTROL_SOURCE = `import { View } from 'react-native'
-
-export default function ControlRoute() {
-  globalThis.__orcaTerminalControlMounted = true
-  return <View testID="terminal-control" />
-}
-`
-
-const LAYOUT_SOURCE = `import { Slot } from 'expo-router'
-export default function ProbeLayout() {
-  return <Slot />
-}
-`
 
 const bundles = mobileWebAppDependenciesPresent()
 const describeRender = bundles ? describe : describe.skip
@@ -705,6 +586,72 @@ describeRender(
       ).toBeGreaterThan(0)
       expect(scheduler.leaked.filter((entry) => entry.includes(documentChunk))).toEqual([])
       await page.unrouteAll({ behavior: 'ignoreErrors' })
+      await page.close()
+    }, 300_000)
+
+    it('styles only what it owns, and leaves the application alone', async () => {
+      // The document's sheet says `*`, `html` and `body` because inside a WebView it owns the
+      // page. Appended to the head of a React Native Web application it owns nothing: those three
+      // selectors set the application's background, its overflow and every element's box model,
+      // on every screen the shell can show, and go on doing it after the terminal is gone.
+      //
+      // Ruling 19's shape: the page mount may style only what it owns. So the document-level
+      // rules are never injected and every remaining selector is held under the host's class.
+      // The oracle is a page of the same application with no terminal on it.
+      const readRoots = (target) =>
+        target.evaluate(() => {
+          const read = (element) => {
+            const computed = getComputedStyle(element)
+            const entries = []
+            for (const property of computed) {
+              entries.push(`${property}: ${computed.getPropertyValue(property)}`)
+            }
+            return entries.join('\n')
+          }
+          return { body: read(document.body), html: read(document.documentElement) }
+        })
+
+      const control = await openPage(CONTROL_ROUTE)
+      const expected = await readRoots(control.page)
+      await control.page.close()
+
+      const { page } = await openTerminal()
+      await openProbeTerminal(page)
+      expect(await readRoots(page), 'roots while the terminal is mounted').toEqual(expected)
+
+      // And nothing in the sheet reaches past the host, which is the rule the comparison above
+      // cannot see: a selector that matched something outside would not have to change `body`.
+      const reach = () =>
+        page.evaluate(() => {
+          const sheet = [...document.styleSheets].find(
+            (one) => one.ownerNode?.id === 'orca-terminal-document-style'
+          )
+          if (!sheet) {
+            return { rules: 0, outside: ['the terminal stylesheet is not in the head'] }
+          }
+          const host = document.querySelector('.orca-terminal-document-host')
+          const outside = []
+          for (const rule of sheet.cssRules) {
+            for (const element of document.querySelectorAll(rule.selectorText)) {
+              if (!host || !host.contains(element)) {
+                outside.push(`${rule.selectorText} matched ${element.tagName}`)
+              }
+            }
+          }
+          return { rules: sheet.cssRules.length, outside }
+        })
+      const mounted = await reach()
+      // The precondition: there are rules to escape with.
+      expect(mounted.rules).toBeGreaterThan(0)
+      expect(mounted.outside).toEqual([])
+
+      await page.evaluate(() => globalThis.__orcaTerminalProbe.setMounted(false))
+      await page.locator('#terminal-container').waitFor({ state: 'detached', timeout: 30_000 })
+      expect(await readRoots(page), 'roots after dispose').toEqual(expected)
+      // The sheet stays in the head for the next mount, and matches nothing until there is one.
+      const disposed = await reach()
+      expect(disposed.rules).toBe(mounted.rules)
+      expect(disposed.outside).toEqual([])
       await page.close()
     }, 300_000)
 

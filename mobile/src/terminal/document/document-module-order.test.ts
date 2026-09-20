@@ -74,9 +74,9 @@ describe('the document module order', () => {
     expect(emitted).toBe('')
   })
 
-  it('emits the host seams ahead of the scope, whose defaults are those five functions', async () => {
+  it('emits the host seams ahead of the scope, whose defaults are those six functions', async () => {
     // Order in the emitted document, not membership in a list: `createTerminalDocumentScope()`
-    // runs as the script is parsed and reads the five by name, so a seams module emitted after it
+    // runs as the script is parsed and reads the six by name, so a seams module emitted after it
     // would throw on the document's first line. Non-membership cannot see that — it is satisfied
     // by any arrangement — so the two texts are located in the document the generator produces.
     expect(TERMINAL_DOCUMENT_MODULE_ORDER).not.toContain(TERMINAL_DOCUMENT_HOST_SEAMS_MODULE)

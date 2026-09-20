@@ -2,7 +2,8 @@ import { Terminal } from '@xterm/xterm'
 import { Unicode11Addon } from '@xterm/addon-unicode11'
 import { WebglAddon } from '@xterm/addon-webgl'
 import type { TerminalDocumentWebglAddon } from './document/document-terminal-shape'
-import { TERMINAL_DOCUMENT_MARKUP, TERMINAL_DOCUMENT_STYLE } from './terminal-webview-html'
+import { TERMINAL_DOCUMENT_ELEMENT_STYLE, TERMINAL_DOCUMENT_MARKUP } from './terminal-webview-html'
+import { scopeStyleToHost } from './terminal-webview-html/document-style-scoping'
 import { XTERM_ENGINE_CSS } from './terminal-webview-engine-css.generated'
 import type { TerminalWebViewCommand } from './terminal-webview-messages'
 
@@ -12,7 +13,7 @@ import type { TerminalWebViewCommand } from './terminal-webview-messages'
  * Same program: the modules the WebView's script is generated from, started here in the order the
  * generator emits them. What the WebView's HTML gave them — the stylesheet, the elements they read
  * by id, the engine on `window` and a `postMessage` back to React Native — this supplies instead,
- * through the five scope seams and the host's own element.
+ * through the six scope seams and the host's own element.
  *
  * Ruling 20 is what makes a remount work. ES module bodies run once per page, so the second mount
  * re-imports nothing: every element read, listener and reporter install lives in a start function,
@@ -31,16 +32,23 @@ export type TerminalWebDocument = {
 
 const STYLE_ELEMENT_ID = 'orca-terminal-document-style'
 
+/** The class the host carries, and the prefix every injected rule is held under. */
+const HOST_CLASS = 'orca-terminal-document-host'
+
 /**
- * The stylesheet, planted in the head once per document.
+ * The stylesheet, planted in the head once per page and reaching only inside the host.
  *
  * `<style>` rather than a constructed sheet or inline attributes: the document's own rules and
- * xterm's are written against ids and classes, and this is the same text the WebView's `<head>`
- * carries. It stays in the head after unmount, because the *next* mount wants it — the page
- * remounts the same terminal on navigation and on the error overlay's reload — and re-parsing
- * 6 KiB each time is the only thing removing it would buy. Two terminals at once is not the
- * case: `document-scope` is a module singleton, so there is one scope per page and `mount`
- * refuses a second live document rather than letting the two share it.
+ * xterm's are written against ids and classes, and the document reads its elements with
+ * `document.getElementById`, which a shadow root would break.
+ *
+ * What is planted is not what the WebView's `<head>` carries. The document-level rules are left
+ * behind entirely and every remaining selector is prefixed with the host's class, so nothing here
+ * can match an element the terminal does not own. That is also what makes leaving the sheet in
+ * the head after unmount the right trade: it matches nothing once the host has dropped the class,
+ * the next mount wants it back, and re-parsing 11 KiB per mount is all removing it would buy.
+ * Two terminals at once is not the case — `document-scope` is a module singleton, so there is one
+ * scope per page and `mount` refuses a second live document rather than letting the two share it.
  */
 function ensureDocumentStyle() {
   if (document.getElementById(STYLE_ELEMENT_ID)) {
@@ -48,7 +56,9 @@ function ensureDocumentStyle() {
   }
   const style = document.createElement('style')
   style.id = STYLE_ELEMENT_ID
-  style.textContent = `${XTERM_ENGINE_CSS}\n${TERMINAL_DOCUMENT_STYLE}`
+  const prefix = `.${HOST_CLASS}`
+  const engine = scopeStyleToHost(XTERM_ENGINE_CSS, prefix)
+  style.textContent = `${engine}\n${scopeStyleToHost(TERMINAL_DOCUMENT_ELEMENT_STYLE, prefix)}`
   document.head.appendChild(style)
 }
 
@@ -104,6 +114,7 @@ async function buildTerminalWebDocument(
   receive: (message: Record<string, unknown>) => void
 ): Promise<TerminalWebDocument> {
   ensureDocumentStyle()
+  host.classList.add(HOST_CLASS)
   host.innerHTML = TERMINAL_DOCUMENT_MARKUP
   // The WebView's `<head>` declares this before anything runs, and the document's error reporter
   // reads it unguarded. Without it the first report throws inside `window.onerror`.
@@ -122,6 +133,14 @@ async function buildTerminalWebDocument(
     }
     window.addEventListener('error', errorListener)
     return () => window.removeEventListener('error', errorListener)
+  }
+
+  // Ruling 19 again, for colour: inside the WebView the terminal's theme is the page's own
+  // background and the document paints `html` and `body` with it. Here those belong to the
+  // application, and a repaint would outlive the terminal, so the host element takes it instead —
+  // it is the element the grid sits on, which is what the paint was for.
+  scope.paintDocumentBackground = (background) => {
+    host.style.background = background
   }
 
   scope.postToHost = receive
@@ -166,6 +185,9 @@ async function buildTerminalWebDocument(
       } catch {}
       scope.term = null
       host.innerHTML = ''
+      // The sheet stays in the head; the class does not, so every rule in it matches nothing
+      // again the moment the terminal is gone.
+      host.classList.remove(HOST_CLASS)
     }
   }
 }

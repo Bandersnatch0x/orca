@@ -4,9 +4,10 @@ import type {
 } from './document-terminal-shape'
 
 /**
- * The five seams between the document and whatever is hosting it, as the document's own
- * defaults. The document reads them at six places: `postToHost` twice, `createTerminal`,
- * `createUnicode11Addon`, `createWebglAddon` and `installErrorReporter` once each.
+ * The six seams between the document and whatever is hosting it, as the document's own
+ * defaults. The document reads them at seven places: `postToHost` twice, `createTerminal`,
+ * `createUnicode11Addon`, `createWebglAddon`, `installErrorReporter` and
+ * `paintDocumentBackground` once each.
  *
  * Inside the WebView the host is React Native and the engine is an IIFE that hangs its
  * constructors off `window`; on the page the host is the component that mounted these modules and
@@ -66,6 +67,17 @@ export function createEngineWebglAddon() {
  * It hands back its own undo, because ruling 20 makes the install a per-mount act and the page's
  * override is a listener that has to come off again.
  */
+/**
+ * The WebView's own background: the document owns `html` and `body` there, and the terminal's
+ * theme is the page's colour. A page mounting these modules owns neither, so this is a field —
+ * painting the application's roots would recolour every screen the shell can show, and leave them
+ * recoloured after the terminal is gone.
+ */
+export function paintWindowDocumentBackground(background: string) {
+  document.documentElement.style.background = background
+  document.body.style.background = background
+}
+
 export function installWindowErrorReporter(report: TerminalDocumentErrorReporter) {
   window.onerror = report
   return function () {

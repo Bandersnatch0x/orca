@@ -3,7 +3,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { TerminalDocumentScope } from './document-scope'
 
 /**
- * The five host seams the page sets, and the window reads and writes they default to.
+ * The six host seams the page sets, and the window reads and writes they default to.
  *
  * The document reached its host through `window.ReactNativeWebView` and built its engine from
  * `window.Terminal` and the two addon globals the engine bundle installs. On the page neither is
@@ -11,7 +11,7 @@ import type { TerminalDocumentScope } from './document-scope'
  * a terminal notify posted through it would put raw terminal JSON into the bridge's own channel,
  * and there is no engine bundle at all because the page imports xterm as a module.
  *
- * So each of the five is a scope field. The default is the window read the document already did,
+ * So each of the six is a scope field. The default is the window read the document already did,
  * unchanged and still performed at call time rather than captured when the scope is built; the
  * page assigns the field instead. Both halves are asserted here, because a seam whose default
  * quietly stopped reading the window would leave the native document mute with every other
@@ -146,6 +146,25 @@ describe('the document host seams, by default', () => {
       expect(window.onerror).toBe(null)
     } finally {
       window.onerror = previous
+    }
+  })
+
+  it('paints the document roots, which is what owning the page means', () => {
+    // Inside the WebView the terminal's theme is the page's own background, so the document sets
+    // it on `html` and `body`. On the page those belong to the application, which is why this is
+    // a field: the render check holds that neither root moves while a terminal is mounted.
+    const roots = [document.documentElement, document.body]
+    const previous = roots.map((element) => element.style.background)
+    try {
+      createTerminalDocumentScope().paintDocumentBackground('rgb(1, 2, 3)')
+      expect(roots.map((element) => element.style.background)).toEqual([
+        'rgb(1, 2, 3)',
+        'rgb(1, 2, 3)'
+      ])
+    } finally {
+      roots.forEach((element, index) => {
+        element.style.background = previous[index]!
+      })
     }
   })
 
