@@ -11,6 +11,8 @@ import { getRepoHostIdentity } from '@/store/slices/repo-host-identity'
 type AddedRepoOwner = {
   runtimeEnvironmentId?: string | null
   sshConnectionId?: string | null
+  /** Add Project WSL distro the repo was added under; pins the project runtime. */
+  wslDistro?: string | null
 }
 
 function repoWithCapturedOwner(repo: Repo, owner: AddedRepoOwner): Repo {
@@ -28,6 +30,21 @@ function repoWithCapturedOwner(repo: Repo, owner: AddedRepoOwner): Repo {
     }
   }
   return repo
+}
+
+// Why: a repo added under a WSL distro must run inside that distro — the host
+// stays local, so the project's runtime preference is the only place the
+// distro decision can live (see resolveProjectExecutionRuntime).
+function pinWslRuntimePreference(repo: Repo, wslDistro: string): void {
+  const project = useAppStore
+    .getState()
+    .projects.find((candidate) => candidate.sourceRepoIds.includes(repo.id))
+  if (!project) {
+    return
+  }
+  void useAppStore.getState().updateProject(project.id, {
+    localWindowsRuntimePreference: { kind: 'wsl', distro: wslDistro }
+  })
 }
 
 export function upsertAddedRepoWithProjectHostSetup(
@@ -50,5 +67,9 @@ export function upsertAddedRepoWithProjectHostSetup(
     projects: projection.projects,
     projectHostSetups: projection.setups
   })
+  const wslDistro = owner.wslDistro?.trim()
+  if (wslDistro) {
+    pinWslRuntimePreference(ownedRepo, wslDistro)
+  }
   return { alreadyPresent, repo: ownedRepo }
 }

@@ -124,7 +124,11 @@ function createWebPreloadApi(): Partial<PreloadApi> {
     ssh: createSshApi(),
     wsl: {
       isAvailable: () => callRuntimeResult<boolean>('host.wsl.isAvailable').catch(() => false),
-      listDistros: () => callRuntimeResult<string[]>('host.wsl.listDistros').catch(() => [])
+      listDistros: () => callRuntimeResult<string[]>('host.wsl.listDistros').catch(() => []),
+      listRunningDistros: () =>
+        callRuntimeResult<string[]>('host.wsl.listRunningDistros').catch(() => []),
+      getDistroHome: (distro: string) =>
+        callRuntimeResult<string | null>('host.wsl.getDistroHome', distro).catch(() => null)
     },
     pwsh: {
       isAvailable: () => callRuntimeResult<boolean>('host.pwsh.isAvailable').catch(() => false)
