@@ -275,6 +275,8 @@ async function open(browser, { extra = {}, csp = 'shipped', sandbox, act } = {})
     return void route.continue()
   }
   await page.route(`${foreignOrigin}/**`, record)
+  // The shell page's violations, and only those: an artifact's own listener would have to run, and
+  // the fence under test is that nothing in the artifact runs.
   await page.addInitScript(() => {
     window.__violations = []
     document.addEventListener('securitypolicyviolation', (event) => {
@@ -375,7 +377,11 @@ for (const engine of ['chromium', 'webkit']) {
         expect(read.mountedSandbox).toBe('allow-top-navigation-by-user-activation')
         // The pixel, not a read inside the frame: the frame is an opaque origin.
         expect(read.pixel).toBe(ARTIFACT_RGB)
-        // The frame's own `<style>` applied, so `style-src`'s `'unsafe-inline'` carries the artifact.
+        // The shell page's own violations, which is all this can be: `securitypolicyviolation` does
+        // not cross into a frame, so an empty list here says the embedder raised none -- not that the
+        // frame raised none. What the frame's inherited policy did to the frame is measured where it
+        // can be: the pixel above is its inline `<style>` applying, and the counting server in the
+        // case below is its `img-src` and `font-src`.
         expect(read.violations).toEqual([])
       }, 120_000)
 
