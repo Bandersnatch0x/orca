@@ -518,30 +518,49 @@ import Foundation
     func verdict(
       _ url: String? = "https://example.com/artifact-link",
       isMainFrame: Bool = true,
+      isFromSubframe: Bool = false,
       isDocumentUrl: Bool = false,
+      isShellLoad: Bool = false,
       hasGesture: Bool = true,
       isDownload: Bool = false
     ) -> MobileWebShellNavigationVerdict {
       MobileWebShellNavigationPolicy.verdict(
         url: url,
         isMainFrame: isMainFrame,
+        isFromSubframe: isFromSubframe,
         isDocumentUrl: isDocumentUrl,
+        isShellLoad: isShellLoad,
         hasGesture: hasGesture,
         isDownload: isDownload
       )
     }
     precondition(verdict() == .cancelAndOffer(foreign))
-    // `href="/"` and `href=""` in an artifact resolve against the embedder's base, so without the
-    // gesture rule one tap inside the sealed preview would reload the shell's own page.
-    precondition(verdict(document, isDocumentUrl: true) == .cancelAndOffer(document))
-    // The page rewriting its own path: no gesture, and the one navigation this WebView performs.
-    precondition(verdict(document, isDocumentUrl: true, hasGesture: false) == .allow)
-    // A top-page meta refresh or a redirect: refused, and never opened in a browser.
+    // The shell's own load, which is the only navigation to the document this view ever performs.
+    // Measured on WebKit: `webView.load` arrives with target and source both the main frame.
+    precondition(verdict(document, isDocumentUrl: true, isShellLoad: true, hasGesture: false) == .allow)
+    // Everything else that names the document is refused, whatever the host says about a gesture,
+    // and is never offered -- handing the shell's own URL to the opener would bounce the user out.
+    // The host is not trusted to report the gesture: measured on WebKit, a sandboxed subframe
+    // navigating the top frame to the document URL arrives with no gesture at all.
+    precondition(verdict(document, isDocumentUrl: true, hasGesture: false) == .cancel)
+    precondition(verdict(document, isDocumentUrl: true, hasGesture: true) == .cancel)
+    precondition(
+      verdict(document, isFromSubframe: true, isDocumentUrl: true, isShellLoad: true, hasGesture: false)
+        == .cancel
+    )
+    // The second discriminator, on its own: a load the shell did not start is refused even when the
+    // initiating frame is the main one, which is the page rewriting its own document away.
+    precondition(verdict(document, isDocumentUrl: true, isShellLoad: false, hasGesture: false) == .cancel)
+    // A top-page meta refresh or a redirect to somewhere else: refused, and never opened.
     precondition(verdict(hasGesture: false) == .cancel)
+    // A tap inside the sealed preview is exactly a subframe-initiated foreign navigation, and that
+    // is the one thing the artifact is allowed to ask for.
+    precondition(verdict(isFromSubframe: true) == .cancelAndOffer(foreign))
     // A download is not a document load, so it is refused there rather than allowed; started by a
     // tap it reaches the opener, which is what makes `<a download>` behave as it does natively.
     precondition(
-      verdict(document, isDocumentUrl: true, hasGesture: false, isDownload: true) == .cancel
+      verdict(document, isDocumentUrl: true, isShellLoad: true, hasGesture: false, isDownload: true)
+        == .cancel
     )
     precondition(verdict(isDownload: true) == .cancelAndOffer(foreign))
     // A subframe is the sealed preview loading itself, which is not the user leaving the app.

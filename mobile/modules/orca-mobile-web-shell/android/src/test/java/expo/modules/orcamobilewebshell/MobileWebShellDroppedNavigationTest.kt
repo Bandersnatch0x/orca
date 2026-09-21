@@ -10,10 +10,20 @@ private const val DOCUMENT = "orca-mobile-web://sess-01JN_aZ9/"
 private fun verdict(
   url: String? = FOREIGN,
   isForMainFrame: Boolean = true,
+  isFromSubframe: Boolean = false,
   isDocumentUrl: Boolean = false,
+  isShellLoad: Boolean = false,
   hasGesture: Boolean = true,
   isDownload: Boolean = false
-) = mobileWebShellNavigationVerdict(url, isForMainFrame, isDocumentUrl, hasGesture, isDownload)
+) = mobileWebShellNavigationVerdict(
+  url,
+  isForMainFrame,
+  isFromSubframe,
+  isDocumentUrl,
+  isShellLoad,
+  hasGesture,
+  isDownload
+)
 
 class MobileWebShellDroppedNavigationTest {
   @Test
@@ -22,21 +32,48 @@ class MobileWebShellDroppedNavigationTest {
   }
 
   @Test
-  fun `refuses a link-activated navigation even when it names the document itself`() {
-    // `href="/"` and `href=""` in an artifact resolve against the embedder's base, so without this
-    // one tap inside the sealed preview would reload the shell's own page. Offered rather than
-    // allowed; the opener's scheme list drops the shell's own origin in silence.
+  fun `refuses every navigation to the document that the shell did not ask for`() {
+    // `href="/"` and `href=""` in an artifact resolve against the embedder's base, so both name the
+    // shell's own document. Refused whatever the host says about a gesture, and never offered:
+    // handing the shell's own URL to the opener would send the user out of the app.
     assertEquals(
-      MobileWebShellNavigationVerdict.CancelAndOffer(DOCUMENT),
+      MobileWebShellNavigationVerdict.Cancel,
       verdict(url = DOCUMENT, isDocumentUrl = true)
+    )
+    // The same navigation with no gesture reported, which is what a subframe's top navigation looks
+    // like on both engines. Chromium's own documentation allows hasGesture() to be false for a
+    // request a human started, so nothing here may rest on it.
+    assertEquals(
+      MobileWebShellNavigationVerdict.Cancel,
+      verdict(url = DOCUMENT, isDocumentUrl = true, hasGesture = false)
     )
   }
 
   @Test
-  fun `allows the document's own programmatic load, which has no gesture behind it`() {
+  fun `allows the document only for the load the shell itself started`() {
     assertEquals(
       MobileWebShellNavigationVerdict.Allow,
-      verdict(url = DOCUMENT, isDocumentUrl = true, hasGesture = false)
+      verdict(url = DOCUMENT, isDocumentUrl = true, isShellLoad = true, hasGesture = false)
+    )
+    // Carried for the iOS twin, which can see the initiating frame: a subframe's navigation is not
+    // the shell's load even if it arrives while the flag is up.
+    assertEquals(
+      MobileWebShellNavigationVerdict.Cancel,
+      verdict(
+        url = DOCUMENT,
+        isFromSubframe = true,
+        isDocumentUrl = true,
+        isShellLoad = true,
+        hasGesture = false
+      )
+    )
+  }
+
+  @Test
+  fun `offers a foreign navigation a subframe started, which is the tap in the preview`() {
+    assertEquals(
+      MobileWebShellNavigationVerdict.CancelAndOffer(FOREIGN),
+      verdict(isFromSubframe = true)
     )
   }
 
@@ -51,7 +88,13 @@ class MobileWebShellDroppedNavigationTest {
   fun `cancels a download rather than allowing it, and offers a gesture-started one`() {
     assertEquals(
       MobileWebShellNavigationVerdict.Cancel,
-      verdict(url = DOCUMENT, isDocumentUrl = true, hasGesture = false, isDownload = true)
+      verdict(
+        url = DOCUMENT,
+        isDocumentUrl = true,
+        isShellLoad = true,
+        hasGesture = false,
+        isDownload = true
+      )
     )
     assertEquals(
       MobileWebShellNavigationVerdict.CancelAndOffer(FOREIGN),

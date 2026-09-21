@@ -288,8 +288,8 @@ async function open(browser, { extra = {}, csp = 'shipped', sandbox, act } = {})
   // and the initial `goto` is one. `href="/"` and `href=""` inside an artifact resolve against the
   // embedder's base, so a tap on either asks to navigate the top frame to the shell's own document.
   // The rig has no shell, so what this pins is the request the shell is handed; refusing it is
-  // `MobileWebShellDroppedNavigationTest`'s "refuses a link-activated navigation even when it names
-  // the document itself" and its `checkNavigationVerdict` twin on iOS.
+  // `MobileWebShellDroppedNavigationTest`'s "refuses every navigation to the document that the shell
+  // did not ask for" and its `checkNavigationVerdict` twin on iOS.
   await page.route(`${origin}/**`, record)
   // `sandbox` undefined is the product's own token, which is what every non-control case runs.
   await page.evaluate(

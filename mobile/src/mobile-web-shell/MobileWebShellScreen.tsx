@@ -281,11 +281,10 @@ export function MobileWebShellScreen({
         onExternalNavigation={(event) => {
           const target = cancelledShellNavigationTarget(event.nativeEvent.url)
           if (target === null) {
-            // Cancelled and not openable. The document's own reloads never reach here at all --
-            // they carry no gesture, so the shell allows them and offers nothing. What does reach
-            // here and gets dropped is a tapped link naming the shell's own origin, which is what
-            // `href="/"` inside a preview resolves to, along with anything outside the three
-            // allowed schemes. Silent, as every cancelled navigation was before this event existed.
+            // Cancelled and not openable. Nothing naming the shell's own document reaches here:
+            // the shell refuses that without offering it, whatever asked. What lands here and is
+            // dropped is a URL outside the three allowed schemes. Silent, as every cancelled
+            // navigation was before this event existed.
             return
           }
           openUrlForPage(target)

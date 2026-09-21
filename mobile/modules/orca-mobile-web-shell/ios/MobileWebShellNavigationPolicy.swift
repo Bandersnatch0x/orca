@@ -32,41 +32,44 @@ enum MobileWebShellNavigationPolicy {
   /// A navigation outside the main frame is the sealed preview frame loading itself. It is refused
   /// and never offered: forwarding it would let an artifact ask for a browser with no tap behind it.
   ///
-  /// **A navigation a human started is never allowed, whatever it names.** `isDocumentUrl` is true
-  /// for `href="/"` and for `href=""` in an artifact, because both resolve against the embedder's
-  /// base, so without this rule one tap inside the preview would reload the shell's own page --
-  /// clearing the bridge target, restarting the load state and losing everything the page held. It
-  /// is offered instead, and the opener's scheme list drops the shell's own origin in silence
-  /// exactly as it drops a route.
+  /// **The document URL loads only when the shell asked for it.** `isShellLoad` is a flag the view
+  /// raises around its own `webView.load` and drops at commit; nothing else can raise it. Every
+  /// other navigation that names the document is refused and never offered -- offering the shell's
+  /// own URL to the opener would send the user out of the app instead of reloading it.
   ///
-  /// Only a navigation with no gesture behind it can be allowed, and only to the served document:
-  /// that is the page rewriting its own path, and the one navigation this WebView performs. A
-  /// download is refused there rather than allowed, because a download is not a document load; with
-  /// a gesture it takes the rule above and reaches the opener, which is what makes `<a download>`
-  /// behave the way it does on the native screens.
+  /// The rule deliberately does not rest on the host reporting a gesture. Measured against a real
+  /// WKWebView, off-device: a sandboxed subframe navigating the top frame to the document URL
+  /// arrives as `.other` with no gesture at all, and under a gesture-shaped rule that is an allow
+  /// and a shell reload -- the bridge target cleared, the load state restarted, the page's state
+  /// gone. `isFromSubframe` is the second discriminator for the same reason: the same probe shows
+  /// the shell's own load arriving with source and target both the main frame, and a subframe's top
+  /// navigation arriving with the subframe as its source.
+  ///
+  /// What is left for the gesture is the only thing an artifact may ask for: a foreign URL, which
+  /// is refused and handed to the opener. A download is not a document load, so it takes that path
+  /// too, which is what makes `<a download>` behave the way it does on the native screens.
   ///
   /// Which URLs may actually open is not decided here -- `readBridgeExternalLinkUrl` owns the scheme
   /// list, in the half that ships over the air.
   static func verdict(
     url: String?,
     isMainFrame: Bool,
+    isFromSubframe: Bool,
     isDocumentUrl: Bool,
+    isShellLoad: Bool,
     hasGesture: Bool,
     isDownload: Bool
   ) -> MobileWebShellNavigationVerdict {
     guard isMainFrame else {
       return .cancel
     }
-    if hasGesture {
-      guard let offered = offerableUrl(url) else {
-        return .cancel
-      }
-      return .cancelAndOffer(offered)
+    if isDocumentUrl, !isDownload {
+      return isShellLoad && !isFromSubframe ? .allow : .cancel
     }
-    guard !isDownload, isDocumentUrl else {
+    guard hasGesture, let offered = offerableUrl(url) else {
       return .cancel
     }
-    return .allow
+    return .cancelAndOffer(offered)
   }
 
   /// The URL a cancelled navigation may be offered under, or nil when nothing crosses.

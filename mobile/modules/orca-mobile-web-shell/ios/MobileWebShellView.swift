@@ -189,6 +189,9 @@ final class OrcaMobileWebShellView: ExpoView, WKNavigationDelegate, WKUIDelegate
   private var applied: MobileWebShellAppliedProps?
   private var appliedSessionId: String? { applied?.sessionId }
   private var pendingDocumentUrl: URL?
+  /// Raised around the shell's own `load` and dropped when that navigation commits or fails. The
+  /// only thing that distinguishes the load the shell asked for from one a document asked for.
+  private var shellInitiatedLoad = false
   private var isolationReady = false
   private var isolationFailed = false
   private let loadState = MobileWebShellLoadStateMachine()
@@ -422,6 +425,7 @@ final class OrcaMobileWebShellView: ExpoView, WKNavigationDelegate, WKUIDelegate
   private func loadWhenIsolated() {
     guard isolationReady, let url = pendingDocumentUrl else { return }
     pendingDocumentUrl = nil
+    shellInitiatedLoad = true
     webView.load(URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData))
   }
 
@@ -435,6 +439,7 @@ final class OrcaMobileWebShellView: ExpoView, WKNavigationDelegate, WKUIDelegate
   }
 
   private func reportDocumentFailure() {
+    shellInitiatedLoad = false
     clearBridgeTarget()
     emit(loadState.failed(.documentLoadFailed))
   }
@@ -462,12 +467,15 @@ final class OrcaMobileWebShellView: ExpoView, WKNavigationDelegate, WKUIDelegate
     if #available(iOS 14.5, *) {
       isDownload = navigationAction.shouldPerformDownload
     }
-    // `.linkActivated` is WebKit's own answer to "did a human start this", and it is what separates
-    // a tap inside the sealed preview frame from the page rewriting its own path.
+    // `.linkActivated` is WebKit's own answer to "did a human start this". It decides only what may
+    // be offered to the opener; nothing is allowed on the strength of it, because a subframe can
+    // navigate the top frame with no gesture reported at all.
     let verdict = MobileWebShellNavigationPolicy.verdict(
       url: navigationAction.request.url?.absoluteString,
       isMainFrame: navigationAction.targetFrame?.isMainFrame == true,
+      isFromSubframe: !navigationAction.sourceFrame.isMainFrame,
       isDocumentUrl: isDocumentUrl(navigationAction.request.url),
+      isShellLoad: shellInitiatedLoad,
       hasGesture: navigationAction.navigationType == .linkActivated,
       isDownload: isDownload
     )
@@ -504,6 +512,9 @@ final class OrcaMobileWebShellView: ExpoView, WKNavigationDelegate, WKUIDelegate
   /// The load the caller was told about is the one now on screen, so this is where the page becomes
   /// something to hear. Earlier than `didFinish`, because the page speaks at document start.
   func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+    // Dropped for every commit, not only the shell's own: what is on screen from here is a document,
+    // and the next navigation has to be asked for again.
+    shellInitiatedLoad = false
     guard isDocumentUrl(webView.url) else { return }
     // Cleared here too, not only at the provisional start: arming is what this re-opens, so the
     // frame the replaced document spoke from must not be inheritable by the one replacing it.
@@ -522,10 +533,12 @@ final class OrcaMobileWebShellView: ExpoView, WKNavigationDelegate, WKUIDelegate
     didFailProvisionalNavigation navigation: WKNavigation!,
     withError error: Error
   ) {
+    shellInitiatedLoad = false
     reportNavigationFailure(error)
   }
 
   func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+    shellInitiatedLoad = false
     reportNavigationFailure(error)
   }
 
