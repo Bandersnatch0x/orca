@@ -22,6 +22,7 @@ import {
   routePathnameFromKey
 } from './mobile-web-app-route-manifest.mjs'
 import {
+  MOBILE_WEB_APP_BUNDLE_DEFERRED_ENGINE_CHUNKS,
   MOBILE_WEB_APP_BUNDLE_MAX_ENTRY_BYTES,
   MOBILE_WEB_APP_BUNDLE_MAX_TOTAL_BYTES,
   MOBILE_WEB_APP_SOURCE_DIRS,
@@ -532,19 +533,22 @@ describe('the Phase C budget', () => {
   it('derives the chunk ceiling from the route count, not from a measured number', async () => {
     // A chunk is emitted per distinct set of importers, so the count is combinatorial rather than
     // one per route. Measured while building this: 8 routes emit 23 chunks, 10 emit 40, 12 emit
-    // 47, 14 emit 53 -- about 3 more per route at the top. The ceiling allows 4 and starts 16
+    // 47, 14 emit 69 -- about 3 more per route at the top. The ceiling allows 4 and starts 16
     // above zero, so the next few routes land under it instead of failing on a pinned number.
+    // Those readings are the page's own split, with mermaid aliased to a stub: the engine's own
+    // 103 scripts are the separate term, because they grow with the engine and not with the tree.
     for (const [routes, measured] of [
       [8, 23],
       [10, 40],
       [12, 47],
-      [14, 53]
+      [14, 69]
     ]) {
-      expect(mobileWebAppBundleMaxChunks(routes), `${String(routes)} routes`).toBeGreaterThan(
-        measured
-      )
+      expect(
+        mobileWebAppBundleMaxChunks(routes) - MOBILE_WEB_APP_BUNDLE_DEFERRED_ENGINE_CHUNKS,
+        `${String(routes)} routes`
+      ).toBeGreaterThan(measured)
     }
-    expect(mobileWebAppBundleMaxChunks(14)).toBe(72)
+    expect(mobileWebAppBundleMaxChunks(14)).toBe(175)
     expect(mobileWebAppBundleMaxChunks(15) - mobileWebAppBundleMaxChunks(14)).toBe(4)
   })
 
@@ -585,12 +589,13 @@ describe('the Phase C budget', () => {
 
   it('fails the build when the derived ceiling passes what the phone will accept', async () => {
     // The shell hands back null for a manifest over its own ceiling, so a derived ceiling above
-    // that ships a green build no device can open. At the 42 images the tree carries, 4r + 16 +
-    // 42 + 1 crosses 256 at 50 routes, which Phase C reaches.
+    // that ships a green build no device can open. At the 42 images the tree carries, the page's
+    // own 4r + 16 + 42 + 1 crossed 256 at 50 routes; with the deferred engine's 103 scripts on top
+    // it crosses at 24, and Phase C reaches that far sooner than it reaches 50.
     expect(await readMobileWebBundleMaxAssets()).toBe(MOBILE_WEB_BUNDLE_MAX_ASSETS)
-    expect(assertAssetCeilingFitsShell(49, 42, MOBILE_WEB_BUNDLE_MAX_ASSETS)).toBe(255)
-    expect(() => assertAssetCeilingFitsShell(50, 42, MOBILE_WEB_BUNDLE_MAX_ASSETS)).toThrow(
-      /259 .*256/
+    expect(assertAssetCeilingFitsShell(23, 42, MOBILE_WEB_BUNDLE_MAX_ASSETS)).toBe(254)
+    expect(() => assertAssetCeilingFitsShell(24, 42, MOBILE_WEB_BUNDLE_MAX_ASSETS)).toThrow(
+      /258 .*256/
     )
   })
 })
