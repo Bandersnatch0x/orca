@@ -268,9 +268,18 @@ async function open(browser, { extra = {}, csp = 'shipped', sandbox, act } = {})
   // shell's `onExternalNavigation` would be handed.
   const record = (route) => {
     const request = route.request()
-    if (request.isNavigationRequest() && request.frame() === page.mainFrame()) {
-      navigations.push({ url: request.url(), foreign: request.url().startsWith(foreignOrigin) })
-      return void route.abort()
+    if (request.isNavigationRequest()) {
+      const main = request.frame() === page.mainFrame()
+      navigations.push({
+        url: request.url(),
+        foreign: request.url().startsWith(foreignOrigin),
+        main
+      })
+      // A frame navigating itself is counted and then left alone: aborting it would make "the frame
+      // stayed on the artifact" true by the rig's own doing.
+      if (main) {
+        return void route.abort()
+      }
     }
     return void route.continue()
   }
@@ -340,8 +349,11 @@ async function open(browser, { extra = {}, csp = 'shipped', sandbox, act } = {})
         threw: window.__threw ?? null
       }))
       .catch(() => null) ?? Promise.resolve(null)),
-    topNavigations: navigations.filter((one) => one.foreign).length,
-    ownOriginTopNavigations: navigations.filter((one) => !one.foreign).length,
+    topNavigations: navigations.filter((one) => one.main && one.foreign).length,
+    ownOriginTopNavigations: navigations.filter((one) => one.main && !one.foreign).length,
+    // What the frame asked for itself at the embedder's origin, which is a different escape from a
+    // top-frame request and is refused by a different line of the policy.
+    ownOriginFrameNavigations: navigations.filter((one) => !one.main && !one.foreign).length,
     popups: popups.length,
     // This arm's fetches only, by nonce: the paths, with the nonce stripped, so a case reads the
     // subresource rather than the bookkeeping.
@@ -469,6 +481,38 @@ for (const engine of ['chromium', 'webkit']) {
         expect(read.popups).toBe(0)
       }, 120_000)
 
+      it("cannot reach the shell through a meta refresh at the embedder's own URL", async () => {
+        // `content="0;url=/"` resolves against the embedder's base, so this is the artifact asking
+        // for the shell's own document with no tap behind it. The foreign meta-refresh arm below
+        // cannot say anything about that: its URL is off-origin, so its own-origin count is zero
+        // whatever the frame did.
+        const own = await open(browser(), {
+          extra: { head: '<meta http-equiv="refresh" content="0;url=/">' }
+        })
+        // The frame is still showing the artifact, so what follows is about a refusal rather than
+        // about a frame that never rendered.
+        expect(own.pixelBefore).toBe(ARTIFACT_RGB)
+        // Zero against a counter that is not blind: the `href="/"` case above reads exactly 1 on this
+        // same reading, from this same rig.
+        expect(own.ownOriginTopNavigations).toBe(0)
+        expect(own.topNavigations).toBe(0)
+        // The other escape the same fixture could take: the frame fetching the shell's document for
+        // itself, which would put the session's own page inside the preview.
+        expect(own.ownOriginFrameNavigations).toBe(0)
+
+        // That zero's presence precondition, and it attributes the fence as well: give the frame
+        // `allow-same-origin` and drop the policy, and this very fixture navigates the frame to the
+        // embedder's `/`. The same fixture with the policy dropped but the product's token kept
+        // navigates nothing, so what refuses it is the opaque origin the sandbox gives the frame,
+        // not the CSP.
+        const loose = await open(browser(), {
+          csp: null,
+          sandbox: 'allow-scripts allow-same-origin allow-top-navigation',
+          extra: { head: '<meta http-equiv="refresh" content="0;url=/">' }
+        })
+        expect(loose.ownOriginFrameNavigations).toBe(1)
+      }, 180_000)
+
       it('hands up nothing without a tap, and nothing for a form or a new window', async () => {
         const meta = await open(browser(), {
           extra: { head: `<meta http-equiv="refresh" content="0;url=${foreignOrigin}/meta.html">` }
@@ -548,10 +592,14 @@ describe('the HTML preview needs no policy change', () => {
  * reached CI. So this polls instead, bounded by the case's own timeout rather than by a number here.
  */
 async function waitForLoadedFrame(page) {
+  // Past this, any child frame that has a URL will do: one arm's artifact tries to navigate the frame
+  // itself, and waiting for a document it may have left would spend the case's whole timeout.
+  const preferSealedUntil = Date.now() + 3000
   for (;;) {
-    const frame = page
-      .frames()
-      .find((one) => one !== page.mainFrame() && one.url() === 'about:srcdoc')
+    const children = page.frames().filter((one) => one !== page.mainFrame())
+    const frame =
+      children.find((one) => one.url() === 'about:srcdoc') ??
+      (Date.now() > preferSealedUntil ? children.find((one) => one.url() !== '') : undefined)
     if (frame) {
       // A read of the frame's current lifecycle state, not a listener: a document that finished
       // loading before this poll first saw the frame still resolves, where a listener would wait for
