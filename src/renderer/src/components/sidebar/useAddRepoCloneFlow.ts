@@ -80,6 +80,7 @@ export function useAddRepoCloneFlow({
     cloneDestination,
     activeRuntimeEnvironmentId,
     sshTargetId,
+    wslDistro,
     workspaceDir,
     cloneStepAutoFilled: cloneStepAutoFilledRef.current
   })

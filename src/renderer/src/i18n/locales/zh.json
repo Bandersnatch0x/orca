@@ -5328,8 +5328,8 @@
         },
         "addProjectWslHost": {
           "wslDistroLabel": "WSL · {{distro}}",
-          "wslDistroRunning": "Windows Linux 子系统 · 就绪",
-          "wslDistroNotRunning": "Windows Linux 子系统 · 首次使用时启动"
+          "wslDistroRunning": "适用于 Linux 的 Windows 子系统 · 就绪",
+          "wslDistroNotRunning": "适用于 Linux 的 Windows 子系统 · 首次使用时启动"
         }
       },
       "shared": {

@@ -11,12 +11,8 @@ import { relaunchApp } from '../app-relaunch'
 import type { Store } from '../persistence'
 import { getDevInstanceIdentity } from '../startup/dev-instance-identity'
 import { isPwshAvailableAsync } from '../pwsh'
-import {
-  getWslHomeAsync,
-  isWslAvailableAsync,
-  listRunningWslDistrosAsync,
-  listWslDistrosAsync
-} from '../wsl'
+import { isWslAvailableAsync, listWslDistrosAsync } from '../wsl'
+import { registerAddProjectWslProbeHandlers } from './add-project-wsl-probes'
 import { isGitBashAvailable } from '../git-bash'
 import { setUnreadDockBadgeCount } from '../dock/unread-badge'
 import { destroySystemTray } from '../tray/system-tray'
@@ -272,10 +268,7 @@ export function registerAppHandlers(store: Store, options: RegisterAppHandlersOp
   // loop — every PTY message, window IPC and watchdog beat — for up to 5s per renderer read.
   ipcMain.handle('wsl:isAvailable', (): Promise<boolean> => isWslAvailableAsync())
   ipcMain.handle('wsl:listDistros', (): Promise<string[]> => listWslDistrosAsync())
-  ipcMain.handle('wsl:listRunningDistros', (): Promise<string[]> => listRunningWslDistrosAsync())
-  ipcMain.handle('wsl:getDistroHome', (_event, distro: string): Promise<string | null> =>
-    getWslHomeAsync(String(distro ?? ''))
-  )
+  registerAddProjectWslProbeHandlers()
   ipcMain.handle('pwsh:isAvailable', (): Promise<boolean> => isPwshAvailableAsync())
   ipcMain.handle('gitBash:isAvailable', (): boolean => isGitBashAvailable())
 

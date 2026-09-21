@@ -6,7 +6,7 @@ import { browseRuntimeServerDirectory } from '@/runtime/runtime-server-directory
 import { callRuntimeRpc } from '@/runtime/runtime-rpc-client'
 import type { AddRepoDialogStep } from './add-repo-dialog-types'
 import { getDefaultCreateProjectParent, type GitAvailability } from './create-project-defaults'
-import { fetchWslDistroHome, wslDistroUncRoot } from './use-wsl-distro-home'
+import { fetchWslDistroHome } from './use-wsl-distro-home'
 
 const LOCAL_GIT_AVAILABILITY_TIMEOUT_MS = 1500
 const RUNTIME_GIT_AVAILABILITY_TIMEOUT_MS = 3000
@@ -164,11 +164,14 @@ export function useCreateProjectDefaults({
     ) {
       return
     }
+    // Why: when the home lookup fails, keep the default empty — a distro-root
+    // fallback (/orca/projects) is unwritable for non-root users and mkdir
+    // would surface a permission error. The picker roots at the distro root
+    // instead, so users can pick any writable parent.
     const parentPromise = activeCreateParentWslDistro
-      ? fetchWslDistroHome(activeCreateParentWslDistro).then((homeUnc) => {
-          const root = homeUnc ?? wslDistroUncRoot(activeCreateParentWslDistro)
-          return `${root.replace(/[\\/]+$/, '')}\\orca\\projects`
-        })
+      ? fetchWslDistroHome(activeCreateParentWslDistro).then((homeUnc) =>
+          homeUnc ? `${homeUnc.replace(/[\\/]+$/, '')}\\orca\\projects` : ''
+        )
       : window.api.repos.getDefaultCreateProjectParent()
     setCreateDefaultParent('')
     void parentPromise

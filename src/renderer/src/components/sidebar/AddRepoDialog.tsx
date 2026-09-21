@@ -350,7 +350,8 @@ export default React.memo(function AddRepoDialog({
             browseRuntime: () => setStep('server-path'),
             browseSsh: (targetId) => void handleOpenRemoteStep(targetId)
           })
-        }        onOpenCloneStep={() => {
+        }
+        onOpenCloneStep={() => {
           if (!hostSelection.selectedHostId) {
             return
           }
