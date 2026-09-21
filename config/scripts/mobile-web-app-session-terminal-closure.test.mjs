@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { mobileWebAppRouteClosure } from './build-mobile-web-app-bundle.mjs'
 import { mobileWebAppDependenciesPresent } from './mobile-web-app-bundle-dependencies.mjs'
+import { mobileWebAppRouteChunkClosure } from './mobile-web-app-route-chunk-closure.mjs'
 import {
   textInputFontSizeOffenders,
   unresolvedTextInputStyles
@@ -32,6 +33,19 @@ import {
  * -47,255 at 51ae7b1b03 and -55,561 at 0ce0fc99a2. They differ because C7.1's own round-1 fold
  * deleted `URL_TAP_WEBVIEW_JS` from a module only the page's component brings into this closure,
  * so the saving lands on the after side and no base can show it.
+ *
+ * Then C7.10 item B put mermaid on the page, and the module list moved again:
+ *
+ *   modules        4320 -> 6362   (+2042)
+ *   local modules   970 ->  971   (+1)
+ *
+ * That +2,042 is what `import('mermaid')` reaches — the engine's own 66 files and the d3, dagre,
+ * katex and cytoscape trees under them — and none of it is a download. `mobileWebAppRouteClosure`
+ * reads `metafile.inputs`, which holds dynamically imported modules under `splitting: true` just
+ * as it does under `splitting: false`, so it cannot express "on demand" about anything. Ruling 28:
+ * the fence for this route is `entryStaticClosure`, which follows `import-statement` edges only,
+ * and the module list's new total is a recorded number rather than a budget. It moves whenever
+ * main adds a module this route reaches, and is re-recorded rather than argued with.
  */
 
 const projectDir = fileURLToPath(new URL('../..', import.meta.url))
@@ -75,6 +89,15 @@ const XTERM_PACKAGES = ['@xterm/xterm', '@xterm/addon-unicode11', '@xterm/addon-
  */
 const EXPECTED_OFFENDERS = 0
 
+/** Where mermaid's own files sit in a closure, and how many of them this version has. */
+const MERMAID_PACKAGE = 'node_modules/mermaid/'
+const MERMAID_MODULES = 66
+
+/** The module list with mermaid in it, recorded at the base in the docstring above. */
+const MODULES_WITH_MERMAID = 6362
+
+const mermaidModules = (inputs) => inputs.filter((input) => input.includes(MERMAID_PACKAGE))
+
 const bundles = mobileWebAppDependenciesPresent()
 const describeClosure = bundles ? describe : describe.skip
 
@@ -102,6 +125,26 @@ describeClosure(
       expect(documentModules).not.toContain('src/terminal/document/message-bridge.ts')
       expect(documentModules).toContain('src/terminal/document/page-document-modules.ts')
     }, 300_000)
+
+    it('reaches mermaid as a module and never as part of the download', async () => {
+      const { modules } = await mobileWebAppRouteClosure(SESSION_ROUTE)
+      // The recorded number, and what of it is mermaid's own: a total on its own could move for
+      // any reason, and the engine's file count only moves when the pinned version does.
+      expect(mermaidModules(modules)).toHaveLength(MERMAID_MODULES)
+      expect(modules).toHaveLength(MODULES_WITH_MERMAID)
+
+      const download = await mobileWebAppRouteChunkClosure(SESSION_ROUTE)
+      // The fence: nothing of mermaid is reachable from the route's own chunk by an import
+      // statement, so opening the session pays none of it.
+      expect(mermaidModules(download.staticInputs)).toEqual([])
+      // The precondition that absence needs. Every one of those files is in the bundle, in a chunk
+      // the route reaches by a `dynamic-import` edge instead — so this is a deferred engine and
+      // not an engine the build dropped.
+      expect(mermaidModules(download.deferredInputs)).toHaveLength(MERMAID_MODULES)
+      // And the walk read a real download rather than one chunk: the route's own chunk is in it.
+      expect(download.staticChunks).toContain(download.routeChunk)
+      expect(download.staticInputs.length).toBeGreaterThan(1000)
+    }, 600_000)
 
     it('leaves the 16px seam census exactly where C7.2 left it', async () => {
       const closure = await mobileWebAppRouteClosure(SESSION_ROUTE)
