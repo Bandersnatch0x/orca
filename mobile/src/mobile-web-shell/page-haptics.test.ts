@@ -9,12 +9,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { BRIDGE_HAPTICS_KINDS, type BridgeHapticsKind } from './bridge/bridge-haptics-notify'
 
+/** Annotated rather than asserted: the platform is a two-value union and the log starts empty. */
+type MockDevice = { platform: { OS: 'ios' | 'android' }; calls: string[] }
+
 // Hoisted, because `vi.mock` is: a factory closing over an ordinary `const` reads it before its
 // initializer has run. The device call each haptic makes is the only thing recorded.
-const device = vi.hoisted(() => ({
-  platform: { OS: 'ios' as 'ios' | 'android' },
-  calls: [] as string[]
-}))
+const device = vi.hoisted((): MockDevice => ({ platform: { OS: 'ios' }, calls: [] }))
 const { calls, platform } = device
 
 vi.mock('react-native', () => ({ Platform: device.platform }))
@@ -47,8 +47,7 @@ vi.mock('expo-haptics', () => ({
   }
 }))
 
-import * as nativeHaptics from '../platform/haptics'
-import { pageHapticExportNames, playPageHaptic } from './page-haptics'
+import { playPageHaptic } from './page-haptics'
 
 beforeEach(() => {
   calls.length = 0
@@ -95,19 +94,18 @@ describe('the kinds and the functions behind them', () => {
   })
 
   /**
-   * The direction the table's type cannot state.
+   * Every kind reaches a different device call, which is what says the table has no duplicate row.
    *
-   * `Record<BridgeHapticsKind, keyof typeof haptics>` refuses a kind with no row and a row naming a
-   * function that does not exist. It says nothing about a function `haptics.ts` grows with no kind
-   * of its own, which would be a haptic the page could never ask for; comparing both sets is the
-   * only thing that sees it.
+   * A table mapping two kinds to one function would pass every case above — each still plays
+   * something — and would mean a Save that felt like a failure. The third direction, a haptic
+   * `haptics.ts` grows with no kind of its own, is the census's:
+   * `config/scripts/mobile-web-app-haptics-seam.test.mjs` reads both files' names.
    */
-  it('maps every function the app exports, so no haptic is unreachable from the page', () => {
-    const exported = Object.keys(nativeHaptics).filter(
-      (name) => typeof nativeHaptics[name as keyof typeof nativeHaptics] === 'function'
-    )
-    expect(exported.length).toBe(BRIDGE_HAPTICS_KINDS.length)
-    expect([...pageHapticExportNames()].sort()).toEqual(exported.sort())
+  it('plays a different device call for every kind, so no two share a row', () => {
+    for (const kind of BRIDGE_HAPTICS_KINDS) {
+      playPageHaptic(kind)
+    }
+    expect(new Set(calls).size).toBe(BRIDGE_HAPTICS_KINDS.length)
   })
 })
 

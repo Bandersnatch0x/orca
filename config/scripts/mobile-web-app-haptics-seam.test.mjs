@@ -22,6 +22,7 @@ import {
   HAPTICS_NATIVE,
   HAPTICS_SEAM,
   bridgeHapticsKinds,
+  hapticsImportedNames,
   hapticsPostedKinds,
   hapticsSeamImporters,
   hapticsTriggerSites
@@ -42,6 +43,9 @@ const ROUTE_MODULES = new Map([
 ])
 
 const HAPTICS_GRANT = 'haptics'
+
+/** The shell's mapping from a notify kind to one of the app's own functions. */
+const SHELL_MAPPING = 'src/mobile-web-shell/page-haptics.ts'
 
 describe('the seam reader', () => {
   it('names the kind each exported trigger posts', () => {
@@ -165,6 +169,54 @@ describe('the two haptics siblings', () => {
   it('exports the same five names from both, which is what makes one a substitution', () => {
     const names = (file) => hapticsTriggerSites(read(file), file).map((site) => site.name)
     expect(names(HAPTICS_SEAM)).toEqual(names(HAPTICS_NATIVE))
+  })
+
+  /**
+   * The third direction, which no type in the app states.
+   *
+   * The shell's table refuses a kind with no row and a row naming a function that does not exist,
+   * both at compile time. It says nothing about a haptic `haptics.ts` grows with no kind of its own,
+   * which would be one the page can never ask for however many rows the table has.
+   */
+  it('maps every function the app exports from the shell side, so none is unreachable', () => {
+    const exported = hapticsTriggerSites(read(HAPTICS_NATIVE), HAPTICS_NATIVE).map(
+      (site) => site.name
+    )
+    expect(exported).toHaveLength(5)
+    expect(hapticsImportedNames(read(SHELL_MAPPING), SHELL_MAPPING)).toEqual([...exported].sort())
+  })
+})
+
+describe('the imported-name reader', () => {
+  it('names what a module takes from the app haptics', () => {
+    expect(
+      hapticsImportedNames(
+        "import { triggerError, triggerSuccess } from '../platform/haptics'\n",
+        'page-haptics.ts'
+      )
+    ).toEqual(['triggerError', 'triggerSuccess'])
+  })
+
+  it('reads the imported name and not the local one, a renamed import being the same export', () => {
+    expect(
+      hapticsImportedNames(
+        "import { triggerError as boom } from '../platform/haptics'\n",
+        'page-haptics.ts'
+      )
+    ).toEqual(['triggerError'])
+  })
+
+  it('leaves alone an import of the web sibling or of something else entirely', () => {
+    expect(
+      hapticsImportedNames(
+        [
+          "import { triggerError } from '../platform/haptics.web'",
+          "import { triggerSuccess } from './other-haptics'",
+          "// import { triggerEdgeBump } from '../platform/haptics'"
+        ].join('\n'),
+        'page-haptics.ts'
+      )
+    ).toEqual([])
   })
 })
 

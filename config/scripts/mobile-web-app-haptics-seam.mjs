@@ -154,6 +154,35 @@ export function hapticsPostedKinds(source, fileName = 'haptics.ts') {
 }
 
 /**
+ * The names a module imports from the app's haptics, which is how the shell's mapping is held to it.
+ *
+ * `page-haptics.ts` names each function as a named import rather than reaching a namespace, so a
+ * row naming something `haptics.ts` does not export is already a compile error. This is the other
+ * direction, which no type states: a haptic that file grows with no kind of its own would be one
+ * the page can never ask for, and comparing this list against the file's own exports is the only
+ * thing that sees it.
+ */
+export function hapticsImportedNames(source, fileName = 'module.ts') {
+  const parsed = parse(source, fileName)
+  const names = []
+  for (const statement of parsed.statements) {
+    if (
+      !ts.isImportDeclaration(statement) ||
+      !ts.isStringLiteral(statement.moduleSpecifier) ||
+      !/(?:\.\.?\/)+platform\/haptics$/.test(statement.moduleSpecifier.text)
+    ) {
+      continue
+    }
+    const bindings = statement.importClause?.namedBindings
+    if (bindings !== undefined && ts.isNamedImports(bindings)) {
+      // The imported name, not the local one: a renamed import is the same export.
+      names.push(...bindings.elements.map((element) => (element.propertyName ?? element.name).text))
+    }
+  }
+  return [...new Set(names)].sort()
+}
+
+/**
  * Every module in a closure that imports the haptics seam, as the path the closure reports.
  *
  * The specifier is read extensionless, because that is how a consumer writes it and how the builder
