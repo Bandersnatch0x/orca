@@ -33,11 +33,19 @@ export type OrcaMobileWebShellViewProps = ViewProps & {
    */
   onBridgeMessage?: (event: NativeSyntheticEvent<MobileWebShellBridgeMessagePayload>) => void
   /**
-   * A main-frame navigation was cancelled, which is the user aiming the top frame off the document:
-   * a tap on a link inside the sealed HTML-preview frame, which the browser hands up as a top-frame
-   * request. The URL is unfiltered by design — `readBridgeExternalLinkUrl` owns the scheme list and
-   * lives in the half that ships over the air — so a handler must run it through that before
-   * opening anything. Bounded natively at 4096 characters so an artifact cannot spend the boundary.
+   * A main-frame navigation a human started was cancelled, which is the user aiming the top frame
+   * somewhere else: a tap on a link inside the sealed HTML-preview frame, which the browser hands up
+   * as a top-frame request.
+   *
+   * **Only a gesture-started navigation is offered.** A top-page meta refresh, a redirect and the
+   * page rewriting its own path carry no gesture, so none of them reaches this and none of them can
+   * be opened in a browser. A tapped link is offered whatever it names, including the shell's own
+   * origin and a download, because `href="/"` inside a preview resolves to the document URL and
+   * allowing it would reload the shell's page out from under the session.
+   *
+   * The URL is unfiltered by design — `readBridgeExternalLinkUrl` owns the scheme list and lives in
+   * the half that ships over the air — so a handler must run it through that before opening
+   * anything. Bounded natively at 4096 characters so an artifact cannot spend the boundary.
    */
   onExternalNavigation?: (
     event: NativeSyntheticEvent<MobileWebShellExternalNavigationPayload>

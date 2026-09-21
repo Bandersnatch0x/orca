@@ -458,25 +458,23 @@ final class OrcaMobileWebShellView: ExpoView, WKNavigationDelegate, WKUIDelegate
     decidePolicyFor navigationAction: WKNavigationAction,
     decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
   ) {
-    if #available(iOS 14.5, *), navigationAction.shouldPerformDownload {
-      decisionHandler(.cancel)
-      return
+    var isDownload = false
+    if #available(iOS 14.5, *) {
+      isDownload = navigationAction.shouldPerformDownload
     }
-    let isMainFrame = navigationAction.targetFrame?.isMainFrame == true
-    let allowed = isMainFrame && isDocumentUrl(navigationAction.request.url)
-    // A cancelled main-frame navigation is the user aiming the top frame somewhere else -- a tap on
-    // a link inside the sealed HTML-preview frame, which the browser hands up as a top-frame
-    // request. Offered to the host, which owns the scheme list and the opener; a cancel that is not
-    // offered stays what it has always been, silent.
-    if !allowed,
-       let url = MobileWebShellNavigationPolicy.cancelledNavigationUrl(
-         url: navigationAction.request.url?.absoluteString,
-         isMainFrame: isMainFrame,
-         cancelled: true
-       ) {
+    // `.linkActivated` is WebKit's own answer to "did a human start this", and it is what separates
+    // a tap inside the sealed preview frame from the page rewriting its own path.
+    let verdict = MobileWebShellNavigationPolicy.verdict(
+      url: navigationAction.request.url?.absoluteString,
+      isMainFrame: navigationAction.targetFrame?.isMainFrame == true,
+      isDocumentUrl: isDocumentUrl(navigationAction.request.url),
+      hasGesture: navigationAction.navigationType == .linkActivated,
+      isDownload: isDownload
+    )
+    if case let .cancelAndOffer(url) = verdict {
       onExternalNavigation(["url": url])
     }
-    decisionHandler(allowed ? .allow : .cancel)
+    decisionHandler(verdict == .allow ? .allow : .cancel)
   }
 
   func webView(

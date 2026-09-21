@@ -356,21 +356,23 @@ internal class OrcaMobileWebShellView(
     }
 
     override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
-      val dropped = mobileWebShellDropsNavigation(
-        requestParts(request.url),
-        served?.originHost,
-        request.isForMainFrame
+      // `hasGesture` is Chromium's own answer to "did a human start this", and it is what separates
+      // a tap inside the sealed preview frame from the page rewriting its own path.
+      val verdict = mobileWebShellNavigationVerdict(
+        url = request.url?.toString(),
+        isForMainFrame = request.isForMainFrame,
+        isDocumentUrl = !mobileWebShellDropsNavigation(
+          requestParts(request.url),
+          served?.originHost,
+          request.isForMainFrame
+        ),
+        hasGesture = request.hasGesture(),
+        isDownload = false
       )
-      // A dropped main-frame navigation is the user aiming the top frame somewhere else -- a tap on
-      // a link inside the sealed HTML-preview frame, which Chromium hands up as a top-frame
-      // request. Offered to the host, which owns the scheme list and the opener; a drop that is not
-      // offered stays what it has always been, silent.
-      mobileWebShellDroppedNavigationUrl(
-        request.url?.toString(),
-        request.isForMainFrame,
-        dropped
-      )?.let { onExternalNavigation(mapOf("url" to it)) }
-      return dropped
+      if (verdict is MobileWebShellNavigationVerdict.CancelAndOffer) {
+        onExternalNavigation(mapOf("url" to verdict.url))
+      }
+      return verdict !is MobileWebShellNavigationVerdict.Allow
     }
 
     override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {

@@ -508,58 +508,57 @@ import Foundation
     precondition(gate.refusedCount == 2)
   }
 
-  /// A cancelled navigation is either offered to the host to open or left silent. The rule is the
-  /// frame, not the scheme: TypeScript's `readBridgeExternalLinkUrl` owns which URLs open, and a
-  /// second scheme list here would be two rules that drift.
-  static func checkCancelledNavigation() {
-    let link = "https://example.com/artifact-link"
-    let offered = MobileWebShellNavigationPolicy.cancelledNavigationUrl(
-      url: link, isMainFrame: true, cancelled: true
-    )
-    precondition(offered == link)
-    // Allowed navigations are the served document; nothing to open.
+  /// The whole navigation decision, which is one function so the allow half and the offer half
+  /// cannot drift. The rule is the frame and the gesture, not the scheme: TypeScript's
+  /// `readBridgeExternalLinkUrl` owns which URLs open, and a second scheme list here would be two
+  /// rules that drift.
+  static func checkNavigationVerdict() {
+    let foreign = "https://example.com/artifact-link"
+    let document = "orca-mobile-web://\(session)/"
+    func verdict(
+      _ url: String? = "https://example.com/artifact-link",
+      isMainFrame: Bool = true,
+      isDocumentUrl: Bool = false,
+      hasGesture: Bool = true,
+      isDownload: Bool = false
+    ) -> MobileWebShellNavigationVerdict {
+      MobileWebShellNavigationPolicy.verdict(
+        url: url,
+        isMainFrame: isMainFrame,
+        isDocumentUrl: isDocumentUrl,
+        hasGesture: hasGesture,
+        isDownload: isDownload
+      )
+    }
+    precondition(verdict() == .cancelAndOffer(foreign))
+    // `href="/"` and `href=""` in an artifact resolve against the embedder's base, so without the
+    // gesture rule one tap inside the sealed preview would reload the shell's own page.
+    precondition(verdict(document, isDocumentUrl: true) == .cancelAndOffer(document))
+    // The page rewriting its own path: no gesture, and the one navigation this WebView performs.
+    precondition(verdict(document, isDocumentUrl: true, hasGesture: false) == .allow)
+    // A top-page meta refresh or a redirect: refused, and never opened in a browser.
+    precondition(verdict(hasGesture: false) == .cancel)
+    // A download is not a document load, so it is refused there rather than allowed; started by a
+    // tap it reaches the opener, which is what makes `<a download>` behave as it does natively.
     precondition(
-      MobileWebShellNavigationPolicy.cancelledNavigationUrl(
-        url: link, isMainFrame: true, cancelled: false
-      ) == nil
+      verdict(document, isDocumentUrl: true, hasGesture: false, isDownload: true) == .cancel
     )
+    precondition(verdict(isDownload: true) == .cancelAndOffer(foreign))
     // A subframe is the sealed preview loading itself, which is not the user leaving the app.
-    precondition(
-      MobileWebShellNavigationPolicy.cancelledNavigationUrl(
-        url: link, isMainFrame: false, cancelled: true
-      ) == nil
-    )
-    precondition(
-      MobileWebShellNavigationPolicy.cancelledNavigationUrl(
-        url: nil, isMainFrame: true, cancelled: true
-      ) == nil
-    )
-    precondition(
-      MobileWebShellNavigationPolicy.cancelledNavigationUrl(
-        url: "", isMainFrame: true, cancelled: true
-      ) == nil
-    )
+    precondition(verdict(isMainFrame: false) == .cancel)
+    precondition(verdict(isMainFrame: false, hasGesture: false) == .cancel)
+    precondition(verdict(nil) == .cancel)
+    precondition(verdict("") == .cancel)
     // The crossing cap, at it and one past it.
     let cap = MobileWebShellNavigationPolicy.maxCancelledNavigationUrlCharacters
     let prefix = "https://example.com/"
     let atCap = prefix + String(repeating: "a", count: cap - prefix.count)
     precondition(atCap.count == cap)
-    precondition(
-      MobileWebShellNavigationPolicy.cancelledNavigationUrl(
-        url: atCap, isMainFrame: true, cancelled: true
-      ) == atCap
-    )
-    precondition(
-      MobileWebShellNavigationPolicy.cancelledNavigationUrl(
-        url: atCap + "a", isMainFrame: true, cancelled: true
-      ) == nil
-    )
+    precondition(MobileWebShellNavigationPolicy.offerableUrl(atCap) == atCap)
+    precondition(MobileWebShellNavigationPolicy.offerableUrl(atCap + "a") == nil)
+    precondition(verdict(atCap + "a") == .cancel)
     // A scheme the opener will refuse still crosses: one filter, in the half that updates.
-    precondition(
-      MobileWebShellNavigationPolicy.cancelledNavigationUrl(
-        url: "javascript:alert(1)", isMainFrame: true, cancelled: true
-      ) == "javascript:alert(1)"
-    )
+    precondition(verdict("javascript:alert(1)") == .cancelAndOffer("javascript:alert(1)"))
   }
 
   static func main() {
@@ -572,7 +571,7 @@ import Foundation
     checkLoadStateMachine()
     checkResponseHeaders()
     checkNavigationErrors()
-    checkCancelledNavigation()
+    checkNavigationVerdict()
     checkAppliedProps()
     checkBridgeAcceptance()
     checkBridgePostTarget()
