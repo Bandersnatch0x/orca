@@ -114,6 +114,8 @@ function artifact(extra = {}, nonce = 'n0') {
 <img id="remote" src="${foreignOrigin}/img.png${tag}" />
 <a id="toplink" href="${foreignOrigin}/tapped.html${tag}" target="_top">tap</a>
 <a id="blanklink" href="${foreignOrigin}/blank.html${tag}" target="_blank">window</a>
+<a id="rootlink" href="/" target="_top">root</a>
+<a id="emptylink" href="" target="_top">empty</a>
 <form id="topform" action="${foreignOrigin}/form.html" target="_top" method="get"><button id="submit">go</button></form>
 ${extra.body ?? ''}</body></html>`
 }
@@ -250,7 +252,6 @@ async function open(browser, { extra = {}, csp = 'shipped', sandbox, act } = {})
   nonceCounter += 1
   const nonce = `n${String(nonceCounter)}`
   const page = await browser.newPage({ viewport: { width: 390, height: 844 } })
-  page.setDefaultTimeout(4000)
   const navigations = []
   const popups = []
   page.on('popup', (popup) => {
@@ -260,17 +261,15 @@ async function open(browser, { extra = {}, csp = 'shipped', sandbox, act } = {})
   // The shell's navigation delegate, stood in for: Playwright is not the shell, so a top-frame
   // navigation is recorded with the frame that asked and aborted. That count is exactly what the
   // shell's `onExternalNavigation` would be handed.
-  await page.route(`${foreignOrigin}/**`, (route) => {
+  const record = (route) => {
     const request = route.request()
-    if (request.isNavigationRequest()) {
-      navigations.push({
-        url: request.url(),
-        top: request.frame() === page.mainFrame()
-      })
+    if (request.isNavigationRequest() && request.frame() === page.mainFrame()) {
+      navigations.push({ url: request.url(), foreign: request.url().startsWith(foreignOrigin) })
       return void route.abort()
     }
     return void route.continue()
-  })
+  }
+  await page.route(`${foreignOrigin}/**`, record)
   await page.addInitScript(() => {
     window.__violations = []
     document.addEventListener('securitypolicyviolation', (event) => {
@@ -278,6 +277,13 @@ async function open(browser, { extra = {}, csp = 'shipped', sandbox, act } = {})
     })
   })
   await page.goto(`${origin}/preview`, { waitUntil: 'load' })
+  // Registered after the page's own load, not before it: this handler aborts main-frame navigations
+  // and the initial `goto` is one. `href="/"` and `href=""` inside an artifact resolve against the
+  // embedder's base, so a tap on either asks to navigate the top frame to the shell's own document.
+  // The rig has no shell, so what this pins is the request the shell is handed; refusing it is
+  // `MobileWebShellDroppedNavigationTest`'s "refuses a link-activated navigation even when it names
+  // the document itself" and its `checkNavigationVerdict` twin on iOS.
+  await page.route(`${origin}/**`, record)
   // `sandbox` undefined is the product's own token, which is what every non-control case runs.
   await page.evaluate(
     ([html, override]) => window.__mount(html, override),
@@ -328,8 +334,8 @@ async function open(browser, { extra = {}, csp = 'shipped', sandbox, act } = {})
         threw: window.__threw ?? null
       }))
       .catch(() => null) ?? Promise.resolve(null)),
-    topNavigations: navigations.filter((one) => one.top).length,
-    frameNavigations: navigations.filter((one) => !one.top).length,
+    topNavigations: navigations.filter((one) => one.foreign).length,
+    ownOriginTopNavigations: navigations.filter((one) => !one.foreign).length,
     popups: popups.length,
     // This arm's fetches only, by nonce: the paths, with the nonce stripped, so a case reads the
     // subresource rather than the bookkeeping.
@@ -415,6 +421,32 @@ for (const engine of ['chromium', 'webkit']) {
         )
       }, 120_000)
 
+      it('asks to navigate the top frame to the shell itself, which the shell must refuse', async () => {
+        // `href="/"` resolves against the embedder's base, so this is a request to load the shell's
+        // own document -- one tap that would clear the bridge target, restart the load state and
+        // lose the page. The browser hands it up like any other, so refusing it is the shell's job
+        // and the native tests named above are where that is pinned; what this counts is that the
+        // request is real and reaches the shell at all.
+        const root = await open(browser(), {
+          act: async ({ frame }) => {
+            await frame?.click('#rootlink', { timeout: 2000 }).catch(() => {})
+          }
+        })
+        expect(root.pixelBefore).toBe(ARTIFACT_RGB)
+        expect(root.ownOriginTopNavigations).toBe(1)
+        expect(root.topNavigations).toBe(0)
+
+        // `href=""` is the same navigation spelled as "this document", and it resolves the same way.
+        const empty = await open(browser(), {
+          act: async ({ frame }) => {
+            await frame?.click('#emptylink', { timeout: 2000 }).catch(() => {})
+          }
+        })
+        expect(empty.pixelBefore).toBe(ARTIFACT_RGB)
+        expect(empty.ownOriginTopNavigations).toBe(1)
+        expect(empty.topNavigations).toBe(0)
+      }, 180_000)
+
       it("hands a user's tap on a link to the top frame, exactly once", async () => {
         const read = await open(browser(), {
           act: async ({ frame }) => {
@@ -423,6 +455,7 @@ for (const engine of ['chromium', 'webkit']) {
         })
         expect(read.pixelBefore).toBe(ARTIFACT_RGB)
         expect(read.topNavigations).toBe(1)
+        expect(read.ownOriginTopNavigations).toBe(0)
         expect(read.popups).toBe(0)
       }, 120_000)
 
@@ -431,6 +464,7 @@ for (const engine of ['chromium', 'webkit']) {
           extra: { head: `<meta http-equiv="refresh" content="0;url=${foreignOrigin}/meta.html">` }
         })
         expect(meta.topNavigations).toBe(0)
+        expect(meta.ownOriginTopNavigations).toBe(0)
         const form = await open(browser(), {
           act: async ({ frame }) => {
             await frame?.click('#submit', { timeout: 2000 }).catch(() => {})
