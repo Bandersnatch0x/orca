@@ -17,9 +17,16 @@
  * Both engines, because the shell is WKWebView on one platform and a Chromium WebView on the
  * other, and "does mermaid need eval" is answered by the engine rather than by mermaid.
  *
- * Recorded from this file's own run, for whoever needs the trade: one `graph TD` fetches 28 chunks
- * and 860,408 bytes on top of the entry. The native document pays 3,705,846 bytes of engine string
- * on every mount, in the closure, always.
+ * Recorded from this file's own run, for whoever needs the trade. Rendering one `graph TD` fetches
+ * 27 chunks and 837,530 minified bytes on top of a 283,918-byte entry, the first of them 28,069 and
+ * the largest 238,325 — none of it in the entry, and none of it fetched by a page with no diagram
+ * on it (ruling 28's fence, held in `mobile-web-app-session-terminal-closure.test.mjs`). The native
+ * document pays 3,705,846 bytes of engine string instead, in the closure, on every mount.
+ *
+ * The SVG itself: 17,143 bytes on the page against 17,504 in the native document (chromium; webkit
+ * is 8 longer on each side), equal at 15,447 once normalised. The gap is the id string repeated
+ * across 57 selectors, and dropping `xmlns:xlink` is load-bearing rather than cosmetic — the
+ * comparison fails without it.
  */
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
@@ -142,6 +149,7 @@ async function buildNativeDocument(outDir) {
     platform: 'node',
     outfile: nativeHtmlModule,
     target: ['node20'],
+    jsx: 'automatic',
     logLevel: 'silent',
     nodePaths: [join(mobileDir, 'node_modules')],
     // `resolveExtensions` is left at its default here, with no `.web.*`, so `./MermaidDiagram`
@@ -182,10 +190,14 @@ beforeAll(async () => {
     // this item exists to avoid.
     format: 'esm',
     splitting: true,
+    // Minified, like the bundle the shell serves: the chunk count and the bytes one render fetches
+    // are numbers this file records, and an unminified bundle records neither.
+    minify: true,
     outdir: outDir,
     entryNames: 'mermaid-check',
     chunkNames: 'chunk-[hash]',
     target: ['es2022'],
+    jsx: 'automatic',
     logLevel: 'silent',
     nodePaths: [join(mobileDir, 'node_modules')],
     alias: { 'react-native': 'react-native-web' },
@@ -215,28 +227,47 @@ afterAll(async () => {
 })
 
 /**
- * Every `eval` and `new Function` the page attempts, recorded before the bundle loads.
+ * Every `eval` and `new Function` attempted on the page, with the stack that asked for it.
  *
  * `script-src 'self'` carries no `'unsafe-eval'`, so a JIT call raises a violation too — but a
  * library that catches its own `EvalError` and takes a slower path would leave that violation
- * looking like noise from elsewhere. Counting the calls names the caller.
+ * looking like noise from elsewhere. The stack is what names the caller, and it has to, because
+ * Playwright evaluates every one of this file's own page functions through `eval`: the calls on
+ * this list are mostly the harness's, and only the ones from the bundle's scripts are the page's.
  */
 function installJitRecorder() {
   globalThis.__orcaJit = []
+  const record = (kind, source) => {
+    // Line 0 is the error's own header and line 1 is this recorder; the rest is whoever asked.
+    const stack = (new Error('jit').stack ?? '').split('\n').slice(2).join(' | ')
+    globalThis.__orcaJit.push({ kind, source: String(source).slice(0, 60), stack })
+  }
   // oxlint-disable-next-line eslint/no-eval -- SAFETY: the recorder holds the real eval so it can count and forward calls; naming it is this function's whole purpose.
   const realEval = globalThis.eval
   // oxlint-disable-next-line eslint/no-eval -- SAFETY: replacing eval with a counting wrapper is the measurement, not a call.
   globalThis.eval = function (source) {
-    globalThis.__orcaJit.push(`eval:${String(source).slice(0, 60)}`)
+    record('eval', source)
     return realEval.call(globalThis, source)
   }
   const RealFunction = globalThis.Function
   function PatchedFunction(...args) {
-    globalThis.__orcaJit.push(`Function:${args.map((one) => String(one).slice(0, 40)).join('|')}`)
+    record('Function', args.map((one) => String(one).slice(0, 40)).join('|'))
     return RealFunction.apply(this, args)
   }
   PatchedFunction.prototype = RealFunction.prototype
   globalThis.Function = PatchedFunction
+}
+
+/**
+ * The JIT calls that came from the bundle rather than from the harness driving it.
+ *
+ * `__orcaJit` being non-empty is the precondition: an attribution filter over a list nothing ever
+ * wrote to answers "none from the page" for a recorder that was never installed.
+ */
+async function pageJitCalls(page) {
+  const all = await page.evaluate(() => globalThis.__orcaJit)
+  expect(all.length).toBeGreaterThan(0)
+  return all.filter((one) => /mermaid-check\.js|\/chunk-/.test(one.stack))
 }
 
 /** What the component has on the page: its frame, the SVG under it, and every SVG anywhere. */
@@ -256,16 +287,6 @@ function readDiagram() {
   }
 }
 
-/** True once the component has settled into one state or the other, which is what a wait needs. */
-function diagramSettled() {
-  const frame = document.querySelector('[data-testid="mermaid-diagram"]')
-  return (
-    frame !== null &&
-    (frame.querySelector('svg') !== null ||
-      document.querySelector('[data-testid="mermaid-diagram-source"]') !== null)
-  )
-}
-
 async function openPage(browser) {
   const page = await browser.newPage({ viewport: { width: 390, height: 844 } })
   const consoleErrors = []
@@ -283,13 +304,28 @@ async function openPage(browser) {
   return { page, consoleErrors }
 }
 
-/** Drives the harness and waits for the component to settle into a diagram or a fallback. */
-async function show(page, source) {
+/**
+ * Drives the harness and waits for the component to settle into a diagram or a fallback.
+ *
+ * `contains` is for a source change, where "an SVG is present" is already true of the diagram being
+ * replaced: naming a label only the new diagram carries is what makes the wait about the new one.
+ */
+async function show(page, source, contains = null) {
   await page.evaluate(
     (next) => globalThis.__orcaMermaidSet({ mounted: true, source: next }),
     source
   )
-  await page.waitForFunction(diagramSettled)
+  await page.waitForFunction((needle) => {
+    const frame = document.querySelector('[data-testid="mermaid-diagram"]')
+    if (frame === null) {
+      return false
+    }
+    const svg = frame.querySelector('svg')
+    if (needle !== null) {
+      return (svg?.textContent ?? '').includes(needle)
+    }
+    return svg !== null || document.querySelector('[data-testid="mermaid-diagram-source"]') !== null
+  }, contains)
 }
 
 async function unmount(page) {
@@ -355,7 +391,7 @@ describeMermaid(
             expect(shown.inFrame).toBe(1)
             // The precondition the absences below need: a diagram rendered, and it is mermaid's.
             expect(shown.html).toContain('aria-roledescription="flowchart-v2"')
-            expect(await page.evaluate(() => globalThis.__orcaJit)).toEqual([])
+            expect(await pageJitCalls(page)).toEqual([])
             expect(await page.evaluate(() => globalThis.__orcaCspViolations)).toEqual([])
             expect(consoleErrors).toEqual([])
             // A CSS identifier, because mermaid writes `#<id>` into the stylesheet it puts inside
@@ -375,18 +411,27 @@ describeMermaid(
 
         it('leaves one SVG across a source change, an unmount and a remount', async () => {
           const { page, consoleErrors } = await openPage(browser)
+          const listeners = () => page.evaluate(() => globalThis.__orcaListeners.snapshot())
           try {
-            const before = await page.evaluate(() => globalThis.__orcaListeners.snapshot())
+            const beforeAnyMount = await listeners()
             await show(page, FIXTURE)
             const first = await page.evaluate(readDiagram)
-            await show(page, SECOND)
-            await page.waitForFunction(
-              (stale) =>
-                document.querySelector('[data-testid="mermaid-diagram"] svg')?.id !== stale,
-              first.id
-            )
+            await unmount(page)
+            // A first mount installs listeners no dispose can take off, and they are not a leak:
+            // mermaid's own `window` `load` (inert under `startOnLoad: false`, and the module's
+            // rather than the mount's) and react-native-web's responder system, which arms itself
+            // on the first `View` the page renders. So the baseline a per-mount leak would move is
+            // the snapshot after one whole cycle, not the one before it — with mermaid's named,
+            // because a cycle that installed nothing would make the comparison below vacuous.
+            const afterEngineLoaded = await listeners()
+            expect(
+              Object.keys(afterEngineLoaded).filter((key) => !(key in beforeAnyMount))
+            ).toContain('window load')
+
+            await show(page, FIXTURE)
+            await show(page, SECOND, 'Three')
             const changed = await page.evaluate(readDiagram)
-            // One in the frame and one in the document: a diagram left behind by the first source
+            // One in the frame and one in the document: a diagram the first source left behind
             // would be the second, wherever it hung.
             expect(changed.inFrame).toBe(1)
             expect(changed.inDocument).toBe(1)
@@ -396,9 +441,10 @@ describeMermaid(
             const gone = await page.evaluate(readDiagram)
             expect(gone.framed).toBe(false)
             expect(gone.inDocument).toBe(0)
-            // Nothing of the first mount is still listening. The snapshot is taken with the page
-            // already booted, so React's own listeners are on both sides of the comparison.
-            expect(await page.evaluate(() => globalThis.__orcaListeners.snapshot())).toEqual(before)
+            // Two mounts and a source change later, the page is listening to exactly what it was
+            // after the first of them. A mount that registered anything of its own would show up
+            // here as the third.
+            expect(await listeners()).toEqual(afterEngineLoaded)
 
             await show(page, FIXTURE)
             const again = await page.evaluate(readDiagram)
@@ -440,7 +486,7 @@ describeMermaid(
             expect(inert.inlineHandlers).toBe(0)
             expect(inert.javascriptHrefs).toBe(0)
             expect(inert.pwned).toBeNull()
-            expect(await page.evaluate(() => globalThis.__orcaJit)).toEqual([])
+            expect(await pageJitCalls(page)).toEqual([])
           } finally {
             await page.close()
           }
@@ -458,8 +504,9 @@ describeMermaid(
             // mermaid draws its own error diagram unless it is told not to.
             expect(failed.inDocument).toBe(0)
 
-            // The control: the same component, the same mount, a diagram that parses.
-            await show(page, FIXTURE)
+            // The control: the same component, the same mount, a diagram that parses. Named,
+            // because the fallback it is replacing already satisfies a bare settle.
+            await show(page, FIXTURE, 'Ship it')
             const recovered = await page.evaluate(readDiagram)
             expect(recovered.sourceBox).toBe(false)
             expect(recovered.inFrame).toBe(1)

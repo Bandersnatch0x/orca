@@ -36,11 +36,13 @@ import {
  *
  * Then C7.10 item B put mermaid on the page, and the module list moved again:
  *
- *   modules        4320 -> 6362   (+2042)
+ *   modules        4320 -> 6376   (+2056)
  *   local modules   970 ->  971   (+1)
  *
- * That +2,042 is what `import('mermaid')` reaches — the engine's own 66 files and the d3, dagre,
- * katex and cytoscape trees under them — and none of it is a download. `mobileWebAppRouteClosure`
+ * That +2,056 is what `import('mermaid')` reaches — the engine's own 66 files and the d3, dagre,
+ * katex and cytoscape trees under them — plus the one local module the two hosts now share, and
+ * none of it is a download. (C7.10's design read +2,042 for the same change; that was a synthetic
+ * entry whose only reach into mermaid was the import, and this is the component, measured.) `mobileWebAppRouteClosure`
  * reads `metafile.inputs`, which holds dynamically imported modules under `splitting: true` just
  * as it does under `splitting: false`, so it cannot express "on demand" about anything. Ruling 28:
  * the fence for this route is `entryStaticClosure`, which follows `import-statement` edges only,
@@ -94,7 +96,7 @@ const MERMAID_PACKAGE = 'node_modules/mermaid/'
 const MERMAID_MODULES = 66
 
 /** The module list with mermaid in it, recorded at the base in the docstring above. */
-const MODULES_WITH_MERMAID = 6362
+const MODULES_WITH_MERMAID = 6376
 
 const mermaidModules = (inputs) => inputs.filter((input) => input.includes(MERMAID_PACKAGE))
 

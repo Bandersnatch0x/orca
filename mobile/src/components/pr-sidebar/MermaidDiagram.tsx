@@ -2,6 +2,7 @@ import { memo, useMemo, useState } from 'react'
 import { ScrollView, StyleSheet, Text, View } from 'react-native'
 import { WebView } from 'react-native-webview'
 import { colors, radii, spacing, typography } from '../../theme/mobile-theme'
+import { MERMAID_DIAGRAM_CONFIG } from './mermaid-diagram-config'
 import { MERMAID_ENGINE_JS } from './mermaid-webview-engine.generated'
 
 export type MermaidDiagramProps = {
@@ -91,7 +92,7 @@ function encodeSourceForScript(source: string): string {
 }
 
 // Self-contained HTML: embedded mermaid bundle, render the graph, post the body
-// height (or "error") back to RN. Theme variables match the dark sidebar palette.
+// height (or "error") back to RN. The configuration is the one the page runs too.
 export function buildHtml(source: string): string {
   const encoded = encodeSourceForScript(source)
   return `<!DOCTYPE html>
@@ -117,19 +118,7 @@ export function buildHtml(source: string): string {
   }
   try {
     document.querySelector('.mermaid').textContent = ${encoded};
-    mermaid.initialize({
-      startOnLoad: false,
-      theme: 'dark',
-      securityLevel: 'strict',
-      darkMode: true,
-      themeVariables: {
-        background: '${colors.bgRaised}',
-        primaryColor: '${colors.bgPanel}',
-        primaryTextColor: '${colors.textPrimary}',
-        lineColor: '${colors.textSecondary}',
-        textColor: '${colors.textPrimary}'
-      }
-    });
+    mermaid.initialize(${JSON.stringify(MERMAID_DIAGRAM_CONFIG)});
     mermaid.run({ querySelector: '.mermaid' })
       .then(function () { reportHeight(); })
       .catch(function () { post('error'); });
