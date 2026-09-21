@@ -14,7 +14,12 @@ import { prependOrcaCliDirToChildPath } from '../../../cli/orca-cli-child-path'
 import { stripLegacyTerminalShimEnv } from '../../../pty/legacy-terminal-shim-dir'
 import { mergePersistedWindowsPath } from '../../../pty/windows-environment-path'
 import { resolveCodexShellLaunchPreflightCommand } from '../../../pty/codex-shell-launch-preflight'
-import { buildConfiguredProxyEnv } from '../../../../shared/network-proxy'
+import {
+  buildConfiguredProxyEnv,
+  NO_PROXY_ENV_KEYS,
+  PROXY_ENV_KEYS
+} from '../../../../shared/network-proxy'
+import { addWslEnvKeys } from '../../../../shared/wsl-env'
 import { isTuiAgentEnabled } from '../../../../shared/tui-agent-selection'
 import type { BuildPtyHostEnvOptions } from './types'
 import { stripInheritedOrcaCodexHomeOverride } from './codex-home'
@@ -43,6 +48,12 @@ export function buildPtyHostEnv(
 ): Record<string, string> {
   mergePersistedWindowsPath(baseEnv)
   Object.assign(baseEnv, buildConfiguredProxyEnv(opts.networkProxySettings))
+  if (opts.isWsl) {
+    // Why: WSLENV is the only channel that carries host variables into a distro
+    // — without registering the proxy keys, the guest shell never sees them,
+    // rewritten to the host gateway or not.
+    addWslEnvKeys(baseEnv, [...PROXY_ENV_KEYS, ...NO_PROXY_ENV_KEYS])
+  }
 
   // Why: local path's baseEnv includes process.env but the daemon path doesn't (fork inheritance, not IPC); check both sources so guards stay in lock-step across spawn paths.
   const preexistingOpenCodeConfigDir = resolveOpenCodeSourceConfigDir(baseEnv)

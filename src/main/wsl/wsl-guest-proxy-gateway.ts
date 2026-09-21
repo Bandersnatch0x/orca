@@ -45,9 +45,10 @@ export function buildWslProxyProbeScript(proxyUrl: string): string | null {
   if (!/^\d+$/u.test(port)) {
     return null
   }
+  // Why bare: /dev/tcp rejects bracketed IPv6 literals ("[fd00::1]" is parsed
+  // as a hostname), so the address must go in unbracketed.
   const hostname = url.hostname.replace(/^\[|\]$/gu, '')
-  const tcpTarget = isIP(hostname) === 6 ? `[${hostname}]` : hostname
-  const probeScript = `:</dev/tcp/${tcpTarget}/${port}`
+  const probeScript = `:</dev/tcp/${hostname}/${port}`
   return [
     'if command -v timeout >/dev/null 2>&1 &&',
     `timeout 1 bash -c ${quotePosixShell(probeScript)} >/dev/null 2>&1; then`,
@@ -262,9 +263,10 @@ export async function resolveWslGuestProxySettings(
   }
 
   const distro = context.distro ?? null
-  // Mirrored networking (or a proxy already listening on the WSL interface)
-  // keeps loopback working; the URL must then survive untouched.
-  if ((await probeProxyReachability(configured.value, distro)) === true) {
+  // Why !== false, not === true: an errored probe ("could not ask") must keep
+  // the user's URL instead of racing into a rewrite on a maybe-good gateway —
+  // the JSDoc promises settings unchanged on any probe failure.
+  if ((await probeProxyReachability(configured.value, distro)) !== false) {
     return settings ?? undefined
   }
 

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { WslSpec, WslResult } from './wsl-runner'
 
 const runWslProcessMock = vi.hoisted(() => vi.fn<(spec: WslSpec) => Promise<WslResult>>())
@@ -17,6 +17,15 @@ import {
 } from './wsl-guest-proxy-gateway'
 
 const GATEWAY_SCRIPT_MARKER = 'ip route show default'
+
+// Why: the resolver early-returns off win32, but CI's unit lane runs on Linux.
+const originalPlatform = process.platform
+beforeAll(() => {
+  Object.defineProperty(process, 'platform', { value: 'win32', configurable: true })
+})
+afterAll(() => {
+  Object.defineProperty(process, 'platform', { value: originalPlatform, configurable: true })
+})
 
 function wslResult(stdout: string): Promise<WslResult> {
   return Promise.resolve({
@@ -94,8 +103,8 @@ describe('buildWslProxyProbeScript', () => {
     expect(buildWslProxyProbeScript('http://localhost')).toContain('/dev/tcp/localhost/80')
   })
 
-  it('brackets IPv6 hosts', () => {
-    expect(buildWslProxyProbeScript('http://[::1]:7890')).toContain('/dev/tcp/[::1]/7890')
+  it('probes bare IPv6 hosts (/dev/tcp rejects bracketed literals)', () => {
+    expect(buildWslProxyProbeScript('http://[::1]:7890')).toContain('/dev/tcp/::1/7890')
   })
 })
 
