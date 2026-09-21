@@ -81,6 +81,7 @@ describe('the grants this app implements', () => {
       'storage',
       'externalLink',
       'screencastBinary',
+      'haptics',
       'native.clipboard.write',
       'native.clipboard.read',
       'native.media.pick',

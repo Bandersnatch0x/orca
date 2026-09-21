@@ -1,4 +1,5 @@
 import type { MobileWebBundleManifestRead } from '../transport/mobile-web-bundle-reply-schemas'
+import { BRIDGE_HAPTICS_GRANT } from './bridge/bridge-haptics-notify'
 import { BRIDGE_NATIVE_VERB_NAMES } from './bridge/bridge-native-verbs'
 import { BRIDGE_SCREENCAST_BINARY_GRANT } from './bridge/bridge-screencast-grant'
 
@@ -20,6 +21,9 @@ export const MOBILE_WEB_SHELL_GRANTS = [
   // The screencast's binary frames, encoded into `event.binary` for a page that subscribed with
   // `wantsBinary`. Named where the rule that reads it lives, so the two cannot drift.
   BRIDGE_SCREENCAST_BINARY_GRANT,
+  // The device's own feedback, played by the app's functions on the page's behalf. A token rather
+  // than the notify's dotted name, which is a spelling no manifest route may declare.
+  BRIDGE_HAPTICS_GRANT,
   // Spread rather than restated: the verb table is keyed on this same tuple, so a verb cannot be
   // advertised without a row and a row cannot exist without being advertised.
   ...BRIDGE_NATIVE_VERB_NAMES
