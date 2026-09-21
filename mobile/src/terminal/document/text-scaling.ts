@@ -1,5 +1,5 @@
 import { elementInRoot } from './document-host-seams'
-import { terminalTextScalePresets } from './document-constants'
+import { TERMINAL_TEXT_SCALES } from '../../storage/preferences'
 import type { TerminalDocumentScope } from './document-scope'
 import { scheduleDocumentFrame } from './document-frame-registry'
 import { applyFitScale, getCellHeight } from './fit-scale'
@@ -20,7 +20,7 @@ import { emitKeyboardAvoidanceMetrics } from './keyboard-avoidance-metrics'
 const BASE_FONT_PX = 13
 const MIN_FONT_PX = 6
 
-const TEXT_SCALE_PRESETS = terminalTextScalePresets
+const TEXT_SCALE_PRESETS: readonly number[] = TERMINAL_TEXT_SCALES
 
 export function snapToTextScalePreset(value: number) {
   let best = TEXT_SCALE_PRESETS[0],

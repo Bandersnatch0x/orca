@@ -1,4 +1,5 @@
-import { terminalDefaultTheme, terminalTextScalePresets } from './document-constants'
+import { TERMINAL_TEXT_SCALES } from '../../storage/preferences'
+import { DEFAULT_TERMINAL_THEME } from '../terminal-webview-html/theme'
 import {
   createEngineTerminal,
   createEngineUnicode11Addon,
@@ -269,7 +270,7 @@ export type TerminalWriteQueueEntry = string | (() => void) | undefined
  * A factory rather than a shared literal so a second document — a test, or a page that remounts —
  * starts from its own state instead of inheriting what the last one left.
  */
-const textScalePresets = terminalTextScalePresets
+const textScalePresets: readonly number[] = TERMINAL_TEXT_SCALES
 const statusDot = String.fromCharCode(0x23fa)
 const textPresentationSelector = String.fromCharCode(0xfe0e)
 const emojiPresentationSelector = String.fromCharCode(0xfe0f)
@@ -285,8 +286,8 @@ function createTerminalDocumentState(): TerminalDocumentState {
     webglAddon: null,
     webglRecoveryTimer: null,
     terminalThemeInput: null,
-    defaultTheme: terminalDefaultTheme,
-    terminalTheme: terminalDefaultTheme,
+    defaultTheme: DEFAULT_TERMINAL_THEME,
+    terminalTheme: DEFAULT_TERMINAL_THEME,
     terminalMinimumContrastRatio: 3,
     initialOscLinks: [],
     initialOscLinkRowOffset: 0,

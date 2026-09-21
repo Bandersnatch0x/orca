@@ -1,5 +1,8 @@
-import { terminalBackgroundFallback } from './document-constants'
+import { colors } from '../../theme/mobile-theme'
 import type { TerminalDocumentScope, TerminalDocumentTheme } from './document-scope'
+
+/** The page background before a theme arrives, and the fallback when a theme omits one. */
+const TERMINAL_BACKGROUND_FALLBACK = colors.terminalBg
 
 /** A terminal colour with no alpha: what the contrast maths works on. */
 export type TerminalDocumentRgb = { r: number; g: number; b: number }
@@ -173,7 +176,7 @@ export function applyTerminalTheme(
 ) {
   scope.terminalThemeInput = input
   scope.terminalTheme = normalizeTerminalTheme(scope, input)
-  const background = scope.terminalTheme.background || terminalBackgroundFallback
+  const background = scope.terminalTheme.background || TERMINAL_BACKGROUND_FALLBACK
   scope.paintDocumentBackground(background)
   // Why prefer the published value: the desktop user may have lowered or disabled the floor (#10754);
   // an older host omits the field and the luminance gate stays authoritative.

@@ -1,10 +1,5 @@
 import { emitKeyboardAvoidanceMetrics } from './keyboard-avoidance-metrics'
-import {
-  terminalCursorBlink,
-  terminalCursorInactiveStyle,
-  terminalCursorStyle,
-  terminalShowCursorImmediately
-} from './document-constants'
+import { MOBILE_TERMINAL_CARET_OPTIONS } from '../terminal-webview-html/theme'
 import { notify } from './host-notify'
 import { fontPxForScale } from './text-scaling'
 import type { TerminalDocumentScope } from './document-scope'
@@ -99,12 +94,12 @@ export function init(
     // Why: xterm suppresses parser-generated query replies when disableStdin
     // is true. Native accepts only validated reply grammars from onData.
     disableStdin: false,
-    cursorBlink: terminalCursorBlink,
-    cursorStyle: terminalCursorStyle,
+    cursorBlink: MOBILE_TERMINAL_CARET_OPTIONS.cursorBlink,
+    cursorStyle: MOBILE_TERMINAL_CARET_OPTIONS.cursorStyle,
     // Native TextInput owns focus; initialize xterm's otherwise-gated main-buffer caret.
-    showCursorImmediately: terminalShowCursorImmediately,
+    showCursorImmediately: MOBILE_TERMINAL_CARET_OPTIONS.showCursorImmediately,
     // A full inactive cell remains visible under the terminal's phone-fit scale.
-    cursorInactiveStyle: terminalCursorInactiveStyle,
+    cursorInactiveStyle: MOBILE_TERMINAL_CARET_OPTIONS.cursorInactiveStyle,
     convertEol: false,
     allowProposedApi: true
   })
