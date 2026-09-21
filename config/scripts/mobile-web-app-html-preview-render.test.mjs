@@ -70,13 +70,18 @@ window.__mount = (html, sandboxOverride) => {
     return Promise.resolve()
   }
   return new Promise((resolve, reject) => {
-    const deadline = Date.now() + 4000
+    // Twenty seconds for a commit that takes a frame or two here: the reads this rig makes all
+    // settle late on a loaded runner, which is the whole reason nothing below is timed.
+    const deadline = Date.now() + 20000
     const apply = () => {
       const frame = host.querySelector('iframe')
       if (frame) {
         frame.setAttribute('sandbox', sandboxOverride)
+        // Resolved on the document this assignment commits, not on the assignment: the frame already
+        // holds one loaded under the product's own token, and an arm that read that one would report
+        // the sealed behaviour under a name that says otherwise.
+        frame.addEventListener('load', () => resolve(), { once: true })
         frame.srcdoc = html
-        resolve()
         return
       }
       if (Date.now() > deadline) {
@@ -289,8 +294,7 @@ async function open(browser, { extra = {}, csp = 'shipped', sandbox, act } = {})
     ([html, override]) => window.__mount(html, override),
     [artifact(extra, nonce), sandbox ?? null]
   )
-  // The frame's own load, which React schedules after the mount commits.
-  await page.waitForTimeout(900)
+  await waitForLoadedFrame(page)
   const frames = () => page.frames().filter((frame) => frame !== page.mainFrame())
   // Sampled before the action as well as after: a case that taps a link is asking what the tap
   // produced, and by then the top frame is mid-navigation and the iframe has blanked to its own
@@ -526,6 +530,32 @@ describe('the HTML preview needs no policy change', () => {
     expect(tokens).not.toContain('allow-same-origin')
   })
 })
+
+/**
+ * The mounted frame, once it holds a document that has loaded.
+ *
+ * Three things settle at their own moments here: React commits the mount, the element's `srcdoc`
+ * commits a document after that, and an override arm replaces that document with a second one. A
+ * timed wait reads whichever of the three has happened by then, and on a loaded runner that is none
+ * of them: CI read `frameUrl` as `''` -- the frame present, its `srcdoc` not yet committed -- and read
+ * the control arm's script as not yet run. The race is invisible on an idle machine, which is why it
+ * reached CI. So this polls instead, bounded by the case's own timeout rather than by a number here.
+ */
+async function waitForLoadedFrame(page) {
+  for (;;) {
+    const frame = page
+      .frames()
+      .find((one) => one !== page.mainFrame() && one.url() === 'about:srcdoc')
+    if (frame) {
+      // A read of the frame's current lifecycle state, not a listener: a document that finished
+      // loading before this poll first saw the frame still resolves, where a listener would wait for
+      // a `load` that had already fired.
+      await frame.waitForLoadState('load').catch(() => {})
+      return frame
+    }
+    await page.waitForTimeout(50)
+  }
+}
 
 /** One pixel of the frame's own fill, which is what says the artifact parsed and painted. */
 async function probePixel(page) {
