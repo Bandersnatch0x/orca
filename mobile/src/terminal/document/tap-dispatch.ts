@@ -4,6 +4,7 @@ import { notify } from './host-notify'
 import { viewportToCell } from './viewport-cell'
 import { scope } from './document-scope'
 import { notifyTerminalSurfaceTap } from './surface-tap'
+import { eventTargetInRoot, type TerminalDocumentTargetContainer } from './document-host-seams'
 
 // ============================================================
 // LATCHING TOUCH DISPATCHER (document-level)
@@ -16,9 +17,6 @@ export type TerminalTouchDispatch = {
   touchIds: number[] | null
   longPressFingerInsideOverlay: boolean
 }
-
-/** An element a target can be tested against; a method so a real element satisfies it. */
-type TerminalDocumentTargetContainer = { contains(other: EventTarget | null): boolean }
 
 export function touchById(touches: TouchList, id: number | null) {
   for (let i = 0; i < touches.length; i++) {
@@ -84,7 +82,20 @@ export function dispatcherShouldBlockSurface() {
 const CAPTURE_ACTIVE = { capture: true, passive: false }
 const CAPTURE_PASSIVE = { capture: true, passive: true }
 
+/**
+ * Whether a touch belongs to this document (ruling 22's last page-wide read).
+ *
+ * `e.target` is the element the finger went down on and stays that element for the life of the
+ * touch, so a select-drag that travels outside the host still answers yes on move and end.
+ */
+function touchIsThisDocuments(e: { target: EventTarget | null }) {
+  return eventTargetInRoot(scope.root, e.target)
+}
+
 function onDocumentTouchStart(e: TouchEvent) {
+  if (!touchIsThisDocuments(e)) {
+    return
+  }
   const t = e.touches[0]
   const target = e.target
   const onHandle = target === scope.handleStart || target === scope.handleEnd
@@ -141,6 +152,9 @@ function onDocumentTouchStart(e: TouchEvent) {
 }
 
 function onDocumentTouchMove(e: TouchEvent) {
+  if (!touchIsThisDocuments(e)) {
+    return
+  }
   if (scope.touchDispatch.mode === 'select-drag') {
     const t = touchById(e.touches, scope.touchDispatch.touchId)
     if (!t || !scope.sel || !scope.sel.activeHandle) {
@@ -177,6 +191,9 @@ function onDocumentTouchMove(e: TouchEvent) {
 }
 
 function onDocumentTouchEnd(e: TouchEvent) {
+  if (!touchIsThisDocuments(e)) {
+    return
+  }
   if (scope.touchDispatch.mode === 'select-drag') {
     if (scope.sel) {
       scope.sel.activeHandle = null
@@ -217,7 +234,10 @@ function onDocumentTouchEnd(e: TouchEvent) {
   }
 }
 
-function onDocumentTouchCancel() {
+function onDocumentTouchCancel(e: TouchEvent) {
+  if (!touchIsThisDocuments(e)) {
+    return
+  }
   clearLongPress()
   scope.tapCandidate = null
   stopEdgeScroll()

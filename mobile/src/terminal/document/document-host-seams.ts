@@ -198,3 +198,30 @@ export function elementInRoot(root: ParentNode | null, id: string) {
   const within = root === null ? document : root
   return within.querySelector<HTMLElement>(`#${id}`)
 }
+
+/** An element a target can be tested against; a method, so a real element satisfies it. */
+export type TerminalDocumentTargetContainer = { contains(other: EventTarget | null): boolean }
+
+/**
+ * Whether an event on the page is this document's to read.
+ *
+ * The counterpart of `elementInRoot` for events rather than elements, and for the same reason: a
+ * listener on `document` is page-wide, so with two documents on one page each one is handed the
+ * other's touches. The dispatcher's two-finger branch answered one before it ever looked at the
+ * target, which dropped the selection of the terminal nobody touched.
+ *
+ * Asked once at the top of each document-level handler rather than inside its branches, because
+ * every branch has the same answer and a branch added later would not remember to ask.
+ *
+ * Inside the WebView the document *is* the page (`root === null`), so this says yes to everything
+ * and the native document's dispatcher is unchanged.
+ */
+export function eventTargetInRoot(
+  root: TerminalDocumentTargetContainer | null,
+  target: EventTarget | null
+) {
+  if (root === null) {
+    return true
+  }
+  return target !== null && root.contains(target)
+}

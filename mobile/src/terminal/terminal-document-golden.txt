@@ -201,6 +201,12 @@ function createTerminalDocument(host) {
     const within = root === null ? document : root;
     return within.querySelector(`#${id}`);
   }
+  function eventTargetInRoot(root, target) {
+    if (root === null) {
+      return true;
+    }
+    return target !== null && root.contains(target);
+  }
   const textScalePresets = [0.5, 0.75, 1, 1.25, 1.5, 2];
   const statusDot = String.fromCharCode(9210);
   const textPresentationSelector = String.fromCharCode(65038);
@@ -2712,7 +2718,13 @@ function createTerminalDocument(host) {
   }
   const CAPTURE_ACTIVE = { capture: true, passive: false };
   const CAPTURE_PASSIVE = { capture: true, passive: true };
+  function touchIsThisDocuments(e) {
+    return eventTargetInRoot(scope.root, e.target);
+  }
   function onDocumentTouchStart(e) {
+    if (!touchIsThisDocuments(e)) {
+      return;
+    }
     const t = e.touches[0];
     const target = e.target;
     const onHandle = target === scope.handleStart || target === scope.handleEnd;
@@ -2754,6 +2766,9 @@ function createTerminalDocument(host) {
     }
   }
   function onDocumentTouchMove(e) {
+    if (!touchIsThisDocuments(e)) {
+      return;
+    }
     if (scope.touchDispatch.mode === "select-drag") {
       const t = touchById(e.touches, scope.touchDispatch.touchId);
       if (!t || !scope.sel || !scope.sel.activeHandle) {
@@ -2784,6 +2799,9 @@ function createTerminalDocument(host) {
     }
   }
   function onDocumentTouchEnd(e) {
+    if (!touchIsThisDocuments(e)) {
+      return;
+    }
     if (scope.touchDispatch.mode === "select-drag") {
       if (scope.sel) {
         scope.sel.activeHandle = null;
@@ -2815,7 +2833,10 @@ function createTerminalDocument(host) {
       }
     }
   }
-  function onDocumentTouchCancel() {
+  function onDocumentTouchCancel(e) {
+    if (!touchIsThisDocuments(e)) {
+      return;
+    }
     clearLongPress();
     scope.tapCandidate = null;
     stopEdgeScroll();

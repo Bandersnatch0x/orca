@@ -86,9 +86,12 @@ function plantHost(id: string) {
 
 function startDocumentIn(host: HTMLElement) {
   const engine = terminalDouble()
+  const posted: Array<Record<string, unknown>> = []
   const started = createTerminalDocument({
     root: host,
-    postToHost: () => {},
+    postToHost: (message) => {
+      posted.push(message)
+    },
     hasEngine: () => true,
     installHostTransport: () => () => {},
     installErrorReporter: () => () => {},
@@ -98,8 +101,48 @@ function startDocumentIn(host: HTMLElement) {
     createWebglAddon: () => null
   })
   started.send({ type: 'init', cols: 80, rows: 24, initialData: '', preserveScroll: false })
-  return { started, openedOn: engine.openedOn }
+  return { started, openedOn: engine.openedOn, posted }
 }
+
+/**
+ * Two fingers landing on one surface, as the page's dispatcher sees them.
+ *
+ * `document` rather than the surface, because the four dispatcher listeners are document-level —
+ * which is the whole reason a touch in one host reached the other host's document.
+ */
+function fireTwoFingerTouchStart(surface: HTMLElement) {
+  const event = new Event('touchstart', { bubbles: true, cancelable: true })
+  Object.defineProperty(event, 'touches', {
+    value: [0, 1].map((identifier) => ({
+      identifier,
+      clientX: 10 + identifier * 20,
+      clientY: 10,
+      target: surface
+    }))
+  })
+  Object.defineProperty(event, 'target', { value: surface })
+  document.dispatchEvent(event)
+}
+
+function surfaceOf(host: HTMLElement) {
+  const surface = host.querySelector<HTMLElement>('#terminal-surface')
+  if (surface === null) {
+    throw new Error(`${host.id} carries no surface`)
+  }
+  return surface
+}
+
+/** Both documents in select mode, with what they posted getting there discarded. */
+function selectAllInBoth(...documents: Array<ReturnType<typeof startDocumentIn>>) {
+  for (const started of documents) {
+    started.started.send({ type: 'do-select-all' })
+    expect(started.posted.map((message) => message.type)).toContain('set-select-mode')
+    started.posted.length = 0
+  }
+}
+
+const pinchCancels = (posted: Array<Record<string, unknown>>) =>
+  posted.filter((message) => message.type === 'mobile-clip-cancel-by-pinch')
 
 describe('two terminal documents on one page', () => {
   beforeEach(() => {
@@ -121,6 +164,46 @@ describe('two terminal documents on one page', () => {
 
     expect(first.contains(one.openedOn() ?? null)).toBe(true)
     expect(second.contains(two.openedOn() ?? null)).toBe(true)
+
+    one.started.stop()
+    two.started.stop()
+  })
+
+  /**
+   * The reviewer's repro (round 1, H1): the dispatcher's four listeners are on `document`, and the
+   * two-finger branch acts before it looks at the target, so a pinch anywhere on the page dropped
+   * the selection of every document on it.
+   */
+  it('leaves the other document alone when two fingers land in that other host', () => {
+    const first = plantHost('first-host')
+    const second = plantHost('second-host')
+    const one = startDocumentIn(first)
+    const two = startDocumentIn(second)
+    selectAllInBoth(one, two)
+
+    fireTwoFingerTouchStart(surfaceOf(second))
+
+    expect(pinchCancels(one.posted)).toHaveLength(0)
+    expect(one.posted).toEqual([])
+    expect(pinchCancels(two.posted)).toHaveLength(1)
+
+    one.started.stop()
+    two.started.stop()
+  })
+
+  // The control: the same event inside the document's own host still reaches it. Without this the
+  // assertion above passes for a dispatcher that ignores every touch.
+  it('cancels its own selection when the two fingers land in its own host', () => {
+    const first = plantHost('first-host')
+    const second = plantHost('second-host')
+    const one = startDocumentIn(first)
+    const two = startDocumentIn(second)
+    selectAllInBoth(one, two)
+
+    fireTwoFingerTouchStart(surfaceOf(first))
+
+    expect(pinchCancels(one.posted)).toHaveLength(1)
+    expect(pinchCancels(two.posted)).toHaveLength(0)
 
     one.started.stop()
     two.started.stop()
