@@ -40,8 +40,12 @@ const HOST_CLASS = 'orca-terminal-document-host'
  * The stylesheet, planted in the head once per page and reaching only inside the host.
  *
  * `<style>` rather than a constructed sheet or inline attributes: the document's own rules and
- * xterm's are written against ids and classes, and the document reads its elements with
- * `document.getElementById`, which a shadow root would break.
+ * xterm's are written against ids and classes, and this is the cheapest way to carry them.
+ *
+ * The element reads are no longer what a shadow root would break — `elementInRoot` is a
+ * `querySelector` under the host, which a shadow root answers. This sheet is: a rule in the
+ * document's head does not cross a shadow boundary, so it would have to move inside each root and
+ * be parsed once per host rather than once per page.
  *
  * What is planted is not what the WebView's `<head>` carries. The document-level rules are left
  * behind entirely and every remaining selector is prefixed with the host's class, so nothing here
