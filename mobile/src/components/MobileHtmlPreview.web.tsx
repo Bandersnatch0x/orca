@@ -46,10 +46,14 @@ export function MobileHtmlPreview({ html, renderSource }: MobileHtmlPreviewProps
 
   return (
     <View style={styles.container}>
-      <View style={styles.toolbar}>
+      {/* A tab pair, not two buttons: which side is showing is carried by the active style, and a
+          style is announced to nobody. */}
+      <View style={styles.toolbar} accessibilityRole="tablist">
         <Pressable
           style={[styles.toggle, mode === 'preview' && styles.toggleActive]}
           onPress={() => setMode('preview')}
+          accessibilityRole="tab"
+          accessibilityState={{ selected: mode === 'preview' }}
           accessibilityLabel="Preview rendered HTML"
         >
           <Eye size={13} color={colors.textSecondary} strokeWidth={2.2} />
@@ -58,6 +62,8 @@ export function MobileHtmlPreview({ html, renderSource }: MobileHtmlPreviewProps
         <Pressable
           style={[styles.toggle, mode === 'source' && styles.toggleActive]}
           onPress={() => setMode('source')}
+          accessibilityRole="tab"
+          accessibilityState={{ selected: mode === 'source' }}
           accessibilityLabel="View HTML source"
         >
           <Code size={13} color={colors.textSecondary} strokeWidth={2.2} />
