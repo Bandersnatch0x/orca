@@ -1,4 +1,3 @@
-import { TERMINAL_TEXT_SCALES } from '../../storage/preferences'
 import { DEFAULT_TERMINAL_THEME } from '../terminal-webview-html/theme'
 import {
   createEngineTerminal,
@@ -8,6 +7,7 @@ import {
   installWindowHostTransport,
   paintWindowDocumentBackground,
   postToReactNativeWebView,
+  windowCapturedEngineErrors,
   windowHasEngine,
   type TerminalDocumentHost,
   type TerminalDocumentHostSeams
@@ -24,31 +24,20 @@ import type { TerminalTouchState } from './surface-touch-gestures'
 import type { TerminalTouchDispatch } from './tap-dispatch'
 import type { TerminalDocumentThemeMessage } from './terminal-theme'
 
-// Re-exported so every module that reads the scope keeps naming one import for both: the split is
-// about this file's length, not about a second place to look for the engine's shape.
+// Re-exported so every module that reads the scope names one import for both: the engine's shape is
+// a separate file for length, not a second place to look.
 export type * from './document-terminal-shape'
 export type { TerminalDocumentHost, TerminalDocumentHostSeams } from './document-host-seams'
 /**
- * The state the in-WebView terminal document shares across its parts.
+ * The state one terminal document shares across its modules.
  *
- * The document is one function scope: 2,758 lines around 100 `var` declarations, 57 of which are
- * written from more than one place. Moving its parts into modules is what lets the web page import
- * them instead of re-implementing them, and a variable assigned from another module cannot be an
- * import — assigning an imported binding is a syntax error. So the written ones become fields here,
- * and the group that owns each is named beside it.
+ * A field is here because more than one module writes it, and the module that owns it is named
+ * beside it. State written only inside the module that declares it stays a `let` there, however
+ * often it is written: `terminalDataRepliesEnabled` is written from four places and all four are in
+ * `query-reply`. A value nothing writes is that module's own `const`, not a field.
  *
- * Two things keep a variable out of this table. One the script never assigns again is an ordinary
- * local. One both declared and assigned inside a single group is that module's own state, however
- * often it is written — `terminalDataRepliesEnabled` is written from four places and all four are
- * in `query-reply`, so it stays a `let` there.
- *
- * Declared, not merely written: while the rest of the document is still strings, a variable the
- * main slice declares is shared even when every use of it is in one group, because the declaration
- * has nowhere else to live yet. `webglRecoveryTimer` is that case. Those can migrate out of this
- * table when the flip makes the main slice modules too, and doing it before then would emit a
- * second declaration beside the one the slice still carries.
- *
- * The table grows one group at a time as C7.1 extracts them; a field arrives with its group.
+ * One object per document, built by the call rather than shared by the modules, which is what lets
+ * two terminals sit on one page without one of them reading the other's state.
  */
 
 export type TerminalDocumentState = {
@@ -81,14 +70,10 @@ export type TerminalDocumentState = {
   initialOscLinks: TerminalInitialOscLink[]
   /** `selection-overlay`: how far the captured rows have scrolled out of the buffer. */
   initialOscLinkRowOffset: number
-  /** `runtime-constants`: the escape byte every report is prefixed with. */
-  ESC: string
   /** `mode-mirroring`: the last mode set published to the host, to suppress repeats. */
   lastEmittedModes: TerminalDocumentModes
   /** `terminal-init`: whether the terminal has ever reached ready. */
   everReady: boolean
-  /** `runtime-constants`: the C1 form of the control sequence introducer. */
-  C1_CSI: string
   /** `mouse-mode-decset-scan`: the tail of the last chunk, in case a DECSET straddles two writes. */
   mouseModeScanTail: string
   /** `mouse-mode-decset-scan`: the mouse tracking mode the TUI last asked for. */
@@ -99,12 +84,6 @@ export type TerminalDocumentState = {
   sgrMousePixelsMode: boolean
   /** `text-scaling`: the scroll indicator's hide timer. */
   scrollIndicatorHideTimer: ReturnType<typeof setTimeout> | null
-  /** `text-scaling`: the narrowest grid a text-scale change will fit to. */
-  MIN_FIT_COLS: number
-  /** `text-scaling`: the smallest text-scale preset. */
-  MIN_TEXT_SCALE: number
-  /** `text-scaling`: the largest text-scale preset. */
-  MAX_TEXT_SCALE: number
   /** `viewport-transform`: host message ids already handled, to drop repeats. */
   handledMessageIds: number[]
   /** `text-scaling`: the text scale the user picked, as a preset index. */
@@ -119,18 +98,8 @@ export type TerminalDocumentState = {
   currentScale: number
   /** `text-scaling`: the pinch zoom the user applied on top of the fit scale. */
   userScale: number
-  /** `runtime-constants`: Claude's record dot, which iOS WebKit would otherwise promote to emoji. */
-  CLAUDE_STATUS_DOT: string
-  /** `runtime-constants`: the variation selector that forces the text glyph. */
-  TEXT_PRESENTATION_SELECTOR: string
-  /** `runtime-constants`: the variation selector that forces the emoji glyph. */
-  EMOJI_PRESENTATION_SELECTOR: string
-  /** `runtime-constants`: the dot with any trailing selectors, as one pattern. */
-  CLAUDE_STATUS_DOT_PATTERN: RegExp
   /** `write-queue`: whether a chunk ended mid-selector, so the next one starts inside it. */
   statusDotPendingSelector: boolean
-  /** `write-queue`: how far a split DECSET may be carried before the scan gives up. */
-  PRIVATE_MODE_SCAN_TAIL_LIMIT: number
   /** `write-queue`: chunks and boundaries waiting for xterm. */
   writeQueue: TerminalWriteQueueEntry[]
   /** `write-queue`: how far the queue has been consumed, before compaction. */
@@ -147,12 +116,6 @@ export type TerminalDocumentState = {
   pendingNormalScrollDeltaY: number
   /** `normal-buffer-smooth-scroll`: the frame request that will apply it, if one is pending. */
   normalScrollFrameId: number | null
-  /** `selection-state-and-eviction`: what counts as one word for select-all and word seeding. */
-  WORD_RE: RegExp
-  /** `selection-state-and-eviction`: how close to an edge a handle drag starts scrolling. */
-  EDGE_SCROLL_PX: number
-  /** `selection-state-and-eviction`: the edge-scroll tick, in milliseconds. */
-  EDGE_SCROLL_INTERVAL: number
   /** `selection-state-and-eviction`: the menu pill element. */
   selMenu: HTMLElement | null
   /** `selection-state-and-eviction`: the pill's copy button. */
@@ -169,14 +132,6 @@ export type TerminalDocumentState = {
   edgeScrollClientY: number
   /** `selection-state-and-eviction`: whether captured OSC 8 rows may start shifting with eviction. */
   initialOscLinkEvictionReady: boolean
-  /** `selection-overlay`: the press duration that starts a selection, in milliseconds. */
-  LONG_PRESS_MS: number
-  /** `selection-overlay`: the travel that cancels a pending long press, in pixels. */
-  LONG_PRESS_SLOP: number
-  /** `selection-overlay`: the travel that disqualifies a tap, in pixels. */
-  TAP_SLOP: number
-  /** `selection-overlay`: the longest press still counted as a tap, in milliseconds. */
-  TAP_MAX_MS: number
   /** `selection-overlay`: the overlay element that carries the handles and the menu pill. */
   selectionOverlay: HTMLElement | null
   /** `selection-overlay`: the selection's leading handle element. */
@@ -270,10 +225,6 @@ export type TerminalWriteQueueEntry = string | (() => void) | undefined
  * A factory rather than a shared literal so a second document — a test, or a page that remounts —
  * starts from its own state instead of inheriting what the last one left.
  */
-const textScalePresets: readonly number[] = TERMINAL_TEXT_SCALES
-const statusDot = String.fromCharCode(0x23fa)
-const textPresentationSelector = String.fromCharCode(0xfe0e)
-const emojiPresentationSelector = String.fromCharCode(0xfe0f)
 
 function createTerminalDocumentState(): TerminalDocumentState {
   return {
@@ -291,7 +242,6 @@ function createTerminalDocumentState(): TerminalDocumentState {
     terminalMinimumContrastRatio: 3,
     initialOscLinks: [],
     initialOscLinkRowOffset: 0,
-    ESC: String.fromCharCode(27),
     lastEmittedModes: {
       bracketedPasteMode: false,
       altScreen: false,
@@ -300,15 +250,11 @@ function createTerminalDocumentState(): TerminalDocumentState {
       sgrMousePixelsMode: false
     },
     everReady: false,
-    C1_CSI: String.fromCharCode(155),
     mouseModeScanTail: '',
     trackedMouseTrackingMode: 'none',
     sgrMouseMode: false,
     sgrMousePixelsMode: false,
     scrollIndicatorHideTimer: null,
-    MIN_FIT_COLS: 20,
-    MIN_TEXT_SCALE: textScalePresets[0],
-    MAX_TEXT_SCALE: textScalePresets[textScalePresets.length - 1],
     handledMessageIds: [],
     currentTextScale: 1,
     terminalFontFamily: '',
@@ -316,15 +262,7 @@ function createTerminalDocumentState(): TerminalDocumentState {
     activeAltScreenSnapshot: false,
     currentScale: 1,
     userScale: 1,
-    CLAUDE_STATUS_DOT: statusDot,
-    TEXT_PRESENTATION_SELECTOR: textPresentationSelector,
-    EMOJI_PRESENTATION_SELECTOR: emojiPresentationSelector,
-    CLAUDE_STATUS_DOT_PATTERN: new RegExp(
-      statusDot + '[' + textPresentationSelector + emojiPresentationSelector + ']*',
-      'g'
-    ),
     statusDotPendingSelector: false,
-    PRIVATE_MODE_SCAN_TAIL_LIMIT: 4096,
     writeQueue: [],
     writeQueueHead: 0,
     writesDraining: false,
@@ -333,9 +271,6 @@ function createTerminalDocumentState(): TerminalDocumentState {
     smoothScrollOffsetY: 0,
     pendingNormalScrollDeltaY: 0,
     normalScrollFrameId: null,
-    WORD_RE: /[\p{L}\p{N}_./:@~+=?&#%-]/u,
-    EDGE_SCROLL_PX: 40,
-    EDGE_SCROLL_INTERVAL: 60,
     selMenu: null,
     btnCopy: null,
     btnSelAll: null,
@@ -344,10 +279,6 @@ function createTerminalDocumentState(): TerminalDocumentState {
     edgeScrollClientX: 0,
     edgeScrollClientY: 0,
     initialOscLinkEvictionReady: false,
-    LONG_PRESS_MS: 500,
-    LONG_PRESS_SLOP: 10,
-    TAP_SLOP: 24,
-    TAP_MAX_MS: 700,
     selectionOverlay: null,
     handleStart: null,
     handleEnd: null,
@@ -406,6 +337,7 @@ function createTerminalDocumentHostSeams(): TerminalDocumentHostSeams {
     createUnicode11Addon: createEngineUnicode11Addon,
     createWebglAddon: createEngineWebglAddon,
     installErrorReporter: installWindowErrorReporter,
+    capturedEngineErrors: windowCapturedEngineErrors,
     paintDocumentBackground: paintWindowDocumentBackground,
     installHostTransport: installWindowHostTransport,
     hasEngine: windowHasEngine,

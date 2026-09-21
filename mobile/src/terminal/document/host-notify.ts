@@ -12,12 +12,6 @@ import type { TerminalEngineError } from './document-host-seams'
  * that both serve.
  */
 
-declare global {
-  interface Window {
-    __engineErrors: string[]
-  }
-}
-
 export function notify(scope: TerminalDocumentScope, msg: Record<string, unknown>) {
   scope.postToHost(msg)
 }
@@ -64,8 +58,9 @@ export function reportEngineError(
   if (errText) {
     parts.push(errText)
   }
-  if (window.__engineErrors && window.__engineErrors.length) {
-    parts.push('captured: ' + window.__engineErrors.join(' | '))
+  const captured = scope.capturedEngineErrors()
+  if (captured.length) {
+    parts.push('captured: ' + captured.join(' | '))
   }
   parts.push(chromeVersionText())
   notify(scope, {
@@ -83,8 +78,11 @@ export function startHostNotify(scope: TerminalDocumentScope) {
     column,
     err?: TerminalEngineError
   ) {
-    if (window.__engineErrors.length < 20) {
-      window.__engineErrors.push(String(msg))
+    const captured = scope.capturedEngineErrors()
+    // Why: a degraded engine can throw per frame; cap so the buffer stays bounded for the
+    // document's lifetime, which is the same cap the shell's pre-document handler holds itself to.
+    if (captured.length < 20) {
+      captured.push(String(msg))
     }
     reportEngineError(scope, 'terminal runtime error', err || msg)
   })

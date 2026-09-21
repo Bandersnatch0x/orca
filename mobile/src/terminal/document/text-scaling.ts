@@ -2,7 +2,7 @@ import { elementInRoot } from './document-host-seams'
 import { TERMINAL_TEXT_SCALES } from '../../storage/preferences'
 import type { TerminalDocumentScope } from './document-scope'
 import { scheduleDocumentFrame } from './document-frame-registry'
-import { applyFitScale, getCellHeight } from './fit-scale'
+import { applyFitScale, getCellHeight, MIN_FIT_COLS } from './fit-scale'
 import { getCellWidth } from './viewport-transform'
 import { emitKeyboardAvoidanceMetrics } from './keyboard-avoidance-metrics'
 
@@ -21,6 +21,10 @@ const BASE_FONT_PX = 13
 const MIN_FONT_PX = 6
 
 const TEXT_SCALE_PRESETS: readonly number[] = TERMINAL_TEXT_SCALES
+
+/** The ends of the preset range, which a pinch is clamped to. */
+export const MIN_TEXT_SCALE = TEXT_SCALE_PRESETS[0]
+export const MAX_TEXT_SCALE = TEXT_SCALE_PRESETS[TEXT_SCALE_PRESETS.length - 1]
 
 export function snapToTextScalePreset(value: number) {
   let best = TEXT_SCALE_PRESETS[0],
@@ -74,7 +78,7 @@ export function applyTextScale(scope: TerminalDocumentScope, scale: number) {
     const cellH = getCellHeight(scope)
     if (cellW > 0 && cellH > 0) {
       const cols = Math.floor(window.innerWidth / cellW)
-      if (cols < scope.MIN_FIT_COLS) {
+      if (cols < MIN_FIT_COLS) {
         return
       }
       const rows = Math.max(8, Math.floor(window.innerHeight / cellH))

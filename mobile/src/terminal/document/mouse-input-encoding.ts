@@ -1,5 +1,6 @@
 import { notify } from './host-notify'
 import type { TerminalDocumentScope } from './document-scope'
+import { ESC } from './escape-introducers'
 import { viewportToMouseReportCell } from './mouse-report-cell'
 
 export function isAlternateBufferActive(scope: TerminalDocumentScope) {
@@ -51,7 +52,7 @@ export function buildArrowScrollSequence(scope: TerminalDocumentScope, lines: nu
       prefix = 'O'
     }
   } catch {}
-  return scope.ESC + prefix + (lines < 0 ? 'A' : 'B')
+  return ESC + prefix + (lines < 0 ? 'A' : 'B')
 }
 
 export function buildMouseWheelSequence(
@@ -69,7 +70,7 @@ export function buildMouseWheelSequence(
     if (!isSafeSgrMouseCoordinate(cell.x) || !isSafeSgrMouseCoordinate(cell.y)) {
       return ''
     }
-    return scope.ESC + '[<' + eventCode + ';' + cell.x + ';' + cell.y + 'M'
+    return ESC + '[<' + eventCode + ';' + cell.x + ';' + cell.y + 'M'
   }
   if (scope.sgrMouseMode) {
     // Why: xterm increments zero-based mouse cells before encoding reports.
@@ -78,7 +79,7 @@ export function buildMouseWheelSequence(
     if (!isSafeSgrMouseCoordinate(sgrCol) || !isSafeSgrMouseCoordinate(sgrRow)) {
       return ''
     }
-    return scope.ESC + '[<' + eventCode + ';' + sgrCol + ';' + sgrRow + 'M'
+    return ESC + '[<' + eventCode + ';' + sgrCol + ';' + sgrRow + 'M'
   }
   // Why: xterm increments zero-based mouse cells before encoding reports.
   const button = eventCode + 32
@@ -90,11 +91,7 @@ export function buildMouseWheelSequence(
     return ''
   }
   return (
-    scope.ESC +
-    '[M' +
-    String.fromCharCode(button) +
-    String.fromCharCode(col) +
-    String.fromCharCode(row)
+    ESC + '[M' + String.fromCharCode(button) + String.fromCharCode(col) + String.fromCharCode(row)
   )
 }
 
@@ -122,11 +119,11 @@ export function buildMouseClickInput(
     if (!isSafeSgrMouseCoordinate(pixelX) || !isSafeSgrMouseCoordinate(pixelY)) {
       return ''
     }
-    const pixelPress = scope.ESC + '[<0;' + pixelX + ';' + pixelY + 'M'
+    const pixelPress = ESC + '[<0;' + pixelX + ';' + pixelY + 'M'
     if (mouseTrackingMode === 'x10') {
       return pixelPress
     }
-    return pixelPress + scope.ESC + '[<0;' + pixelX + ';' + pixelY + 'm'
+    return pixelPress + ESC + '[<0;' + pixelX + ';' + pixelY + 'm'
   }
   if (scope.sgrMouseMode) {
     // Why: xterm increments zero-based mouse cells before encoding reports.
@@ -135,11 +132,11 @@ export function buildMouseClickInput(
     if (!isSafeSgrMouseCoordinate(sgrCol) || !isSafeSgrMouseCoordinate(sgrRow)) {
       return ''
     }
-    const sgrPress = scope.ESC + '[<0;' + sgrCol + ';' + sgrRow + 'M'
+    const sgrPress = ESC + '[<0;' + sgrCol + ';' + sgrRow + 'M'
     if (mouseTrackingMode === 'x10') {
       return sgrPress
     }
-    return sgrPress + scope.ESC + '[<0;' + sgrCol + ';' + sgrRow + 'm'
+    return sgrPress + ESC + '[<0;' + sgrCol + ';' + sgrRow + 'm'
   }
   // Why: non-SGR click coordinates use printable ASCII bytes on the mobile
   // bridge; unsafe wide-terminal cells must not turn into corrupted input.
@@ -149,13 +146,13 @@ export function buildMouseClickInput(
     return ''
   }
   const press =
-    scope.ESC + '[M' + String.fromCharCode(32) + String.fromCharCode(col) + String.fromCharCode(row)
+    ESC + '[M' + String.fromCharCode(32) + String.fromCharCode(col) + String.fromCharCode(row)
   if (mouseTrackingMode === 'x10') {
     return press
   }
   return (
     press +
-    scope.ESC +
+    ESC +
     '[M' +
     String.fromCharCode(35) +
     String.fromCharCode(col) +

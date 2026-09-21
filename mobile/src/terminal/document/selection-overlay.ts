@@ -6,6 +6,12 @@ import { applyXtermSelection, selRange } from './selection-range'
 import { viewportToCell } from './viewport-cell'
 import { getTotalScale } from './viewport-transform'
 
+/** How close to an edge a handle drag starts scrolling, in pixels. */
+const EDGE_SCROLL_PX = 40
+
+/** The edge-scroll tick, in milliseconds. */
+const EDGE_SCROLL_INTERVAL = 60
+
 export function repositionOverlay(scope: TerminalDocumentScope) {
   if (scope.selMode !== 'select' || !scope.sel || !scope.term) {
     return
@@ -113,7 +119,7 @@ export function startEdgeScroll(scope: TerminalDocumentScope, dir: number) {
     }
     syncEdgeScrollSelectionEndpoint(scope)
     repositionOverlay(scope)
-  }, scope.EDGE_SCROLL_INTERVAL)
+  }, EDGE_SCROLL_INTERVAL)
 }
 
 export function stopEdgeScroll(scope: TerminalDocumentScope) {
@@ -136,9 +142,9 @@ export function handleDragMove(
     return
   }
   repositionOverlay(scope)
-  if (clientY < scope.EDGE_SCROLL_PX) {
+  if (clientY < EDGE_SCROLL_PX) {
     startEdgeScroll(scope, -1)
-  } else if (clientY > window.innerHeight - scope.EDGE_SCROLL_PX) {
+  } else if (clientY > window.innerHeight - EDGE_SCROLL_PX) {
     startEdgeScroll(scope, 1)
   } else {
     stopEdgeScroll(scope)

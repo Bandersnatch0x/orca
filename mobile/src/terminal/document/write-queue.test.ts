@@ -1,6 +1,7 @@
 import { transformSync } from 'esbuild'
 import { describe, expect, it } from 'vitest'
 import { createTerminalDocumentScope } from './document-scope'
+import * as escapeIntroducers from './escape-introducers'
 import { documentModuleSource } from './document-module-source.test-support'
 
 // Why: the two implementations are compared rather than asserted about, so both are evaluated. The
@@ -33,18 +34,29 @@ type WriteQueueHarness = WriteQueueRuntime & {
 /**
  * One module's exports, evaluated.
  *
- * The module is ordinary TypeScript and its only import is a type, so a CommonJS transform of its
- * own text is the whole thing: no bundler, no scope object baked in, and the pre-change arm is the
- * same text minus one statement. Every function it exports takes the scope as its first argument,
- * which is what lets one evaluation serve two different scopes.
+ * A CommonJS transform of the module's own text is the whole thing: no bundler, no scope object
+ * baked in, and the pre-change arm is the same text minus one statement. Every function it exports
+ * takes the scope as its first argument, which is what lets one evaluation serve two scopes. Its
+ * one value import is resolved to the real module, so both arms read the same escape bytes.
  */
 function moduleExports(source: string): Record<string, (...args: never[]) => unknown> {
   const js = transformSync(source, { loader: 'ts', format: 'cjs' }).code
   // The transform replaces `module.exports` wholesale, so the exports are read back off it rather
   // than from the object handed in.
   const evaluated: { exports: Record<string, (...args: never[]) => unknown> } = { exports: {} }
-  new Function('exports', 'module', js)(evaluated.exports, evaluated)
+  new Function('exports', 'module', 'require', js)(
+    evaluated.exports,
+    evaluated,
+    requireDocumentModule
+  )
   return evaluated.exports
+}
+
+function requireDocumentModule(specifier: string) {
+  if (specifier === './escape-introducers') {
+    return escapeIntroducers
+  }
+  throw new Error(`the write-queue harness has no module for ${specifier}`)
 }
 
 function createWriteQueue(source: string): WriteQueueHarness {

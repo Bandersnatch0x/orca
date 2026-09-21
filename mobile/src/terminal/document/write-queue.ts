@@ -1,20 +1,41 @@
 import type { TerminalDocumentScope } from './document-scope'
+import { C1_CSI, ESC } from './escape-introducers'
+
+/** Claude's record dot, which iOS WebKit would otherwise promote to a colourful emoji glyph. */
+const CLAUDE_STATUS_DOT = '\u23fa'
+
+/** The variation selector that forces the text glyph. */
+const TEXT_PRESENTATION_SELECTOR = '\ufe0e'
+
+/** The variation selector that forces the emoji glyph. */
+const EMOJI_PRESENTATION_SELECTOR = '\ufe0f'
+
+/**
+ * The dot with any trailing selectors, as one pattern.
+ *
+ * A literal rather than a construction: a `new RegExp` at a module's top level is parse-time work
+ * (ruling 20), and `replace` leaves no `lastIndex` behind for the next document to find.
+ */
+const CLAUDE_STATUS_DOT_PATTERN = /\u23fa[\ufe0e\ufe0f]*/g
+
+/** How far a split DECSET may be carried before the mode scan gives up. */
+const PRIVATE_MODE_SCAN_TAIL_LIMIT = 4096
 
 export function resetWriteQueue(scope: TerminalDocumentScope) {
   scope.writeQueue = []
   scope.writeQueueHead = 0
 }
 
-export function isStatusDotPresentationSelector(scope: TerminalDocumentScope, value: string) {
-  return value === scope.TEXT_PRESENTATION_SELECTOR || value === scope.EMOJI_PRESENTATION_SELECTOR
+export function isStatusDotPresentationSelector(value: string) {
+  return value === TEXT_PRESENTATION_SELECTOR || value === EMOJI_PRESENTATION_SELECTOR
 }
 
-export function endsWithStatusDotPresentationSequence(scope: TerminalDocumentScope, data: string) {
+export function endsWithStatusDotPresentationSequence(data: string) {
   let i = data.length - 1
-  while (i >= 0 && isStatusDotPresentationSelector(scope, data.charAt(i))) {
+  while (i >= 0 && isStatusDotPresentationSelector(data.charAt(i))) {
     i--
   }
-  return i >= 0 && data.charAt(i) === scope.CLAUDE_STATUS_DOT
+  return i >= 0 && data.charAt(i) === CLAUDE_STATUS_DOT
 }
 
 // Why: iOS WebKit promotes Claude's record/status dot to a colorful emoji glyph.
@@ -25,7 +46,7 @@ export function normalizeStatusDotPresentation(scope: TerminalDocumentScope, dat
   if (scope.statusDotPendingSelector) {
     scope.statusDotPendingSelector = false
     let strippedPendingSelectors = false
-    while (data.length > 0 && isStatusDotPresentationSelector(scope, data.charAt(0))) {
+    while (data.length > 0 && isStatusDotPresentationSelector(data.charAt(0))) {
       data = data.slice(1)
     }
     strippedPendingSelectors = data.length === 0
@@ -35,10 +56,10 @@ export function normalizeStatusDotPresentation(scope: TerminalDocumentScope, dat
     }
   }
   const normalized = data.replace(
-    scope.CLAUDE_STATUS_DOT_PATTERN,
-    scope.CLAUDE_STATUS_DOT + scope.TEXT_PRESENTATION_SELECTOR
+    CLAUDE_STATUS_DOT_PATTERN,
+    CLAUDE_STATUS_DOT + TEXT_PRESENTATION_SELECTOR
   )
-  scope.statusDotPendingSelector = endsWithStatusDotPresentationSequence(scope, data)
+  scope.statusDotPendingSelector = endsWithStatusDotPresentationSequence(data)
   return normalized
 }
 
@@ -78,24 +99,24 @@ export function disposeTermObservers(scope: TerminalDocumentScope) {
   }
 }
 
-export function extractMouseModeScanTail(scope: TerminalDocumentScope, input: string) {
-  const start = Math.max(input.lastIndexOf(scope.ESC), input.lastIndexOf(scope.C1_CSI))
+export function extractMouseModeScanTail(input: string) {
+  const start = Math.max(input.lastIndexOf(ESC), input.lastIndexOf(C1_CSI))
   if (start === -1) {
     return ''
   }
   const tail = input.slice(start)
   // Why: PTY/SSH chunks can split a long combined DECSET before the final h/l.
   // Keep parser state far beyond normal mode lists while still bounding memory.
-  if (tail.length > scope.PRIVATE_MODE_SCAN_TAIL_LIMIT) {
+  if (tail.length > PRIVATE_MODE_SCAN_TAIL_LIMIT) {
     return ''
   }
-  if (tail === scope.ESC || tail === scope.ESC + '[' || tail === scope.C1_CSI) {
+  if (tail === ESC || tail === ESC + '[' || tail === C1_CSI) {
     return tail
   }
-  if (tail.indexOf(scope.ESC + '[?') === 0) {
+  if (tail.indexOf(ESC + '[?') === 0) {
     return /^[0-9;]*$/.test(tail.slice(3)) ? tail : ''
   }
-  if (tail.indexOf(scope.C1_CSI + '?') === 0) {
+  if (tail.indexOf(C1_CSI + '?') === 0) {
     return /^[0-9;]*$/.test(tail.slice(2)) ? tail : ''
   }
   return ''

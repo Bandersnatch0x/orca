@@ -4,9 +4,8 @@ import { join } from 'node:path'
 /**
  * The document's own source, for the tests that assert what its code does rather than what it does.
  *
- * Those tests used to read the generated script, because the document was a string and there was
- * nothing else to read. It is ordinary TypeScript now, so they read it directly: no build step in
- * the loop, and the text they match is the text a reader edits.
+ * The document is ordinary TypeScript, so they read it directly: no build step in the loop, and the
+ * text they match is the text a reader edits.
  *
  * The bundle is not a substitute. esbuild merges these modules into one scope and renames what
  * collides — the threaded `scope` parameter comes out as `scope2` — so a statement matched against

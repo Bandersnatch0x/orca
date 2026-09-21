@@ -1,6 +1,6 @@
 import type { TerminalDocumentScope } from './document-scope'
 import { scheduleDocumentFrame } from './document-frame-registry'
-import { applyFitScale } from './fit-scale'
+import { applyFitScale, MIN_FIT_COLS } from './fit-scale'
 import { notify } from './host-notify'
 import { emitKeyboardAvoidanceMetrics } from './keyboard-avoidance-metrics'
 import { emitModesIfChanged } from './mode-mirroring'
@@ -84,7 +84,7 @@ export function measureFitDimensions(
       ? containerHeightPx
       : window.innerHeight
   const cols = Math.floor(vpWidth / cellWidth)
-  if (cols < scope.MIN_FIT_COLS) {
+  if (cols < MIN_FIT_COLS) {
     flog(scope, 'measure-skip-small-width', {
       vpWidth: vpWidth,
       cellWidth: cellWidth,

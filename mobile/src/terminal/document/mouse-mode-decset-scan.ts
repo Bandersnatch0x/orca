@@ -1,20 +1,21 @@
 import { extractMouseModeScanTail } from './write-queue'
 import type { TerminalDocumentScope } from './document-scope'
+import { C1_CSI, ESC } from './escape-introducers'
 
-export function isAltScreenActive(scope: TerminalDocumentScope, data: unknown): data is string {
+export function isAltScreenActive(data: unknown): data is string {
   if (typeof data !== 'string') {
     return false
   }
-  const on = data.lastIndexOf(scope.ESC + '[?1049h')
-  const off = data.lastIndexOf(scope.ESC + '[?1049l')
+  const on = data.lastIndexOf(ESC + '[?1049h')
+  const off = data.lastIndexOf(ESC + '[?1049l')
   return on !== -1 && on > off
 }
 
-export function normalizeInitialData(scope: TerminalDocumentScope, data: unknown) {
-  if (!isAltScreenActive(scope, data)) {
+export function normalizeInitialData(data: unknown) {
+  if (!isAltScreenActive(data)) {
     return data
   }
-  const on = data.lastIndexOf(scope.ESC + '[?1049h')
+  const on = data.lastIndexOf(ESC + '[?1049h')
   // Why: SerializeAddon can include normal-buffer scrollback before the
   // active alternate-screen snapshot. Replaying both into a fresh mobile
   // xterm duplicates TUI frames and can flatten SGR attributes.
@@ -26,14 +27,14 @@ export function updateMouseModeFromData(scope: TerminalDocumentScope, data: unkn
     return
   }
   const input = scope.mouseModeScanTail + data
-  scope.mouseModeScanTail = extractMouseModeScanTail(scope, input)
+  scope.mouseModeScanTail = extractMouseModeScanTail(input)
   const re = new RegExp(
-    scope.ESC + 'c|' + scope.ESC + '\\[\\?([0-9;]+)([hl])|' + scope.C1_CSI + '\\?([0-9;]+)([hl])',
+    ESC + 'c|' + ESC + '\\[\\?([0-9;]+)([hl])|' + C1_CSI + '\\?([0-9;]+)([hl])',
     'g'
   )
   let match: RegExpExecArray | null
   while ((match = re.exec(input)) !== null) {
-    if (match[0] === scope.ESC + 'c') {
+    if (match[0] === ESC + 'c') {
       scope.trackedMouseTrackingMode = 'none'
       scope.sgrMouseMode = false
       scope.sgrMousePixelsMode = false

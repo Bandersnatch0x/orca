@@ -41,15 +41,6 @@ const MODULES = readdirSync(new URL('.', import.meta.url))
   .filter((name) => name !== ENTRY)
   .sort()
 
-/**
- * The one module that does build something as it is parsed: the scope object every other module
- * reads. It has to exist before any of them, and on the page it is one object for the life of the
- * tab — which is safe precisely because the rule below holds for everything else. Each start
- * function writes every field it owns, so a remount resets the scope rather than inheriting it.
- * Its parse-time work touches no element, which is asserted rather than asserted-in-prose.
- */
-const BUILDS_THE_SCOPE = 'document-scope'
-
 /** Statement kinds that only declare. Anything else at the top level is work. */
 const DECLARATION_KINDS = new Set([
   'ImportDeclaration',
@@ -168,24 +159,25 @@ function parseTimeEffectsIn(name: string, source: string): string[] {
 
 describe('the document modules at parse time', () => {
   it('do no work: every effect is in a start function the hosts call', () => {
-    const modules = MODULES.filter((name) => name !== BUILDS_THE_SCOPE)
-    expect(modules).toContain('runtime-constants')
-    expect(modules.flatMap(parseTimeEffects)).toEqual([])
+    // Every module, with no exception left: the scope is built by a call now, and the constants the
+    // modules own are declarations rather than the substituted literals a generator wrote.
+    expect(MODULES.length).toBeGreaterThan(30)
+    expect(MODULES.flatMap(parseTimeEffects)).toEqual([])
   })
 
-  it('build the scope, and only the scope, before the rest of them', () => {
-    // The exception, measured. It is one module, it is the one that builds the scope, and nothing
-    // it does at parse time reaches an element.
-    expect(parseTimeEffects(BUILDS_THE_SCOPE).length).toBeGreaterThan(0)
-    const source = moduleSource(BUILDS_THE_SCOPE)
-    const { program } = parseSync(`${BUILDS_THE_SCOPE}.ts`, source, { lang: 'ts' })
-    const topLevel = program.body.filter(
-      (statement) =>
-        statement.type === 'VariableDeclaration' ||
-        (statement.type === 'ExportNamedDeclaration' &&
-          statement.declaration?.type === 'VariableDeclaration')
-    )
-    expect(topLevel.some(readsTheDocument)).toBe(false)
+  it('declare nothing that reaches an element', () => {
+    // The stricter half, and the one the remount defect was: a declaration whose initialiser reads
+    // an element is work by effect whatever its shape, so the same reader runs over every module.
+    for (const name of MODULES) {
+      const { program } = parseSync(`${name}.ts`, moduleSource(name), { lang: 'ts' })
+      const topLevel = program.body.filter(
+        (statement) =>
+          statement.type === 'VariableDeclaration' ||
+          (statement.type === 'ExportNamedDeclaration' &&
+            statement.declaration?.type === 'VariableDeclaration')
+      )
+      expect({ name, reaches: topLevel.some(readsTheDocument) }).toEqual({ name, reaches: false })
+    }
   })
 
   it('would report a planted element read, which the statement filter cannot see', () => {
@@ -199,6 +191,9 @@ describe('the document modules at parse time', () => {
     expect(parseTimeEffectsIn('planted', planted)).toEqual([
       "planted: indicator = document.getElementById('scroll-indicator')"
     ])
+    // And the element reader the case above spends on every module: the same plant, seen by it.
+    const { program } = parseSync('planted.ts', planted, { lang: 'ts' })
+    expect(program.body.some(readsTheDocument)).toBe(true)
     // And the other direction, because a reader that flagged every initialiser would agree with
     // the empty list above only by refusing everything: a plain literal is not work.
     const inert =
@@ -232,7 +227,7 @@ describe('the document modules at parse time', () => {
           'm'
         ).test(moduleSource(name))
       )
-    expect(declaring('start').length).toBe(11)
+    expect(declaring('start').length).toBe(10)
     // Ruling 21: a module that schedules a frame, a timer or a retry owes an undo for it.
     expect(declaring('stop').length).toBe(10)
   })

@@ -10,7 +10,12 @@ import {
   resetSmoothScrollOffset
 } from './normal-buffer-smooth-scroll'
 import { dispatcherShouldBlockSurface } from './tap-dispatch'
-import { applyTextScale, snapToTextScalePreset } from './text-scaling'
+import {
+  applyTextScale,
+  MAX_TEXT_SCALE,
+  MIN_TEXT_SCALE,
+  snapToTextScalePreset
+} from './text-scaling'
 import { getTotalScale, updateTransform } from './viewport-transform'
 import { attachSurfaceWheelHandler } from './wheel-scroll'
 
@@ -138,8 +143,8 @@ export function attachSurfaceEventHandlers(
         // Why: userScale is a CSS multiplier on the current font size; bound it so
         // the resulting apparent size (currentTextScale × userScale) stays within
         // the preset range, since release snaps to one of those presets.
-        const loScale = scope.MIN_TEXT_SCALE / scope.currentTextScale
-        const hiScale = scope.MAX_TEXT_SCALE / scope.currentTextScale
+        const loScale = MIN_TEXT_SCALE / scope.currentTextScale
+        const hiScale = MAX_TEXT_SCALE / scope.currentTextScale
         scope.userScale = Math.max(
           loScale,
           Math.min(hiScale, scope.touchGesture.pinchScale * ratio)

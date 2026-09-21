@@ -8,7 +8,10 @@ import { XTERM_ENGINE_CSS } from './terminal-webview-engine-css.generated'
 import { XTERM_ENGINE_JS } from './terminal-webview-engine.generated'
 import { createTerminalDocumentScope } from './document/document-scope'
 import { attachWebglAddon, startWebglRecovery } from './document/webgl-recovery'
-import { documentSourceText } from './document/document-module-source.test-support'
+import {
+  documentModuleSource,
+  documentSourceText
+} from './document/document-module-source.test-support'
 import { XTERM_HTML } from './terminal-webview-html'
 
 // The document's own source, so a rule about what the document does is read where it is written.
@@ -187,8 +190,16 @@ describe('terminal WebView bundled engine', () => {
       join(import.meta.dirname, 'terminal-webview-html', 'document-shell.ts'),
       'utf8'
     )
-    const capSites = `${terminalHtmlSource}${shell}`.match(/__engineErrors\.length < 20/g) ?? []
-    expect(capSites.length).toBe(2)
+    // The shell's buffer is a global because it is older than any document; the document appends to
+    // it through the seam, so the two sites now spell the same cap over the same list differently.
+    expect(shell).toContain('window.__engineErrors.length < 20')
+    expect(terminalHtmlSource).toContain('const captured = scope.capturedEngineErrors()')
+    expect(terminalHtmlSource).toContain('if (captured.length < 20) {')
+    // The global is read in one place, the seam's own default, and the reporter no longer names it.
+    expect(documentModuleSource('host-notify')).not.toContain('window.__engineErrors')
+    expect(documentModuleSource('document-host-seams')).toContain(
+      'window.__engineErrors = window.__engineErrors ?? []'
+    )
     expect(terminalHtmlSource).toContain('nonFatalErrorNotifies > 5')
   })
 

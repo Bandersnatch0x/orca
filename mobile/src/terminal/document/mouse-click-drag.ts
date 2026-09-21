@@ -4,9 +4,10 @@ import { notify } from './host-notify'
 import { getMouseTrackingMode, isSafeSgrMouseCoordinate } from './mouse-input-encoding'
 import { viewportToCell } from './viewport-cell'
 import type { TerminalDocumentScope } from './document-scope'
+import { ESC } from './escape-introducers'
 import { notifyTerminalSurfaceTap } from './surface-tap'
 import { viewportToMouseReportCell } from './mouse-report-cell'
-import { dispatcherShouldBlockSurface } from './tap-dispatch'
+import { dispatcherShouldBlockSurface, TAP_SLOP } from './tap-dispatch'
 
 /** A mouse press being tracked from pointerdown to pointerup. */
 export type TerminalMouseGesture = {
@@ -50,7 +51,7 @@ export function buildMouseButtonReport(
     if (!isSafeSgrMouseCoordinate(cell.x) || !isSafeSgrMouseCoordinate(cell.y)) {
       return ''
     }
-    return scope.ESC + '[<' + sgrButton + ';' + cell.x + ';' + cell.y + sgrFinal
+    return ESC + '[<' + sgrButton + ';' + cell.x + ';' + cell.y + sgrFinal
   }
   if (scope.sgrMouseMode) {
     // Why: xterm increments zero-based mouse cells before encoding reports.
@@ -59,7 +60,7 @@ export function buildMouseButtonReport(
     if (!isSafeSgrMouseCoordinate(sgrCol) || !isSafeSgrMouseCoordinate(sgrRow)) {
       return ''
     }
-    return scope.ESC + '[<' + sgrButton + ';' + sgrCol + ';' + sgrRow + sgrFinal
+    return ESC + '[<' + sgrButton + ';' + sgrCol + ';' + sgrRow + sgrFinal
   }
   const button = kind === 'motion' ? 64 : kind === 'release' ? 35 : 32
   const col = cell.col + 1 + 32
@@ -70,11 +71,7 @@ export function buildMouseButtonReport(
     return ''
   }
   return (
-    scope.ESC +
-    '[M' +
-    String.fromCharCode(button) +
-    String.fromCharCode(col) +
-    String.fromCharCode(row)
+    ESC + '[M' + String.fromCharCode(button) + String.fromCharCode(col) + String.fromCharCode(row)
   )
 }
 
@@ -200,7 +197,7 @@ export function attachSurfaceMouseClickDragHandler(
       if (!gesture.moved) {
         const dx = Math.abs(e.clientX - gesture.startX)
         const dy = Math.abs(e.clientY - gesture.startY)
-        if (dx + dy <= scope.TAP_SLOP) {
+        if (dx + dy <= TAP_SLOP) {
           return
         }
         beginMouseDrag(scope, gesture)

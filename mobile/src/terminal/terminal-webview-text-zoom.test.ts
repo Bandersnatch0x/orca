@@ -79,17 +79,17 @@ describe('TerminalWebView text zoom', () => {
 
   it('forces the Claude status dot to text presentation before xterm writes', () => {
     expect(terminalHtmlSource).toContain('font-variant-emoji: text')
-    // Ruling 21: the dot's value is in the scope factory, not in a parse-time write.
-    expect(terminalHtmlSource).toContain('const statusDot = String.fromCharCode(0x23fa)')
+    // The dot and its two selectors are the write queue's own constants, and the pattern is a
+    // literal because a construction at a module's top level would be parse-time work (ruling 20).
+    expect(terminalHtmlSource).toContain("const CLAUDE_STATUS_DOT = '\\u23fa'")
+    expect(terminalHtmlSource).toContain("const TEXT_PRESENTATION_SELECTOR = '\\ufe0e'")
+    expect(terminalHtmlSource).toContain("const EMOJI_PRESENTATION_SELECTOR = '\\ufe0f'")
     expect(terminalHtmlSource).toContain(
-      'const textPresentationSelector = String.fromCharCode(0xfe0e)'
-    )
-    expect(terminalHtmlSource).toContain(
-      'const emojiPresentationSelector = String.fromCharCode(0xfe0f)'
+      'const CLAUDE_STATUS_DOT_PATTERN = /\\u23fa[\\ufe0e\\ufe0f]*/g'
     )
     expect(terminalHtmlSource).toContain('export function normalizeStatusDotPresentation(')
     expect(terminalHtmlSource).toContain(
-      'scope.CLAUDE_STATUS_DOT_PATTERN,\n    scope.CLAUDE_STATUS_DOT + scope.TEXT_PRESENTATION_SELECTOR'
+      'CLAUDE_STATUS_DOT_PATTERN,\n    CLAUDE_STATUS_DOT + TEXT_PRESENTATION_SELECTOR'
     )
     expect(terminalHtmlSource).toContain(
       'scope.writeQueue.push(normalizeStatusDotPresentation(scope, data))'
@@ -125,7 +125,7 @@ describe('TerminalWebView text zoom', () => {
   it('resets pending Claude status dot selector state when the terminal lifecycle resets', () => {
     const initStart = terminalHtmlSource.indexOf('export function init(')
     const initReplay = terminalHtmlSource.indexOf(
-      'const replayData = normalizeInitialData(scope, initialData)'
+      'const replayData = normalizeInitialData(initialData)'
     )
     const clearStart = terminalHtmlSource.indexOf("} else if (msg.type === 'clear') {")
     const clearEnd = terminalHtmlSource.indexOf("} else if (msg.type === 'measure')", clearStart)
@@ -146,7 +146,7 @@ describe('TerminalWebView text zoom', () => {
     expect(terminalHtmlSource).toContain('window.Unicode11Addon.Unicode11Addon')
     const open = terminalHtmlSource.indexOf('scope.term.open(scope.surface!)')
     const unicode = terminalHtmlSource.indexOf("scope.term.unicode.activeVersion = '11'")
-    const replay = terminalHtmlSource.indexOf("enqueueWrite(scope, scope.ESC + '[0m' + replayData)")
+    const replay = terminalHtmlSource.indexOf("enqueueWrite(scope, ESC + '[0m' + replayData)")
     expect(open).toBeGreaterThanOrEqual(0)
     expect(unicode).toBeGreaterThan(open)
     expect(replay).toBeGreaterThan(unicode)

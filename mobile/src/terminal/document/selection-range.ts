@@ -3,6 +3,9 @@ import type { TerminalDocumentScope, TerminalDocumentSelection } from './documen
 import { notify } from './host-notify'
 import { repositionOverlay, stopEdgeScroll } from './selection-overlay'
 
+/** What counts as one word for select-all and for word seeding. */
+const WORD_RE = /[\p{L}\p{N}_./:@~+=?&#%-]/u
+
 /** The ordered ends of the selection, whichever way the user dragged it. */
 export type TerminalSelectionRange = {
   start: TerminalDocumentSelection['anchor']
@@ -22,11 +25,11 @@ export function seedWordSelection(scope: TerminalDocumentScope, col: number, abs
   }
   let s = col
   let e = col
-  if (col >= 0 && col < line.length && scope.WORD_RE.test(line[col])) {
-    while (s > 0 && scope.WORD_RE.test(line[s - 1])) {
+  if (col >= 0 && col < line.length && WORD_RE.test(line[col])) {
+    while (s > 0 && WORD_RE.test(line[s - 1])) {
       s--
     }
-    while (e < line.length - 1 && scope.WORD_RE.test(line[e + 1])) {
+    while (e < line.length - 1 && WORD_RE.test(line[e + 1])) {
       e++
     }
   }

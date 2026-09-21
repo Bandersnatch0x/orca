@@ -5,7 +5,6 @@ import { handleMsg } from './host-message-router'
 import { startHostNotify, stopHostNotify } from './host-notify'
 import { startMessageBridge, stopMessageBridge } from './message-bridge'
 import { stopNormalBufferSmoothScroll } from './normal-buffer-smooth-scroll'
-import { startRuntimeConstants } from './runtime-constants'
 import { startSelectionMenuButtons } from './selection-menu-buttons'
 import { stopSelectionOverlay } from './selection-overlay'
 import { startSelectionStateAndEviction } from './selection-state-and-eviction'
@@ -47,7 +46,7 @@ export function createTerminalDocument(host: TerminalDocumentHost = {}): Termina
 }
 
 /**
- * Every module's start, in the order the document has always run them.
+ * Every module's start, in the order the document runs them.
  *
  * A start that throws has left the ones before it holding a document listener or the host's error
  * reporter, and there is no handle for anyone to stop with, so the undo runs here. Every stop is a
@@ -59,7 +58,6 @@ export function createTerminalDocument(host: TerminalDocumentHost = {}): Termina
  */
 export function startTerminalDocument(scope: TerminalDocumentScope) {
   try {
-    startRuntimeConstants(scope)
     startSurfaceSwap(scope)
     startTextScaling(scope)
     startFitScale(scope)

@@ -54,9 +54,9 @@ describe('terminal WebView reflow', () => {
   })
 
   it('does not locally resize hidden WebViews to a one-column grid', () => {
-    // Ruling 21: the floor's value is in the scope factory, not in a parse-time write.
-    expect(DOCUMENT_SOURCE).toContain('MIN_FIT_COLS: 20,')
-    expect(DOCUMENT_SOURCE).toContain('if (cols < scope.MIN_FIT_COLS) {')
+    // The floor is a constant of the module that fits the grid, and both readers import it.
+    expect(DOCUMENT_SOURCE).toContain('export const MIN_FIT_COLS = 20')
+    expect(DOCUMENT_SOURCE).toContain('if (cols < MIN_FIT_COLS) {')
     expect(DOCUMENT_SOURCE).toContain("flog(scope, 'measure-skip-small-width'")
     expect(DOCUMENT_SOURCE).toContain(
       "notify(scope, { type: 'measure-result', cols: null, rows: null })"

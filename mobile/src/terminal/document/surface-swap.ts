@@ -67,5 +67,6 @@ export function commitTerminalSurfaceSwap(
 // last painted surface is tracked apart from its replacement — on the scope (ruling 21), because
 // the page mounts this module more than once and a second mount must not inherit the first's.
 export function startSurfaceSwap(scope: TerminalDocumentScope) {
+  scope.surface = elementInRoot(scope.root, 'terminal-surface')
   scope.committedSurface = scope.surface
 }

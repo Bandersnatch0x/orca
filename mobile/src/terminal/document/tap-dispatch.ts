@@ -5,6 +5,18 @@ import { viewportToCell } from './viewport-cell'
 import type { TerminalDocumentScope } from './document-scope'
 import { notifyTerminalSurfaceTap } from './surface-tap'
 
+/** The press duration that starts a selection, in milliseconds. */
+const LONG_PRESS_MS = 500
+
+/** The travel that cancels a pending long press, in pixels. */
+const LONG_PRESS_SLOP = 10
+
+/** The travel that disqualifies a tap, in pixels; the mouse drag path holds itself to the same. */
+export const TAP_SLOP = 24
+
+/** The longest press still counted as a tap, in milliseconds. */
+const TAP_MAX_MS = 700
+
 // ============================================================
 // LATCHING TOUCH DISPATCHER (document-level)
 // ============================================================
@@ -59,7 +71,7 @@ export function armLongPress(scope: TerminalDocumentScope, touch: Touch) {
       return
     }
     enterSelect(scope, c.col, c.row)
-  }, scope.LONG_PRESS_MS)
+  }, LONG_PRESS_MS)
 }
 
 export function touchSlopExceeded(scope: TerminalDocumentScope, t: Touch) {
@@ -68,7 +80,7 @@ export function touchSlopExceeded(scope: TerminalDocumentScope, t: Touch) {
   }
   const dx = Math.abs(t.clientX - scope.longPressOrigin.x)
   const dy = Math.abs(t.clientY - scope.longPressOrigin.y)
-  return dx + dy > scope.LONG_PRESS_SLOP
+  return dx + dy > LONG_PRESS_SLOP
 }
 
 // Why: existing surface handlers stay attached to surface but we wrap
@@ -165,7 +177,7 @@ function onDocumentTouchMove(scope: TerminalDocumentScope, e: TouchEvent) {
       if (mt.identifier === scope.tapCandidate.identifier) {
         const dx = Math.abs(mt.clientX - scope.tapCandidate.x)
         const dy = Math.abs(mt.clientY - scope.tapCandidate.y)
-        if (dx + dy > scope.TAP_SLOP) {
+        if (dx + dy > TAP_SLOP) {
           scope.tapCandidate = null
         }
       }
@@ -204,7 +216,7 @@ function onDocumentTouchEnd(scope: TerminalDocumentScope, e: TouchEvent) {
       e.touches.length === 0 &&
       scope.tapCandidate &&
       scope.selMode !== 'select' &&
-      Date.now() - scope.tapCandidate.t <= scope.TAP_MAX_MS
+      Date.now() - scope.tapCandidate.t <= TAP_MAX_MS
     ) {
       notifyTerminalSurfaceTap(scope, scope.tapCandidate.x, scope.tapCandidate.y, true)
     }

@@ -1,5 +1,6 @@
 import { emitKeyboardAvoidanceMetrics } from './keyboard-avoidance-metrics'
 import { MOBILE_TERMINAL_CARET_OPTIONS } from '../terminal-webview-html/theme'
+import { ESC } from './escape-introducers'
 import { notify } from './host-notify'
 import { fontPxForScale } from './text-scaling'
 import type { TerminalDocumentScope } from './document-scope'
@@ -68,11 +69,11 @@ export function init(
     sgrMouseMode: false,
     sgrMousePixelsMode: false
   }
-  const replayData = normalizeInitialData(scope, initialData)
+  const replayData = normalizeInitialData(initialData)
   // Why: normalizeInitialData can discard pre-alt-screen bytes. Keep the
   // mirrored modes aligned with exactly what this mobile xterm replays.
   updateMouseModeFromData(scope, replayData)
-  scope.activeAltScreenSnapshot = isAltScreenActive(scope, replayData)
+  scope.activeAltScreenSnapshot = isAltScreenActive(replayData)
   scope.initialOscLinks = Array.isArray(nextOscLinks) ? nextOscLinks : []
   scope.initialOscLinkRowOffset = 0
   scope.initialOscLinkEvictionReady = false
@@ -116,7 +117,7 @@ export function init(
   } catch {}
   if (typeof replayData === 'string' && replayData.length > 0) {
     // Why no trailing reset: the snapshot pen belongs to the live host TUI receiving later output.
-    enqueueWrite(scope, scope.ESC + '[0m' + replayData)
+    enqueueWrite(scope, ESC + '[0m' + replayData)
   }
 
   // Why: reset eviction tracking + attach observers for the new term.
