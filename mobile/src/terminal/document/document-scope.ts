@@ -217,6 +217,10 @@ export type TerminalDocumentState = {
   uninstallHostTransport: (() => void) | null
   /** `fit-scale`: takes the viewport refit's listener off again, or null before one. */
   removeViewportRefit: (() => void) | null
+  /** `tap-dispatch`: takes its four document listeners off again, or null before them. */
+  removeTapDispatch: (() => void) | null
+  /** `webgl-recovery`: takes the visibility listener off again, or null before one. */
+  removeWebglRecovery: (() => void) | null
   /** `fit-scale`: the generation of the retry loop; a bump abandons the one in flight. */
   fitRetryToken: number
   /** `mouse-click-drag`: the mouse gesture in progress, or null. */
@@ -365,6 +369,8 @@ function createTerminalDocumentState(): TerminalDocumentState {
     uninstallErrorReporter: null,
     uninstallHostTransport: null,
     removeViewportRefit: null,
+    removeTapDispatch: null,
+    removeWebglRecovery: null,
     fitRetryToken: 0,
     mouseGesture: null,
     touchDispatch: {
@@ -411,53 +417,4 @@ export function createTerminalDocumentScope(
 ): TerminalDocumentScope {
   const named = Object.fromEntries(Object.entries(host).filter(([, hook]) => hook !== undefined))
   return { ...createTerminalDocumentState(), ...createTerminalDocumentHostSeams(), ...named }
-}
-
-/**
- * The document's own scope. The generator emits this declaration at the top of the factory, with
- * the factory's `host` argument passed in, so each call gets state of its own (ruling 22).
- *
- * That is what makes a second mount a second document, and it is why nothing resets this: a
- * generation counter used to carry across a reset so a frame scheduled by the mount that went away
- * could not match the new one, and now the old mount's callbacks close over the old scope object,
- * which the new one is not.
- */
-export const scope: TerminalDocumentScope = createTerminalDocumentScope()
-
-/**
- * An animation frame the document can take back (ruling 21).
- *
- * A generation guard makes a stale frame *do* nothing; it still runs, and inside a WebView that
- * is the same thing. On the page it is not: the mount that scheduled the frame may be gone and
- * the next one already up, and a callback that reads the scope reads the new mount's. Every frame
- * the document asks for is registered here so `cancelDocumentFrames` can take the pending ones
- * back, which is what the page's dispose does. The id is dropped as the frame runs, so the list
- * holds only what is still owed.
- */
-export function scheduleDocumentFrame(callback: FrameRequestCallback) {
-  // A stopped document asks for nothing. Tearing the terminal down runs the engine's own
-  // disposal, which calls back into these modules, and a frame asked for on the way out would be
-  // owed by nobody — the cancel has already run. `-1` is not a live frame id, so a caller that
-  // holds one and cancels it later is cancelling nothing.
-  if (scope.framesStopped) {
-    return -1
-  }
-  const id = requestAnimationFrame(function (time) {
-    const at = scope.scheduledFrames.indexOf(id)
-    if (at !== -1) {
-      scope.scheduledFrames.splice(at, 1)
-    }
-    callback(time)
-  })
-  scope.scheduledFrames.push(id)
-  return id
-}
-
-/** Takes back every frame the document is still owed, and stops it asking for more. */
-export function cancelDocumentFrames() {
-  scope.framesStopped = true
-  for (const id of scope.scheduledFrames) {
-    cancelAnimationFrame(id)
-  }
-  scope.scheduledFrames = []
 }

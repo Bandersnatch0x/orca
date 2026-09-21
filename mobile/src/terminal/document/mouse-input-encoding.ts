@@ -1,8 +1,8 @@
 import { notify } from './host-notify'
-import { scope } from './document-scope'
+import type { TerminalDocumentScope } from './document-scope'
 import { viewportToMouseReportCell } from './mouse-report-cell'
 
-export function isAlternateBufferActive() {
+export function isAlternateBufferActive(scope: TerminalDocumentScope) {
   try {
     return !!(
       scope.term &&
@@ -15,7 +15,7 @@ export function isAlternateBufferActive() {
   }
 }
 
-export function getMouseTrackingMode() {
+export function getMouseTrackingMode(scope: TerminalDocumentScope) {
   try {
     if (scope.term && scope.term.modes && typeof scope.term.modes.mouseTrackingMode === 'string') {
       const mode = scope.term.modes.mouseTrackingMode
@@ -44,7 +44,7 @@ export function repeatSequence(sequence: string, count: number) {
   return out
 }
 
-export function buildArrowScrollSequence(lines: number) {
+export function buildArrowScrollSequence(scope: TerminalDocumentScope, lines: number) {
   let prefix = '['
   try {
     if (scope.term && scope.term.modes && scope.term.modes.applicationCursorKeysMode) {
@@ -54,8 +54,13 @@ export function buildArrowScrollSequence(lines: number) {
   return scope.ESC + prefix + (lines < 0 ? 'A' : 'B')
 }
 
-export function buildMouseWheelSequence(lines: number, clientX: number, clientY: number) {
-  const cell = viewportToMouseReportCell(clientX, clientY)
+export function buildMouseWheelSequence(
+  scope: TerminalDocumentScope,
+  lines: number,
+  clientX: number,
+  clientY: number
+) {
+  const cell = viewportToMouseReportCell(scope, clientX, clientY)
   if (!cell) {
     return ''
   }
@@ -97,12 +102,16 @@ export function isSafeSgrMouseCoordinate(value: number) {
   return Number.isInteger(value) && value >= 0 && value <= 9999
 }
 
-export function buildMouseClickInput(clientX: number, clientY: number) {
-  const mouseTrackingMode = getMouseTrackingMode()
+export function buildMouseClickInput(
+  scope: TerminalDocumentScope,
+  clientX: number,
+  clientY: number
+) {
+  const mouseTrackingMode = getMouseTrackingMode(scope)
   if (!isClickMouseTrackingMode(mouseTrackingMode)) {
     return ''
   }
-  const cell = viewportToMouseReportCell(clientX, clientY)
+  const cell = viewportToMouseReportCell(scope, clientX, clientY)
   if (!cell) {
     return ''
   }
@@ -162,67 +171,82 @@ export function isWheelMouseTrackingMode(mode: string) {
   return mode !== 'none' && mode !== 'x10'
 }
 
-export function shouldRouteScrollToTerminalInput() {
-  return isWheelMouseTrackingMode(getMouseTrackingMode()) || isAlternateBufferActive()
+export function shouldRouteScrollToTerminalInput(scope: TerminalDocumentScope) {
+  return isWheelMouseTrackingMode(getMouseTrackingMode(scope)) || isAlternateBufferActive(scope)
 }
 
-export function buildMouseWheelScrollInput(lines: number, clientX: number, clientY: number) {
+export function buildMouseWheelScrollInput(
+  scope: TerminalDocumentScope,
+  lines: number,
+  clientX: number,
+  clientY: number
+) {
   const count = Math.min(Math.abs(lines), 32)
   if (count === 0) {
     return ''
   }
-  const sequence = buildMouseWheelSequence(lines, clientX, clientY)
+  const sequence = buildMouseWheelSequence(scope, lines, clientX, clientY)
   if (!sequence) {
     return ''
   }
   return repeatSequence(sequence, count)
 }
 
-export function buildTuiScrollInput(lines: number, clientX: number, clientY: number) {
+export function buildTuiScrollInput(
+  scope: TerminalDocumentScope,
+  lines: number,
+  clientX: number,
+  clientY: number
+) {
   const count = Math.min(Math.abs(lines), 32)
   if (count === 0) {
     return ''
   }
-  const mouseTrackingMode = getMouseTrackingMode()
+  const mouseTrackingMode = getMouseTrackingMode(scope)
   let sequence = ''
   if (isWheelMouseTrackingMode(mouseTrackingMode)) {
-    sequence = buildMouseWheelSequence(lines, clientX, clientY)
+    sequence = buildMouseWheelSequence(scope, lines, clientX, clientY)
   }
   if (!sequence) {
-    sequence = buildArrowScrollSequence(lines)
+    sequence = buildArrowScrollSequence(scope, lines)
   }
   return repeatSequence(sequence, count)
 }
 
-export function routeScrollLines(lines: number, clientX: number, clientY: number) {
+export function routeScrollLines(
+  scope: TerminalDocumentScope,
+  lines: number,
+  clientX: number,
+  clientY: number
+) {
   if (!scope.term || lines === 0) {
     return
   }
-  const mouseTrackingMode = getMouseTrackingMode()
-  const alternateBufferActive = isAlternateBufferActive()
+  const mouseTrackingMode = getMouseTrackingMode(scope)
+  const alternateBufferActive = isAlternateBufferActive(scope)
   if (isWheelMouseTrackingMode(mouseTrackingMode)) {
     // Why: xterm sends wheel events to mouse-aware TUIs before considering
     // scrollback, even if the app stays on the normal buffer.
-    const mouseInput = buildMouseWheelScrollInput(lines, clientX, clientY)
+    const mouseInput = buildMouseWheelScrollInput(scope, lines, clientX, clientY)
     if (mouseInput) {
-      notify({ type: 'terminal-input', bytes: mouseInput })
+      notify(scope, { type: 'terminal-input', bytes: mouseInput })
       return
     }
     // Why: default mouse encoding can be unrepresentable in our ASCII-safe
     // RPC path on wide terminals. Send bounded arrows instead of local
     // scrollback/no-op while a mouse-aware app owns scroll gestures.
-    const fallbackInput = buildTuiScrollInput(lines, clientX, clientY)
+    const fallbackInput = buildTuiScrollInput(scope, lines, clientX, clientY)
     if (fallbackInput) {
-      notify({ type: 'terminal-input', bytes: fallbackInput })
+      notify(scope, { type: 'terminal-input', bytes: fallbackInput })
     }
     return
   }
   if (alternateBufferActive) {
     // Why: alternate-screen TUIs own their scroll state and xterm has no
     // scrollback there, so mobile scroll gestures must become terminal input.
-    const input = buildTuiScrollInput(lines, clientX, clientY)
+    const input = buildTuiScrollInput(scope, lines, clientX, clientY)
     if (input) {
-      notify({ type: 'terminal-input', bytes: input })
+      notify(scope, { type: 'terminal-input', bytes: input })
     }
     return
   }

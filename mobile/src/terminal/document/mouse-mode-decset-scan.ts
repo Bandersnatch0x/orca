@@ -1,7 +1,7 @@
 import { extractMouseModeScanTail } from './write-queue'
-import { scope } from './document-scope'
+import type { TerminalDocumentScope } from './document-scope'
 
-export function isAltScreenActive(data: unknown): data is string {
+export function isAltScreenActive(scope: TerminalDocumentScope, data: unknown): data is string {
   if (typeof data !== 'string') {
     return false
   }
@@ -10,8 +10,8 @@ export function isAltScreenActive(data: unknown): data is string {
   return on !== -1 && on > off
 }
 
-export function normalizeInitialData(data: unknown) {
-  if (!isAltScreenActive(data)) {
+export function normalizeInitialData(scope: TerminalDocumentScope, data: unknown) {
+  if (!isAltScreenActive(scope, data)) {
     return data
   }
   const on = data.lastIndexOf(scope.ESC + '[?1049h')
@@ -21,12 +21,12 @@ export function normalizeInitialData(data: unknown) {
   return on > 0 ? data.slice(on) : data
 }
 
-export function updateMouseModeFromData(data: unknown) {
+export function updateMouseModeFromData(scope: TerminalDocumentScope, data: unknown) {
   if (typeof data !== 'string' || data.length === 0) {
     return
   }
   const input = scope.mouseModeScanTail + data
-  scope.mouseModeScanTail = extractMouseModeScanTail(input)
+  scope.mouseModeScanTail = extractMouseModeScanTail(scope, input)
   const re = new RegExp(
     scope.ESC + 'c|' + scope.ESC + '\\[\\?([0-9;]+)([hl])|' + scope.C1_CSI + '\\?([0-9;]+)([hl])',
     'g'

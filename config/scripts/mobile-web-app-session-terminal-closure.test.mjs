@@ -30,10 +30,11 @@ import {
  * emitted file and its 41 inputs leave. The bytes barely move because it is the same program: what
  * goes is the import and export plumbing between the modules, and what the generator substitutes.
  *
- * The two commits inside this reading, because only one of them is the factory arriving: making the
- * document a factory put the `host` argument on `createTerminalDocumentScope`, the lane's only edit
- * to a module this closure already carried, and cost 80 bytes on its own — 3,768,202 measured at
- * that commit. The -1,890 from there is the page importing the emitted factory instead.
+ * The +2 is two modules and no generated text: `create-terminal-document` holds the start and stop
+ * sequence, `document-frame-registry` holds the frames, and the generated factory C7.5b emitted for
+ * the page is gone. The bytes fall because threading the scope deletes a closure: every function
+ * names its state as a parameter, and a parameter minifies to one character where a module-level
+ * object could not.
  *
  * xterm was already a static import of the mount before this, so nothing here is xterm arriving: it
  * and its two addons are 607,945 bytes minified ESM on their own, and they are on both sides of the
@@ -58,7 +59,6 @@ const SHED = [
 /** The component, its mount, the stylesheet and the markup, and the modules the splits made. */
 const GAINED_OUTSIDE_THE_DOCUMENT = [
   'src/terminal/TerminalWebView.web.tsx',
-  'src/terminal/terminal-webview-document-factory.generated.ts',
   'src/terminal/terminal-web-document-mount.ts',
   'src/terminal/terminal-webview-engine-css.generated.ts',
   'src/terminal/terminal-webview-html.web.ts',
@@ -102,12 +102,17 @@ describeClosure(
           `${name} is not in the closure`
         ).toBe(true)
       }
-      // The document, whole, and as one file: ruling 23 gives the page the factory the WebView's
-      // own script is generated from, so what the closure carries is that emitted text. The source
-      // modules are not in it at all — they are the factory's inputs, not the page's — and the one
-      // import the generated file makes is a type, which erases.
-      expect(local).toContain('src/terminal/terminal-webview-document-factory.generated.ts')
-      expect(local.filter((module) => module.startsWith('src/terminal/document/'))).toEqual([])
+      // The document, whole, and as modules: ruling 25 makes it ordinary TypeScript that the page
+      // imports and calls, so the closure carries every module — including `message-bridge`, whose
+      // two host facts are seams now — and nothing generated at all.
+      const documentModules = local.filter((module) => module.startsWith('src/terminal/document/'))
+      expect(documentModules).toContain('src/terminal/document/create-terminal-document.ts')
+      expect(documentModules).toContain('src/terminal/document/message-bridge.ts')
+      expect(documentModules.length).toBeGreaterThanOrEqual(36)
+      // The bundle and its entry belong to the phone: a page reaching either would ship the
+      // document twice, once as modules and once as a string.
+      expect(documentModules).not.toContain('src/terminal/document/native-document-entry.ts')
+      expect(local).not.toContain('src/terminal/terminal-webview-document-script.generated.ts')
     }, 300_000)
 
     it('leaves the 16px seam census exactly where C7.2 left it', async () => {

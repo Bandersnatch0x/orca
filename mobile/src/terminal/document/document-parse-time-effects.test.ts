@@ -1,11 +1,6 @@
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { parseSync } from 'oxc-parser'
 import { describe, expect, it } from 'vitest'
-import {
-  TERMINAL_DOCUMENT_HOST_SEAMS_MODULE,
-  TERMINAL_DOCUMENT_MODULE_ORDER,
-  TERMINAL_DOCUMENT_SCOPE_MODULE
-} from '../../../scripts/terminal-document-module-order.mjs'
 
 /**
  * Rulings 20 and 21: no module in the document does work as it is parsed, and none owns state.
@@ -28,11 +23,23 @@ import {
  * would run at the position its module is emitted rather than in the start sequence, so no stop
  * would undo it and every call would leak another one.
  */
-const EMITTED = [
-  TERMINAL_DOCUMENT_HOST_SEAMS_MODULE,
-  TERMINAL_DOCUMENT_SCOPE_MODULE,
-  ...TERMINAL_DOCUMENT_MODULE_ORDER
-]
+/**
+ * Every module of the document, read from the directory.
+ *
+ * From the directory rather than from a list: the bundler walks imports from the entry, so there is
+ * no order to pin any more, and a module that this census cannot see is a module the rule does not
+ * cover. The entry itself is the one file allowed a statement at its top level — it is the call.
+ */
+const ENTRY = 'native-document-entry'
+
+/** The sequence that calls the starts, which is not a module with a start of its own. */
+const THE_SEQUENCE = 'create-terminal-document'
+
+const MODULES = readdirSync(new URL('.', import.meta.url))
+  .filter((name) => name.endsWith('.ts') && !name.includes('.test'))
+  .map((name) => name.replace(/\.ts$/, ''))
+  .filter((name) => name !== ENTRY)
+  .sort()
 
 /**
  * The one module that does build something as it is parsed: the scope object every other module
@@ -41,7 +48,7 @@ const EMITTED = [
  * function writes every field it owns, so a remount resets the scope rather than inheriting it.
  * Its parse-time work touches no element, which is asserted rather than asserted-in-prose.
  */
-const BUILDS_THE_SCOPE = TERMINAL_DOCUMENT_SCOPE_MODULE
+const BUILDS_THE_SCOPE = 'document-scope'
 
 /** Statement kinds that only declare. Anything else at the top level is work. */
 const DECLARATION_KINDS = new Set([
@@ -161,15 +168,14 @@ function parseTimeEffectsIn(name: string, source: string): string[] {
 
 describe('the document modules at parse time', () => {
   it('do no work: every effect is in a start function the hosts call', () => {
-    const modules = EMITTED.filter((name) => name !== BUILDS_THE_SCOPE)
+    const modules = MODULES.filter((name) => name !== BUILDS_THE_SCOPE)
     expect(modules).toContain('runtime-constants')
     expect(modules.flatMap(parseTimeEffects)).toEqual([])
   })
 
   it('build the scope, and only the scope, before the rest of them', () => {
-    // The exception, measured. It is one module, it is the one the order list already names as
-    // the scope, and nothing it does at parse time reaches an element — so a remount inherits an
-    // object of fields, never a stale node.
+    // The exception, measured. It is one module, it is the one that builds the scope, and nothing
+    // it does at parse time reaches an element.
     expect(parseTimeEffects(BUILDS_THE_SCOPE).length).toBeGreaterThan(0)
     const source = moduleSource(BUILDS_THE_SCOPE)
     const { program } = parseSync(`${BUILDS_THE_SCOPE}.ts`, source, { lang: 'ts' })
@@ -216,12 +222,15 @@ describe('the document modules at parse time', () => {
   })
 
   it('still start and stop: the functions holding what was moved out are exported', () => {
-    // The other half. Moving an effect out is only correct if something calls it, and the caller
-    // is the generator's own sequence, derived from these names by convention rather than listed;
-    // this holds the shape of the names so that derivation keeps working.
+    // The other half. Moving an effect out is only correct if something calls it, and the caller is
+    // `create-terminal-document`, which names every one of them. What this holds is the shape: a
+    // start takes the scope and nothing else, so the sequence can call them uniformly.
     const declaring = (keyword: string) =>
-      EMITTED.filter((name) =>
-        new RegExp(`^export function ${keyword}[A-Za-z]+\\(\\) \\{$`, 'm').test(moduleSource(name))
+      MODULES.filter((name) => name !== THE_SEQUENCE).filter((name) =>
+        new RegExp(
+          `^export function ${keyword}[A-Za-z]+\\(scope: TerminalDocumentScope\\) \\{$`,
+          'm'
+        ).test(moduleSource(name))
       )
     expect(declaring('start').length).toBe(11)
     // Ruling 21: a module that schedules a frame, a timer or a retry owes an undo for it.

@@ -1,5 +1,5 @@
 import { elementInRoot } from './document-host-seams'
-import { scope } from './document-scope'
+import type { TerminalDocumentScope } from './document-scope'
 
 /**
  * The first declarations inside the document's IIFE.
@@ -8,6 +8,6 @@ import { scope } from './document-scope'
  * shell opens the function they live in and `document-close.ts` closes it.
  */
 
-export function startRuntimeConstants() {
+export function startRuntimeConstants(scope: TerminalDocumentScope) {
   scope.surface = elementInRoot(scope.root, 'terminal-surface')
 }

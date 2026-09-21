@@ -1,5 +1,5 @@
 import { getLineText } from './cell-geometry'
-import { scope, type TerminalDocumentSelection } from './document-scope'
+import type { TerminalDocumentScope, TerminalDocumentSelection } from './document-scope'
 import { notify } from './host-notify'
 import { repositionOverlay, stopEdgeScroll } from './selection-overlay'
 
@@ -9,15 +9,15 @@ export type TerminalSelectionRange = {
   end: TerminalDocumentSelection['anchor']
 }
 
-export function seedWordSelection(col: number, absRow: number) {
-  const line = getLineText(absRow)
+export function seedWordSelection(scope: TerminalDocumentScope, col: number, absRow: number) {
+  const line = getLineText(scope, absRow)
   if (!line) {
     scope.sel = {
       anchor: { col: col, row: absRow },
       focus: { col: col, row: absRow },
       activeHandle: null
     }
-    applyXtermSelection()
+    applyXtermSelection(scope)
     return
   }
   let s = col
@@ -35,7 +35,7 @@ export function seedWordSelection(col: number, absRow: number) {
     focus: { col: e, row: absRow },
     activeHandle: null
   }
-  applyXtermSelection()
+  applyXtermSelection(scope)
 }
 
 export function isStartFirst(
@@ -48,7 +48,7 @@ export function isStartFirst(
   return a.col <= b.col
 }
 
-export function selRange(): TerminalSelectionRange | null {
+export function selRange(scope: TerminalDocumentScope): TerminalSelectionRange | null {
   if (!scope.sel) {
     return null
   }
@@ -58,11 +58,11 @@ export function selRange(): TerminalSelectionRange | null {
   return { start: scope.sel.focus, end: scope.sel.anchor }
 }
 
-export function applyXtermSelection() {
+export function applyXtermSelection(scope: TerminalDocumentScope) {
   if (!scope.term || !scope.sel) {
     return
   }
-  const r = selRange()
+  const r = selRange(scope)
   if (!r) {
     return
   }
@@ -85,10 +85,10 @@ export function applyXtermSelection() {
   } catch {}
 }
 
-export function cancelSelect() {
+export function cancelSelect(scope: TerminalDocumentScope) {
   scope.selMode = 'navigate'
   scope.sel = null
-  stopEdgeScroll()
+  stopEdgeScroll(scope)
   if (scope.term) {
     try {
       scope.term.clearSelection()
@@ -102,14 +102,14 @@ export function cancelSelect() {
     } catch {}
   }
   scope.selectionOverlay!.classList.remove('active')
-  notify({ type: 'set-select-mode', enabled: false })
+  notify(scope, { type: 'set-select-mode', enabled: false })
 }
 
-export function enterSelect(col: number, absRow: number) {
+export function enterSelect(scope: TerminalDocumentScope, col: number, absRow: number) {
   scope.selMode = 'select'
-  seedWordSelection(col, absRow)
+  seedWordSelection(scope, col, absRow)
   scope.selectionOverlay!.classList.add('active')
-  notify({ type: 'set-select-mode', enabled: true })
-  notify({ type: 'haptic', kind: 'selection' })
-  repositionOverlay()
+  notify(scope, { type: 'set-select-mode', enabled: true })
+  notify(scope, { type: 'haptic', kind: 'selection' })
+  repositionOverlay(scope)
 }

@@ -8,7 +8,7 @@ import type {
 import { TERMINAL_DOCUMENT_ELEMENT_STYLE, TERMINAL_DOCUMENT_MARKUP } from './terminal-webview-html'
 import { scopeStyleToHost } from './terminal-webview-html/document-style-scoping'
 import { XTERM_ENGINE_CSS } from './terminal-webview-engine-css.generated'
-import { createTerminalDocument } from './terminal-webview-document-factory.generated'
+import { createTerminalDocument } from './document/create-terminal-document'
 import type { TerminalWebViewCommand } from './terminal-webview-messages'
 
 /**

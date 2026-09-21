@@ -1,4 +1,4 @@
-import { scope } from './document-scope'
+import type { TerminalDocumentScope } from './document-scope'
 
 // Declared beside the seam that hands it out, and re-exported here because this is where the
 // document's readers have always named it.
@@ -18,7 +18,7 @@ declare global {
   }
 }
 
-export function notify(msg: Record<string, unknown>) {
+export function notify(scope: TerminalDocumentScope, msg: Record<string, unknown>) {
   scope.postToHost(msg)
 }
 
@@ -44,7 +44,12 @@ export function chromeVersionText() {
   return match ? 'Chrome ' + match[1] : 'Chrome version unknown'
 }
 
-export function reportEngineError(context: string, err: TerminalEngineError, fatal?: unknown) {
+export function reportEngineError(
+  scope: TerminalDocumentScope,
+  context: string,
+  err: TerminalEngineError,
+  fatal?: unknown
+) {
   const isFatal = fatal === undefined ? !scope.everReady : !!fatal
   if (!isFatal) {
     // Why: a constructed-but-degraded engine can throw per frame; cap
@@ -63,14 +68,14 @@ export function reportEngineError(context: string, err: TerminalEngineError, fat
     parts.push('captured: ' + window.__engineErrors.join(' | '))
   }
   parts.push(chromeVersionText())
-  notify({
+  notify(scope, {
     type: 'error',
     fatal: isFatal,
     message: parts.join(' - ')
   })
 }
 
-export function startHostNotify() {
+export function startHostNotify(scope: TerminalDocumentScope) {
   scope.uninstallErrorReporter = scope.installErrorReporter(function (
     msg: string | (Event & { message?: unknown }),
     source,
@@ -81,11 +86,11 @@ export function startHostNotify() {
     if (window.__engineErrors.length < 20) {
       window.__engineErrors.push(String(msg))
     }
-    reportEngineError('terminal runtime error', err || msg)
+    reportEngineError(scope, 'terminal runtime error', err || msg)
   })
 }
 
-export function stopHostNotify() {
+export function stopHostNotify(scope: TerminalDocumentScope) {
   if (scope.uninstallErrorReporter) {
     scope.uninstallErrorReporter()
     scope.uninstallErrorReporter = null

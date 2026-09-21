@@ -1,31 +1,31 @@
-import { scope } from './document-scope'
+import type { TerminalDocumentScope } from './document-scope'
 
-export function resetWriteQueue() {
+export function resetWriteQueue(scope: TerminalDocumentScope) {
   scope.writeQueue = []
   scope.writeQueueHead = 0
 }
 
-export function isStatusDotPresentationSelector(value: string) {
+export function isStatusDotPresentationSelector(scope: TerminalDocumentScope, value: string) {
   return value === scope.TEXT_PRESENTATION_SELECTOR || value === scope.EMOJI_PRESENTATION_SELECTOR
 }
 
-export function endsWithStatusDotPresentationSequence(data: string) {
+export function endsWithStatusDotPresentationSequence(scope: TerminalDocumentScope, data: string) {
   let i = data.length - 1
-  while (i >= 0 && isStatusDotPresentationSelector(data.charAt(i))) {
+  while (i >= 0 && isStatusDotPresentationSelector(scope, data.charAt(i))) {
     i--
   }
   return i >= 0 && data.charAt(i) === scope.CLAUDE_STATUS_DOT
 }
 
 // Why: iOS WebKit promotes Claude's record/status dot to a colorful emoji glyph.
-export function normalizeStatusDotPresentation(data: string) {
+export function normalizeStatusDotPresentation(scope: TerminalDocumentScope, data: string) {
   if (typeof data !== 'string' || data.length === 0) {
     return data
   }
   if (scope.statusDotPendingSelector) {
     scope.statusDotPendingSelector = false
     let strippedPendingSelectors = false
-    while (data.length > 0 && isStatusDotPresentationSelector(data.charAt(0))) {
+    while (data.length > 0 && isStatusDotPresentationSelector(scope, data.charAt(0))) {
       data = data.slice(1)
     }
     strippedPendingSelectors = data.length === 0
@@ -38,21 +38,21 @@ export function normalizeStatusDotPresentation(data: string) {
     scope.CLAUDE_STATUS_DOT_PATTERN,
     scope.CLAUDE_STATUS_DOT + scope.TEXT_PRESENTATION_SELECTOR
   )
-  scope.statusDotPendingSelector = endsWithStatusDotPresentationSequence(data)
+  scope.statusDotPendingSelector = endsWithStatusDotPresentationSequence(scope, data)
   return normalized
 }
 
-export function enqueueWrite(data: string) {
-  scope.writeQueue.push(normalizeStatusDotPresentation(data))
+export function enqueueWrite(scope: TerminalDocumentScope, data: string) {
+  scope.writeQueue.push(normalizeStatusDotPresentation(scope, data))
 }
 
-export function enqueueWriteBoundary(callback: () => void) {
+export function enqueueWriteBoundary(scope: TerminalDocumentScope, callback: () => void) {
   scope.writeQueue.push(callback)
 }
 
-export function nextQueuedWrite() {
+export function nextQueuedWrite(scope: TerminalDocumentScope) {
   if (scope.writeQueueHead >= scope.writeQueue.length) {
-    resetWriteQueue()
+    resetWriteQueue(scope)
     return undefined
   }
   const next = scope.writeQueue[scope.writeQueueHead]
@@ -67,7 +67,7 @@ export function nextQueuedWrite() {
   return next
 }
 
-export function disposeTermObservers() {
+export function disposeTermObservers(scope: TerminalDocumentScope) {
   const disposables = scope.termObserverDisposables
   scope.termObserverDisposables = []
   for (let i = 0; i < disposables.length; i++) {
@@ -78,7 +78,7 @@ export function disposeTermObservers() {
   }
 }
 
-export function extractMouseModeScanTail(input: string) {
+export function extractMouseModeScanTail(scope: TerminalDocumentScope, input: string) {
   const start = Math.max(input.lastIndexOf(scope.ESC), input.lastIndexOf(scope.C1_CSI))
   if (start === -1) {
     return ''
@@ -101,14 +101,14 @@ export function extractMouseModeScanTail(input: string) {
   return ''
 }
 
-export function pumpWrites(gen: number): void {
+export function pumpWrites(scope: TerminalDocumentScope, gen: number): void {
   if (!scope.ready || !scope.term || scope.writesDraining || gen !== scope.terminalGeneration) {
     return
   }
-  const next = nextQueuedWrite()
+  const next = nextQueuedWrite(scope)
   if (typeof next !== 'string') {
     if (typeof next === 'function') {
-      return (next(), pumpWrites(gen))
+      return (next(), pumpWrites(scope, gen))
     }
     const callbacks = scope.afterDrainCallbacks
     scope.afterDrainCallbacks = []
@@ -125,11 +125,11 @@ export function pumpWrites(gen: number): void {
       return
     }
     scope.writesDraining = false
-    pumpWrites(gen)
+    pumpWrites(scope, gen)
   })
 }
 
-export function afterWritesDrained(callback: () => void) {
+export function afterWritesDrained(scope: TerminalDocumentScope, callback: () => void) {
   scope.afterDrainCallbacks.push(callback)
-  pumpWrites(scope.terminalGeneration)
+  pumpWrites(scope, scope.terminalGeneration)
 }

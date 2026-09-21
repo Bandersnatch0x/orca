@@ -1,3 +1,4 @@
+import type { TerminalDocumentScope } from './document-scope'
 import { cellColToStringIndex, getLineText } from './cell-geometry'
 import { viewportToCell } from './viewport-cell'
 import {
@@ -36,20 +37,30 @@ export function findTerminalUrlAtColumn(lineText: unknown, col: number, source: 
   return null
 }
 
-export function fileUrlAtViewportPoint(clientX: number, clientY: number) {
-  const cell = viewportToCell(clientX, clientY)
+export function fileUrlAtViewportPoint(
+  scope: TerminalDocumentScope,
+  clientX: number,
+  clientY: number
+) {
+  const cell = viewportToCell(scope, clientX, clientY)
   if (!cell) {
     return null
   }
-  return findFileUrlAtColumn(getLineText(cell.row), cellColToStringIndex(cell.row, cell.col))
+  return findFileUrlAtColumn(
+    getLineText(scope, cell.row),
+    cellColToStringIndex(scope, cell.row, cell.col)
+  )
 }
 
-export function urlAtViewportPoint(clientX: number, clientY: number) {
-  const cell = viewportToCell(clientX, clientY)
+export function urlAtViewportPoint(scope: TerminalDocumentScope, clientX: number, clientY: number) {
+  const cell = viewportToCell(scope, clientX, clientY)
   if (!cell) {
     return null
   }
   // Map the cell column to a string index so wide chars earlier on the line
   // don't shift the match column off the tapped URL.
-  return findUrlAtColumn(getLineText(cell.row), cellColToStringIndex(cell.row, cell.col))
+  return findUrlAtColumn(
+    getLineText(scope, cell.row),
+    cellColToStringIndex(scope, cell.row, cell.col)
+  )
 }

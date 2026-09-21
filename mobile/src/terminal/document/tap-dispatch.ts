@@ -2,7 +2,7 @@ import { handleDragMove, stopEdgeScroll } from './selection-overlay'
 import { cancelSelect, enterSelect } from './selection-range'
 import { notify } from './host-notify'
 import { viewportToCell } from './viewport-cell'
-import { scope } from './document-scope'
+import type { TerminalDocumentScope } from './document-scope'
 import { notifyTerminalSurfaceTap } from './surface-tap'
 
 // ============================================================
@@ -39,7 +39,7 @@ export function targetInside(
   return el.contains(target)
 }
 
-export function clearLongPress() {
+export function clearLongPress(scope: TerminalDocumentScope) {
   if (scope.longPressTimer) {
     clearTimeout(scope.longPressTimer)
     scope.longPressTimer = null
@@ -47,22 +47,22 @@ export function clearLongPress() {
   scope.longPressOrigin = null
 }
 
-export function armLongPress(touch: Touch) {
+export function armLongPress(scope: TerminalDocumentScope, touch: Touch) {
   scope.longPressOrigin = { x: touch.clientX, y: touch.clientY, identifier: touch.identifier }
   scope.longPressTimer = setTimeout(function () {
     scope.longPressTimer = null
     if (!scope.longPressOrigin) {
       return
     }
-    const c = viewportToCell(scope.longPressOrigin.x, scope.longPressOrigin.y)
+    const c = viewportToCell(scope, scope.longPressOrigin.x, scope.longPressOrigin.y)
     if (!c) {
       return
     }
-    enterSelect(c.col, c.row)
+    enterSelect(scope, c.col, c.row)
   }, scope.LONG_PRESS_MS)
 }
 
-export function touchSlopExceeded(t: Touch) {
+export function touchSlopExceeded(scope: TerminalDocumentScope, t: Touch) {
   if (!scope.longPressOrigin) {
     return false
   }
@@ -73,7 +73,7 @@ export function touchSlopExceeded(t: Touch) {
 
 // Why: existing surface handlers stay attached to surface but we wrap
 // their entry to no-op when the dispatcher latches into select-drag.
-export function dispatcherShouldBlockSurface() {
+export function dispatcherShouldBlockSurface(scope: TerminalDocumentScope) {
   return scope.touchDispatch.mode === 'select-drag'
 }
 
@@ -84,7 +84,7 @@ export function dispatcherShouldBlockSurface() {
 const CAPTURE_ACTIVE = { capture: true, passive: false }
 const CAPTURE_PASSIVE = { capture: true, passive: true }
 
-function onDocumentTouchStart(e: TouchEvent) {
+function onDocumentTouchStart(scope: TerminalDocumentScope, e: TouchEvent) {
   const t = e.touches[0]
   const target = e.target
   const onHandle = target === scope.handleStart || target === scope.handleEnd
@@ -98,12 +98,12 @@ function onDocumentTouchStart(e: TouchEvent) {
   if (e.touches.length === 2) {
     // pinch latch
     if (scope.selMode === 'select') {
-      notify({ type: 'mobile-clip-cancel-by-pinch' })
-      cancelSelect()
+      notify(scope, { type: 'mobile-clip-cancel-by-pinch' })
+      cancelSelect(scope)
     }
     scope.touchDispatch.mode = 'pinch'
     scope.touchDispatch.touchIds = [e.touches[0].identifier, e.touches[1].identifier]
-    clearLongPress()
+    clearLongPress(scope)
     return
   }
 
@@ -126,7 +126,7 @@ function onDocumentTouchStart(e: TouchEvent) {
     // Why: tap-to-dismiss matches native iOS/Android — touching outside the
     // selection clears it. We cancel immediately and latch to 'surface' so
     // the same gesture still drives scroll/pan without a second touch.
-    cancelSelect()
+    cancelSelect(scope)
     scope.touchDispatch.mode = 'surface'
     scope.touchDispatch.touchId = t.identifier
     return
@@ -136,25 +136,25 @@ function onDocumentTouchStart(e: TouchEvent) {
     scope.touchDispatch.mode = 'surface'
     scope.touchDispatch.touchId = t.identifier
     scope.tapCandidate = { x: t.clientX, y: t.clientY, t: Date.now(), identifier: t.identifier }
-    armLongPress(t)
+    armLongPress(scope, t)
   }
 }
 
-function onDocumentTouchMove(e: TouchEvent) {
+function onDocumentTouchMove(scope: TerminalDocumentScope, e: TouchEvent) {
   if (scope.touchDispatch.mode === 'select-drag') {
     const t = touchById(e.touches, scope.touchDispatch.touchId)
     if (!t || !scope.sel || !scope.sel.activeHandle) {
       return
     }
     e.preventDefault()
-    handleDragMove(scope.sel.activeHandle, t.clientX, t.clientY)
+    handleDragMove(scope, scope.sel.activeHandle, t.clientX, t.clientY)
     return
   }
   if (scope.touchDispatch.mode === 'surface' || scope.touchDispatch.mode === 'pinch') {
     // long-press slop check
     if (scope.longPressTimer && e.touches.length === 1) {
-      if (touchSlopExceeded(e.touches[0])) {
-        clearLongPress()
+      if (touchSlopExceeded(scope, e.touches[0])) {
+        clearLongPress(scope)
       }
     }
     // Why: disqualify the tap only once the finger travels past TAP_SLOP
@@ -176,12 +176,12 @@ function onDocumentTouchMove(e: TouchEvent) {
   }
 }
 
-function onDocumentTouchEnd(e: TouchEvent) {
+function onDocumentTouchEnd(scope: TerminalDocumentScope, e: TouchEvent) {
   if (scope.touchDispatch.mode === 'select-drag') {
     if (scope.sel) {
       scope.sel.activeHandle = null
     }
-    stopEdgeScroll()
+    stopEdgeScroll(scope)
     scope.touchDispatch.mode = 'idle'
     scope.touchDispatch.touchId = null
     return
@@ -206,9 +206,9 @@ function onDocumentTouchEnd(e: TouchEvent) {
       scope.selMode !== 'select' &&
       Date.now() - scope.tapCandidate.t <= scope.TAP_MAX_MS
     ) {
-      notifyTerminalSurfaceTap(scope.tapCandidate.x, scope.tapCandidate.y, true)
+      notifyTerminalSurfaceTap(scope, scope.tapCandidate.x, scope.tapCandidate.y, true)
     }
-    clearLongPress()
+    clearLongPress(scope)
     scope.tapCandidate = null
     if (e.touches.length === 0) {
       scope.touchDispatch.mode = 'idle'
@@ -217,10 +217,10 @@ function onDocumentTouchEnd(e: TouchEvent) {
   }
 }
 
-function onDocumentTouchCancel() {
-  clearLongPress()
+function onDocumentTouchCancel(scope: TerminalDocumentScope) {
+  clearLongPress(scope)
   scope.tapCandidate = null
-  stopEdgeScroll()
+  stopEdgeScroll(scope)
   if (scope.touchDispatch.mode === 'select-drag') {
     if (scope.sel) {
       scope.sel.activeHandle = null
@@ -237,17 +237,29 @@ function onDocumentTouchCancel() {
  * They are on `document` rather than on the surface, so unlike every surface handler they outlive
  * the host element a remount replaces — which is exactly why the undo below exists.
  */
-export function startTapDispatch() {
-  document.addEventListener('touchstart', onDocumentTouchStart, CAPTURE_ACTIVE)
-  document.addEventListener('touchmove', onDocumentTouchMove, CAPTURE_ACTIVE)
-  document.addEventListener('touchend', onDocumentTouchEnd, CAPTURE_PASSIVE)
-  document.addEventListener('touchcancel', onDocumentTouchCancel, CAPTURE_PASSIVE)
+export function startTapDispatch(scope: TerminalDocumentScope) {
+  const start = (e: TouchEvent) => onDocumentTouchStart(scope, e)
+  const move = (e: TouchEvent) => onDocumentTouchMove(scope, e)
+  const end = (e: TouchEvent) => onDocumentTouchEnd(scope, e)
+  const cancel = () => onDocumentTouchCancel(scope)
+  document.addEventListener('touchstart', start, CAPTURE_ACTIVE)
+  document.addEventListener('touchmove', move, CAPTURE_ACTIVE)
+  document.addEventListener('touchend', end, CAPTURE_PASSIVE)
+  document.addEventListener('touchcancel', cancel, CAPTURE_PASSIVE)
+  // The removers, kept because the listeners are closures over this document's scope: identity is
+  // what `removeEventListener` matches on, and a second document's are not these.
+  scope.removeTapDispatch = () => {
+    document.removeEventListener('touchstart', start, CAPTURE_ACTIVE)
+    document.removeEventListener('touchmove', move, CAPTURE_ACTIVE)
+    document.removeEventListener('touchend', end, CAPTURE_PASSIVE)
+    document.removeEventListener('touchcancel', cancel, CAPTURE_PASSIVE)
+  }
 }
 
-export function stopTapDispatch() {
-  document.removeEventListener('touchstart', onDocumentTouchStart, CAPTURE_ACTIVE)
-  document.removeEventListener('touchmove', onDocumentTouchMove, CAPTURE_ACTIVE)
-  document.removeEventListener('touchend', onDocumentTouchEnd, CAPTURE_PASSIVE)
-  document.removeEventListener('touchcancel', onDocumentTouchCancel, CAPTURE_PASSIVE)
-  clearLongPress()
+export function stopTapDispatch(scope: TerminalDocumentScope) {
+  if (scope.removeTapDispatch) {
+    scope.removeTapDispatch()
+    scope.removeTapDispatch = null
+  }
+  clearLongPress(scope)
 }
