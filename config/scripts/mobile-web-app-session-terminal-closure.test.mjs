@@ -20,21 +20,26 @@ import {
  * re-anchored rather than adjusted: the base this note used to name is far enough back that main
  * has moved 44,296 bytes below its number through changes that are not this lane's.
  *
- *   modules        4320 -> 4280   (-40)
- *   local modules   970 ->  930   (-40)
- *   minified bytes  3,768,122 -> 3,766,312   (-1,810)
+ *   modules        4320 -> 4321   (+1)
+ *   local modules   970 ->  971   (+1)
+ *   minified bytes  3,768,122 -> 3,764,932   (-3,190)
  *
- * What moved is which files carry the document, not whether the page carries it. C7.5 put the
- * document's own source modules in this closure and started them per mount; ruling 23 gives the
- * page the factory the WebView's script is generated from, so the same program arrives as one
- * emitted file and its 41 inputs leave. The bytes barely move because it is the same program: what
- * goes is the import and export plumbing between the modules, and what the generator substitutes.
+ * What moved is which files carry the document, not whether the page carries it. C7.5 already put
+ * the document's own source modules in this closure and started them per mount, and ruling 25 keeps
+ * them there: the page imports ordinary TypeScript and calls it, and nothing generated is in the
+ * reading at all — the bundle the phone loads is built from the same modules and is not imported
+ * here.
  *
- * The +2 is two modules and no generated text: `create-terminal-document` holds the start and stop
- * sequence, `document-frame-registry` holds the frames, and the generated factory C7.5b emitted for
- * the page is gone. The bytes fall because threading the scope deletes a closure: every function
- * names its state as a parameter, and a parameter minifies to one character where a module-level
- * object could not.
+ * The +1 is three modules in and two out. In: `create-terminal-document` holds the start and stop
+ * sequence, `document-frame-registry` holds the frames, `escape-introducers` holds the two control
+ * bytes. Out: `document-constants`, which existed because a generated string cannot import, and
+ * `runtime-constants`, whose one element read is the first line of `startSurfaceSwap`.
+ *
+ * The bytes fall because threading the scope deletes a closure: every function names its state as a
+ * parameter, and a parameter minifies to one character where a shared module-level object could not.
+ * Folding the seventeen never-written fields out of that object takes the rest: a constant read
+ * through `scope.X` is a property access the minifier must keep, and the same constant as a module
+ * `const` is inlined.
  *
  * xterm was already a static import of the mount before this, so nothing here is xterm arriving: it
  * and its two addons are 607,945 bytes minified ESM on their own, and they are on both sides of the
