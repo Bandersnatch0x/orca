@@ -5,9 +5,10 @@ import type {
 
 /**
  * The eight seams between the document and whatever is hosting it, as the document's own
- * defaults. The document reads them at nine places: `postToHost` twice, `createTerminal`,
- * `createUnicode11Addon`, `createWebglAddon`, `installErrorReporter`,
- * `paintDocumentBackground`, `installHostTransport` and `hasEngine` once each.
+ * defaults, and the root its elements are read from. The document reads the seams at nine places:
+ * `postToHost` twice, `createTerminal`, `createUnicode11Addon`, `createWebglAddon`,
+ * `installErrorReporter`, `paintDocumentBackground`, `installHostTransport` and `hasEngine` once
+ * each; the root is read through one accessor, at the ten element reads.
  *
  * Inside the WebView the host is React Native and the engine is an IIFE that hangs its
  * constructors off `window`; on the page the host is the component that mounted these modules and
@@ -52,6 +53,22 @@ export type TerminalDocumentHostSeams = {
   installHostTransport: (receive: (frame: TerminalDocumentHostFrame) => void) => () => void
   /** `message-bridge`: whether the engine is here, which is what readiness is reported on. */
   hasEngine: () => boolean
+  /**
+   * Where this document's elements are: the node its markup was planted in, or null for the page
+   * the document is running in.
+   *
+   * The last thing two documents on one page shared. The ids are in the markup every host plants,
+   * so a page-wide read found whichever host came first in the tree — and two documents at once is
+   * not a corner on the page, because a stack transition keeps the outgoing screen mounted while
+   * the incoming one starts. Inside the WebView the document *is* the page, so it says nothing and
+   * gets the whole of it; on the page it names the host element the mount planted the markup in.
+   *
+   * Null rather than `document` as the default, because this is the one seam whose value is data:
+   * a default of `document` is read when the scope is built rather than when an element is, and
+   * the rule for every seam above it is that the window read happens at the call. The accessor
+   * resolves it, so the read stays where the other eight are.
+   */
+  root: ParentNode | null
 }
 
 /**
@@ -165,4 +182,19 @@ export function windowHasEngine() {
   // `!== undefined` rather than a `typeof` guard: the global is declared optional, so the lint rule
   // that forbids the guard is right that there is nothing to guard against here.
   return window.Terminal !== undefined
+}
+
+/**
+ * One of a document's own elements, by the id its markup gives it.
+ *
+ * Every element read goes through here, so `root` is the only place a host says where its document
+ * is. `querySelector` rather than `getElementById`, because a root may be an element: the page's
+ * host carries the markup, and only the WebView's document is a whole document.
+ *
+ * A ternary rather than `??`: the emitted document is transformed for an older target, where `??`
+ * costs a temporary that the reader of the script has to step over.
+ */
+export function elementInRoot(root: ParentNode | null, id: string) {
+  const within = root === null ? document : root
+  return within.querySelector<HTMLElement>(`#${id}`)
 }

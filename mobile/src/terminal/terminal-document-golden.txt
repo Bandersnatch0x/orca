@@ -197,6 +197,10 @@ function createTerminalDocument(host) {
   function windowHasEngine() {
     return window.Terminal !== void 0;
   }
+  function elementInRoot(root, id) {
+    const within = root === null ? document : root;
+    return within.querySelector(`#${id}`);
+  }
   const textScalePresets = [0.5, 0.75, 1, 1.25, 1.5, 2];
   const statusDot = String.fromCharCode(9210);
   const textPresentationSelector = String.fromCharCode(65038);
@@ -330,7 +334,8 @@ function createTerminalDocument(host) {
       installErrorReporter: installWindowErrorReporter,
       paintDocumentBackground: paintWindowDocumentBackground,
       installHostTransport: installWindowHostTransport,
-      hasEngine: windowHasEngine
+      hasEngine: windowHasEngine,
+      root: null
     };
   }
   function createTerminalDocumentScope(host = {}) {
@@ -360,7 +365,7 @@ function createTerminalDocument(host) {
     scope.scheduledFrames = [];
   }
   function startRuntimeConstants() {
-    scope.surface = document.getElementById("terminal-surface");
+    scope.surface = elementInRoot(scope.root, "terminal-surface");
   }
   function resetTerminalDataReplyAuthority() {
     scope.terminalDataRepliesEnabled = false;
@@ -428,7 +433,7 @@ function createTerminalDocument(host) {
     swap.nextSurface.style.position = "absolute";
     swap.nextSurface.style.left = "0";
     swap.nextSurface.style.top = "0";
-    document.getElementById("terminal-container").appendChild(swap.nextSurface);
+    elementInRoot(scope.root, "terminal-container").appendChild(swap.nextSurface);
     scope.surface = swap.nextSurface;
     scope.pendingSurface = swap.nextSurface;
     attachSurfaceEventHandlers(scope.surface);
@@ -506,8 +511,8 @@ function createTerminalDocument(host) {
     });
   }
   function startTextScaling() {
-    scope.scrollIndicator = document.getElementById("scroll-indicator");
-    scope.scrollThumb = document.getElementById("scroll-thumb");
+    scope.scrollIndicator = elementInRoot(scope.root, "scroll-indicator");
+    scope.scrollThumb = elementInRoot(scope.root, "scroll-thumb");
     scope.terminalFontFamily = (isIOSWebView() ? "ui-monospace, " : '"SF Mono", ') + TERMINAL_FONT_FALLBACKS;
   }
   function flog(tag, payload) {
@@ -1525,12 +1530,12 @@ function createTerminalDocument(host) {
     }
   }
   function startSelectionStateAndEviction() {
-    scope.selectionOverlay = document.getElementById("selection-overlay");
-    scope.handleStart = document.getElementById("sel-handle-start");
-    scope.handleEnd = document.getElementById("sel-handle-end");
-    scope.selMenu = document.getElementById("sel-menu");
-    scope.btnCopy = document.getElementById("sel-menu-copy");
-    scope.btnSelAll = document.getElementById("sel-menu-all");
+    scope.selectionOverlay = elementInRoot(scope.root, "selection-overlay");
+    scope.handleStart = elementInRoot(scope.root, "sel-handle-start");
+    scope.handleEnd = elementInRoot(scope.root, "sel-handle-end");
+    scope.selMenu = elementInRoot(scope.root, "sel-menu");
+    scope.btnCopy = elementInRoot(scope.root, "sel-menu-copy");
+    scope.btnSelAll = elementInRoot(scope.root, "sel-menu-all");
   }
   function emitModesIfChanged() {
     if (!scope.term) {

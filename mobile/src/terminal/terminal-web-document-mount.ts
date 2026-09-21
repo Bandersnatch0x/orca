@@ -95,7 +95,11 @@ export function mountTerminalWebDocument(
   host.innerHTML = TERMINAL_DOCUMENT_MARKUP
   // The WebView's `<head>` declares this before anything runs, and the document's error reporter
   // reads it unguarded. Without it the first report throws inside the reporter.
-  window.__engineErrors = []
+  //
+  // Assigned rather than emptied, and the one thing two documents on this page still share: it is
+  // a capped diagnostic buffer that the reporter appends the page's own errors to, so a second
+  // mount starting a fresh one costs the first its captured lines and nothing else.
+  window.__engineErrors = window.__engineErrors ?? []
 
   const started = startDocumentOrGiveTheHostBack(host, receive)
 
@@ -137,6 +141,11 @@ function startDocumentOrGiveTheHostBack(
 /** The eight seams, as the page answers them. */
 function startPageDocument(host: HTMLElement, receive: (message: Record<string, unknown>) => void) {
   return createTerminalDocument({
+    // Ruling 24's ninth member: this document's elements are the ones inside this host. Two
+    // terminals can be on the page at once — a stack transition keeps the outgoing screen mounted
+    // while the incoming one starts — and the markup's ids are the same in both hosts.
+    root: host,
+
     postToHost: receive,
 
     // Ruling 19 reaches `window.onerror`: the WebView's document owns its page and may take that

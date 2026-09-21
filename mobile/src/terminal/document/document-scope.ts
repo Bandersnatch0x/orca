@@ -401,7 +401,8 @@ function createTerminalDocumentHostSeams(): TerminalDocumentHostSeams {
     installErrorReporter: installWindowErrorReporter,
     paintDocumentBackground: paintWindowDocumentBackground,
     installHostTransport: installWindowHostTransport,
-    hasEngine: windowHasEngine
+    hasEngine: windowHasEngine,
+    root: null
   }
 }
 
