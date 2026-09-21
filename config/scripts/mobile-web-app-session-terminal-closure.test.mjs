@@ -36,18 +36,23 @@ import {
  *
  * Then C7.10 item B put mermaid on the page, and the module list moved again:
  *
- *   modules        4320 -> 6376   (+2056)
- *   local modules   970 ->  971   (+1)
+ *   modules        4320 -> 4323   (+3)
+ *   local modules   970 ->  973   (+3)
  *
- * That +2,056 is what `import('mermaid')` reaches — the engine's own 66 files and the d3, dagre,
- * katex and cytoscape trees under them — plus the one local module the two hosts now share, and
- * none of it is a download. (C7.10's design read +2,042 for the same change; that was a synthetic
- * entry whose only reach into mermaid was the import, and this is the component, measured.) `mobileWebAppRouteClosure`
- * reads `metafile.inputs`, which holds dynamically imported modules under `splitting: true` just
- * as it does under `splitting: false`, so it cannot express "on demand" about anything. Ruling 28:
- * the fence for this route is `entryStaticClosure`, which follows `import-statement` edges only,
- * and the module list's new total is a recorded number rather than a budget. It moves whenever
- * main adds a module this route reaches, and is re-recorded rather than argued with.
+ * Three modules: the configuration both hosts read, the loader, and the pre-bundled engine the
+ * loader imports on demand. The engine's own 66 files and the d3, dagre, katex and cytoscape trees
+ * under them are inside that one artifact rather than in this graph, which is why the count barely
+ * moves. Importing the package here instead read +2,056 and emitted 103 scripts, a package
+ * splitting along its own lazy diagram-type boundaries — every one of them inside the OTA generation
+ * the phone had already downloaded, so the split moved no bytes and spent 103 of the 256 manifest
+ * assets the shell will load. One artifact costs one script and one module.
+ *
+ * `mobileWebAppRouteClosure` reads `metafile.inputs`, which holds dynamically imported modules
+ * under `splitting: true` just as it does under `splitting: false`, so it cannot express "on
+ * demand" about anything. Ruling 28: the fence for this route is `entryStaticClosure`, which
+ * follows `import-statement` edges only, and the module list's total is a recorded number rather
+ * than a budget. It moves whenever main adds a module this route reaches, and is re-recorded rather
+ * than argued with.
  */
 
 const projectDir = fileURLToPath(new URL('../..', import.meta.url))
@@ -91,14 +96,15 @@ const XTERM_PACKAGES = ['@xterm/xterm', '@xterm/addon-unicode11', '@xterm/addon-
  */
 const EXPECTED_OFFENDERS = 0
 
-/** Where mermaid's own files sit in a closure, and how many of them this version has. */
+/** The deferred engine, as the page reaches it: one artifact, not the package's own file tree. */
+const MERMAID_PAGE_ENGINE = 'src/components/pr-sidebar/mermaid-page-engine.generated.ts'
 const MERMAID_PACKAGE = 'node_modules/mermaid/'
-const MERMAID_MODULES = 66
 
-/** The module list with mermaid in it, recorded at the base in the docstring above. */
-const MODULES_WITH_MERMAID = 6376
+/** The module list with mermaid on the page, recorded at the base in the docstring above. */
+const MODULES_WITH_MERMAID = 4323
 
-const mermaidModules = (inputs) => inputs.filter((input) => input.includes(MERMAID_PACKAGE))
+const artifactModules = (inputs) => inputs.filter((input) => input.includes(MERMAID_PAGE_ENGINE))
+const packageModules = (inputs) => inputs.filter((input) => input.includes(MERMAID_PACKAGE))
 
 const bundles = mobileWebAppDependenciesPresent()
 const describeClosure = bundles ? describe : describe.skip
@@ -128,21 +134,22 @@ describeClosure(
       expect(documentModules).toContain('src/terminal/document/page-document-modules.ts')
     }, 300_000)
 
-    it('reaches mermaid as a module and never as part of the download', async () => {
+    it('reaches the engine as one deferred module and never as part of the download', async () => {
       const { modules } = await mobileWebAppRouteClosure(SESSION_ROUTE)
-      // The recorded number, and what of it is mermaid's own: a total on its own could move for
-      // any reason, and the engine's file count only moves when the pinned version does.
-      expect(mermaidModules(modules)).toHaveLength(MERMAID_MODULES)
+      // The engine is here, as the one artifact the loader imports.
+      expect(artifactModules(modules)).toHaveLength(1)
+      // And the package's own file tree is not, anywhere: it is inside that artifact. Meaningful
+      // only beside the line above, which is why the two sit together.
+      expect(packageModules(modules)).toEqual([])
       expect(modules).toHaveLength(MODULES_WITH_MERMAID)
 
       const download = await mobileWebAppRouteChunkClosure(SESSION_ROUTE)
-      // The fence: nothing of mermaid is reachable from the route's own chunk by an import
+      // The fence: nothing of the engine is reachable from the route's own chunk by an import
       // statement, so opening the session pays none of it.
-      expect(mermaidModules(download.staticInputs)).toEqual([])
-      // The precondition that absence needs. Every one of those files is in the bundle, in a chunk
-      // the route reaches by a `dynamic-import` edge instead — so this is a deferred engine and
-      // not an engine the build dropped.
-      expect(mermaidModules(download.deferredInputs)).toHaveLength(MERMAID_MODULES)
+      expect(artifactModules(download.staticInputs)).toEqual([])
+      // The precondition that absence needs. The artifact is in the bundle, in a chunk the route
+      // reaches by a `dynamic-import` edge instead -- a deferred engine, not a dropped one.
+      expect(artifactModules(download.deferredInputs)).toHaveLength(1)
       // And the walk read a real download rather than one chunk: the route's own chunk is in it.
       expect(download.staticChunks).toContain(download.routeChunk)
       expect(download.staticInputs.length).toBeGreaterThan(1000)

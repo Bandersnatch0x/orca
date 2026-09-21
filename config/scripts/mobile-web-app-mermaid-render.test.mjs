@@ -18,10 +18,13 @@
  * other, and "does mermaid need eval" is answered by the engine rather than by mermaid.
  *
  * Recorded from this file's own run, for whoever needs the trade. Rendering one `graph TD` fetches
- * 27 chunks and 837,530 minified bytes on top of a 283,918-byte entry, the first of them 28,069 and
- * the largest 238,325 — none of it in the entry, and none of it fetched by a page with no diagram
- * on it (ruling 28's fence, held in `mobile-web-app-session-terminal-closure.test.mjs`). The native
- * document pays 3,705,846 bytes of engine string instead, in the closure, on every mount.
+ * one chunk of 3,482,965 minified bytes on top of a 283,956-byte entry — the pre-bundled engine,
+ * not in the entry, and not fetched at all by a page with no diagram on it (ruling 28's fence,
+ * held in `mobile-web-app-session-terminal-closure.test.mjs`). One chunk rather than the 103 that
+ * `import('mermaid')` emitted: mermaid splits along its own lazy diagram-type boundaries, all of
+ * which sit inside the generation the phone has already downloaded, so that split moved no bytes
+ * and spent 103 of the 256 manifest assets the shell will load. The native document pays 3,705,846
+ * bytes of engine string instead, in the closure, on every mount.
  *
  * The SVG itself: 17,143 bytes on the page against 17,504 in the native document (chromium; webkit
  * is 8 longer on each side), equal at 15,447 once normalised. The gap is the id string repeated
@@ -397,9 +400,11 @@ describeMermaid(
             // A CSS identifier, because mermaid writes `#<id>` into the stylesheet it puts inside
             // the SVG; an id spelled `«r0»` would leave every one of those rules inert.
             expect(shown.id).toMatch(/^[A-Za-z_][\w-]*$/)
-            // On demand, and from here: the engine arrived as chunks the render asked for, and
-            // nothing was fetched off this origin.
-            expect(fetched.filter((url) => url.includes('/chunk-')).length).toBeGreaterThan(0)
+            // On demand, from here, and in one piece: the engine arrived as exactly one chunk the
+            // render asked for, and nothing was fetched off this origin. The count is the claim —
+            // importing the package rather than the artifact fetched 27 here and emitted 103 in
+            // the app bundle, which is what spends the shell's asset budget.
+            expect(fetched.filter((url) => url.includes('/chunk-'))).toHaveLength(1)
             expect(fetched.filter((url) => !url.startsWith(origin))).toEqual([])
 
             const native = await readNativeSvg(browser)

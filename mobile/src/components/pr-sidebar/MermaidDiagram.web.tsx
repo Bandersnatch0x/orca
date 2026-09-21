@@ -4,6 +4,7 @@ import { colors, radii, spacing, typography } from '../../theme/mobile-theme'
 // The native component's own prop type, so a change to it fails here rather than drifting.
 import type { MermaidDiagramProps } from './MermaidDiagram'
 import { MERMAID_DIAGRAM_CONFIG } from './mermaid-diagram-config'
+import { loadPageMermaid } from './mermaid-page-engine'
 
 /**
  * Web sibling: the same diagram, drawn by mermaid in this document.
@@ -21,8 +22,10 @@ import { MERMAID_DIAGRAM_CONFIG } from './mermaid-diagram-config'
  * native path's `</script>` escaping has no analogue here and does not need one: the source is a
  * JS string argument, not text spliced into an inline `<script>`.
  *
- * The import is inside the effect, so a session with no diagram in it downloads none of the engine
- * (ruling 28; the chunks are ~860 KB for one `graph TD`).
+ * The import is inside the effect, so a session with no diagram in it evaluates none of the engine
+ * (ruling 28). It reaches the engine through `mermaid-page-engine.ts`, which loads one pre-bundled
+ * artifact rather than the package: importing the package here emitted 103 scripts, all of them
+ * already inside the generation the phone downloaded.
  */
 export const MermaidDiagram = memo(function MermaidDiagram({ source, base }: MermaidDiagramProps) {
   const hostRef = useRef<View>(null)
@@ -45,7 +48,7 @@ export const MermaidDiagram = memo(function MermaidDiagram({ source, base }: Mer
     let disposed = false
     void (async () => {
       try {
-        const { default: mermaid } = await import('mermaid')
+        const mermaid = await loadPageMermaid()
         mermaid.initialize(MERMAID_DIAGRAM_CONFIG)
         const { svg } = await mermaid.render(id, source)
         if (disposed) {
