@@ -1,12 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { resolveClaudeCommandMock, spawnMock } = vi.hoisted(() => ({
-  resolveClaudeCommandMock: vi.fn(),
-  spawnMock: vi.fn()
-}))
+const { resolveClaudeCommandMock, spawnMock, resolveWslGuestProxySettingsMock } = vi.hoisted(
+  () => ({
+    resolveClaudeCommandMock: vi.fn(),
+    spawnMock: vi.fn(),
+    resolveWslGuestProxySettingsMock: vi.fn()
+  })
+)
 
 vi.mock('../codex-cli/command', () => ({
   resolveClaudeCommand: resolveClaudeCommandMock
+}))
+
+vi.mock('../wsl/wsl-guest-proxy-gateway', () => ({
+  resolveWslGuestProxySettings: resolveWslGuestProxySettingsMock
 }))
 
 vi.mock('node-pty', () => ({
@@ -54,6 +61,9 @@ describe('fetchViaPty', () => {
     vi.useFakeTimers()
     vi.clearAllMocks()
     resolveClaudeCommandMock.mockReturnValue('claude')
+    resolveWslGuestProxySettingsMock.mockImplementation((settings: unknown) =>
+      Promise.resolve(settings)
+    )
   })
 
   it('disposes node-pty listeners before killing the hidden PTY on timeout', async () => {
@@ -156,6 +166,34 @@ describe('fetchViaPty', () => {
     expect(bashCommand).toContain('cd "$orca_rate_limit_cwd"')
     expect(bashCommand).toContain("export HTTPS_PROXY='http://127.0.0.1:7890'")
     expect(bashCommand).toContain('exec claude')
+
+    term.emitExit()
+    await resultPromise
+  })
+
+  it('exports the WSL-gateway-rewritten proxy inside the WSL launch command', async () => {
+    const term = makeMockTerm()
+    spawnMock.mockReturnValue(term)
+    resolveWslGuestProxySettingsMock.mockResolvedValue({
+      httpProxyUrl: 'http://172.28.112.193:7890'
+    })
+
+    const resultPromise = fetchViaPty({
+      networkProxySettings: { httpProxyUrl: 'http://127.0.0.1:7890' },
+      authPreparation: {
+        configDir: '/home/u/.claude',
+        runtime: 'wsl',
+        wslDistro: 'Ubuntu',
+        wslLinuxConfigDir: '/home/u/.claude',
+        envPatch: { CLAUDE_CONFIG_DIR: '/home/u/.claude' },
+        stripAuthEnv: false,
+        provenance: 'system'
+      }
+    })
+    await vi.advanceTimersByTimeAsync(0)
+
+    const bashCommand = (spawnMock.mock.calls[0] as [string, string[]])[1].at(-1) as string
+    expect(bashCommand).toContain("export HTTPS_PROXY='http://172.28.112.193:7890'")
 
     term.emitExit()
     await resultPromise
