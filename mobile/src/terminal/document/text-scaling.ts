@@ -1,5 +1,5 @@
 import { elementInRoot } from './document-host-seams'
-import { TERMINAL_TEXT_SCALES } from '../../storage/preferences'
+import { TERMINAL_TEXT_SCALES } from '../terminal-text-scales'
 import type { TerminalDocumentScope } from './document-scope'
 import { scheduleDocumentFrame } from './document-frame-registry'
 import { applyFitScale, getCellHeight, MIN_FIT_COLS } from './fit-scale'

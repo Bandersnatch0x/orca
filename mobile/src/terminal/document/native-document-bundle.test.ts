@@ -1,5 +1,7 @@
 // @vitest-environment happy-dom
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
+import { terminalDocumentBundleInputs } from '../../../scripts/build-terminal-document-script.mjs'
+import { createTerminalDocument } from './create-terminal-document'
 import { TERMINAL_DOCUMENT_SCRIPT } from '../terminal-webview-document-script.generated'
 import { TERMINAL_DOCUMENT_MARKUP } from '../terminal-webview-html'
 
@@ -15,11 +17,16 @@ import { TERMINAL_DOCUMENT_MARKUP } from '../terminal-webview-html'
  * touched — the window listener, the frame parse, the router and `init` — and it is the one thing
  * that says the bundle is a working document rather than a well-formed string.
  *
+ * This file, the module tests beside it and the page's render check are together what the golden
+ * was: the golden said the text had not moved, the module tests say each part does its job, the
+ * render check says the page's copy paints, and this says the phone's copy runs and answers.
+ *
  * `tap-routing` and `wheel-scroll` run the same bundle for behaviour of their own; this is the
  * bring-up, so a failure here says the bundle is broken rather than that a gesture is.
  */
 function engineDouble() {
   const opened: HTMLElement[] = []
+  const written: string[] = []
   class Terminal {
     cols = 80
     rows = 24
@@ -35,7 +42,8 @@ function engineDouble() {
       }
     }
     unicode = { activeVersion: '6' }
-    write(_data: string, callback?: () => void) {
+    write(data: string, callback?: () => void) {
+      written.push(data)
       callback?.()
     }
     open(element: HTMLElement) {
@@ -67,7 +75,70 @@ function engineDouble() {
     scrollToBottom() {}
     dispose() {}
   }
-  return { Terminal, opened }
+  return { Terminal, opened, written }
+}
+
+/** The frames the shell posts, as the shell posts them. */
+function post(message: Record<string, unknown>) {
+  window.dispatchEvent(new MessageEvent('message', { data: JSON.stringify(message) }))
+}
+
+/**
+ * The listeners a document installs, captured around one evaluation.
+ *
+ * Both targets, because the WebView's transport takes `message` on `window` for the injected bridge
+ * and on `document` for Android's dispatch. The removals come back with them: the WebView never
+ * stops its document and neither does a case, so a case that has finished has to take its own
+ * listeners off or the next one's frames reach two documents.
+ */
+function recordMessageListeners(run: () => void) {
+  const added: string[] = []
+  const removals: Array<() => void> = []
+  const windowAdd = window.addEventListener
+  const documentAdd = document.addEventListener
+  const record = (
+    target: Window | Document,
+    name: string,
+    args: Parameters<typeof window.addEventListener>
+  ) => {
+    if (args[0] === 'message') {
+      added.push(name)
+      removals.push(() => target.removeEventListener(args[0], args[1], args[2]))
+    }
+  }
+  window.addEventListener = (...args: Parameters<typeof window.addEventListener>) => {
+    record(window, 'window', args)
+    return windowAdd.apply(window, args)
+  }
+  document.addEventListener = (...args: Parameters<typeof document.addEventListener>) => {
+    record(document, 'document', args)
+    return documentAdd.apply(document, args)
+  }
+  try {
+    run()
+  } finally {
+    window.addEventListener = windowAdd
+    document.addEventListener = documentAdd
+  }
+  return { added, removals }
+}
+
+/** Every listener this file's documents are still holding, taken off between cases. */
+const liveListeners: Array<() => void> = []
+
+afterEach(() => {
+  while (liveListeners.length > 0) {
+    liveListeners.pop()!()
+  }
+})
+
+/** The WebView's own act: evaluate the string, and keep what it installed so the case can undo it. */
+function evaluateBundle() {
+  const { added, removals } = recordMessageListeners(() => {
+    new Function(TERMINAL_DOCUMENT_SCRIPT)()
+  })
+  liveListeners.push(...removals)
+  return added
 }
 
 describe('the bundled native document', () => {
@@ -86,7 +157,7 @@ describe('the bundled native document', () => {
     })
 
     // The WebView evaluates this string; so does this case.
-    new Function(TERMINAL_DOCUMENT_SCRIPT)()
+    evaluateBundle()
 
     // The document's last act at start: it has the engine, so it says so.
     expect(posted.map((message) => message.type)).toContain('web-ready')
@@ -118,13 +189,108 @@ describe('the bundled native document', () => {
       Terminal,
       __engineErrors: []
     })
-    new Function(TERMINAL_DOCUMENT_SCRIPT)()
+    evaluateBundle()
 
     window.dispatchEvent(
       new MessageEvent('message', { data: JSON.stringify({ type: 'ping', id: 9 }) })
     )
     expect(posted).toContainEqual({ type: 'pong', pingId: 9 })
   })
+
+  it('takes a theme and a write before init, and init is what decides they are stale', async () => {
+    // Read from the router, not assumed: `set-theme` before init applies to the scope and paints
+    // through the seam, and `write` normalises, queues and pumps — the pump returns at once because
+    // there is no terminal. Then `init` resets the queue and the mode scan, so the chunk that
+    // arrived early is dropped rather than replayed under the snapshot, and the init frame's own
+    // theme wins over the early one.
+    document.body.innerHTML = TERMINAL_DOCUMENT_MARKUP
+    const posted: Record<string, unknown>[] = []
+    const { Terminal, opened, written } = engineDouble()
+    Object.assign(globalThis, {
+      ReactNativeWebView: {
+        postMessage: (message: string) => posted.push(JSON.parse(message))
+      },
+      Terminal,
+      __engineErrors: []
+    })
+    evaluateBundle()
+
+    post({ type: 'set-theme', terminalTheme: { theme: { background: 'rgb(1, 2, 3)' } } })
+    expect(document.documentElement.style.background).toBe('rgb(1, 2, 3)')
+    post({ type: 'write', data: 'early chunk' })
+    expect(posted.map((message) => message.type)).not.toContain('error')
+
+    post({
+      type: 'init',
+      cols: 80,
+      rows: 24,
+      initialData: 'replayed',
+      terminalTheme: { theme: { background: 'rgb(4, 5, 6)' } },
+      preserveScroll: false
+    })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    expect(opened).toHaveLength(1)
+    expect(document.documentElement.style.background).toBe('rgb(4, 5, 6)')
+    expect(written.join('')).toContain('replayed')
+    expect(written.join('')).not.toContain('early chunk')
+    // Still the same document afterwards, which is what says the out-of-order frames cost nothing.
+    post({ type: 'ping', id: 4 })
+    expect(posted).toContainEqual({ type: 'pong', pingId: 4 })
+  })
+
+  it('keeps the transport it installed, where the page installs none', () => {
+    // The WebView never stops its document, so the listeners it takes are for the life of the page
+    // it owns. A page mounting the same modules is a guest: `installHostTransport` is the seam that
+    // says so, and a host that installs nothing takes none of the shell's own frames.
+    document.body.innerHTML = TERMINAL_DOCUMENT_MARKUP
+    const { Terminal } = engineDouble()
+    Object.assign(globalThis, {
+      ReactNativeWebView: { postMessage: () => {} },
+      Terminal,
+      __engineErrors: []
+    })
+
+    expect(evaluateBundle()).toEqual(['window', 'document'])
+    // Nothing stopped it, and the transport is still live: a frame posted now still routes.
+    const posted: Record<string, unknown>[] = []
+    Object.assign(globalThis, {
+      ReactNativeWebView: {
+        postMessage: (message: string) => posted.push(JSON.parse(message))
+      }
+    })
+    post({ type: 'ping', id: 7 })
+    expect(posted).toContainEqual({ type: 'pong', pingId: 7 })
+
+    const host = document.createElement('div')
+    host.innerHTML = TERMINAL_DOCUMENT_MARKUP
+    document.body.appendChild(host)
+    const { added: pageListeners } = recordMessageListeners(() => {
+      createTerminalDocument({
+        root: host,
+        hasEngine: () => true,
+        installHostTransport: () => () => {},
+        postToHost: () => {},
+        paintDocumentBackground: () => {},
+        installErrorReporter: () => () => {},
+        capturedEngineErrors: () => []
+      }).stop()
+    })
+    expect(pageListeners).toEqual([])
+  })
+
+  it('carries the document and nothing else: no dependency rides into the WebView', async () => {
+    // The document imports ordinary modules now, so an import added anywhere in its graph reaches
+    // the phone's script. `storage/preferences` did: one constant pulled AsyncStorage and its two
+    // dependencies into a string with nothing to store, which is why the presets are a leaf module.
+    const inputs = await terminalDocumentBundleInputs()
+    expect(inputs.filter((input) => input.includes('node_modules'))).toEqual([])
+    expect(inputs.length).toBeGreaterThan(40)
+    expect(TERMINAL_DOCUMENT_SCRIPT).not.toContain('__commonJS')
+    // `__esm` wrappers are esbuild's answer to a cycle, and a cycle would make a module's top level
+    // run at first import rather than where the bundle places it.
+    expect(TERMINAL_DOCUMENT_SCRIPT).not.toContain('__esm(')
+  }, 30_000)
 
   it('reports a missing engine rather than starting without one', () => {
     document.body.innerHTML = TERMINAL_DOCUMENT_MARKUP
@@ -139,7 +305,7 @@ describe('the bundled native document', () => {
     // load leaves it undefined. The precondition for the case above.
     Reflect.deleteProperty(globalThis, 'Terminal')
 
-    new Function(TERMINAL_DOCUMENT_SCRIPT)()
+    evaluateBundle()
 
     expect(posted.map((message) => message.type)).not.toContain('web-ready')
     expect(posted).toContainEqual(

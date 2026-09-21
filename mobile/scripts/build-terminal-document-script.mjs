@@ -33,8 +33,14 @@ const GENERATED_HEADER =
   `// The source is mobile/src/terminal/document/, bundled from native-document-entry.ts.\n` +
   `// Target: ${TARGET}. Regenerate via pnpm postinstall.`
 
-export async function buildTerminalDocumentScript() {
-  const result = await esbuild.build({
+/**
+ * One options object, so a census of what the bundle contains measures the bundle that ships.
+ *
+ * `minify: false` is load-bearing beyond readability: the engine-error overlay reports the line and
+ * column `window.onerror` hands it, and a minified document makes both useless.
+ */
+export function terminalDocumentBuildOptions(extra = {}) {
+  return {
     entryPoints: [ENTRY],
     bundle: true,
     format: 'iife',
@@ -43,8 +49,19 @@ export async function buildTerminalDocumentScript() {
     target: TARGET,
     legalComments: 'none',
     write: false,
-    logLevel: 'silent'
-  })
+    logLevel: 'silent',
+    ...extra
+  }
+}
+
+/** Every module the bundle pulls in, which is what a test reads to see what it is carrying. */
+export async function terminalDocumentBundleInputs() {
+  const result = await esbuild.build(terminalDocumentBuildOptions({ metafile: true }))
+  return Object.keys(result.metafile.inputs)
+}
+
+export async function buildTerminalDocumentScript() {
+  const result = await esbuild.build(terminalDocumentBuildOptions())
   const [output] = result.outputFiles
   if (!output) {
     throw new Error('[build-terminal-document-script] esbuild emitted no document bundle')
