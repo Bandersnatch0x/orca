@@ -24,6 +24,10 @@ import {
  *   local modules   970 ->  972   (+2)
  *   minified bytes  3,768,122 -> 3,764,937   (-3,185)
  *
+ * That byte figure is the lane's own, measured at the commit before main was merged in. This head
+ * reads 3,765,180: the 243 between them are the two touch-root predicates and main's own #21687
+ * momentum change, which arrived with e476193bf5 and are not this lane's to claim either way.
+ *
  * What moved is which files carry the document, not whether the page carries it. C7.5 already put
  * the document's own source modules in this closure and started them per mount, and ruling 25 keeps
  * them there: the page imports ordinary TypeScript and calls it, and nothing generated is in the
