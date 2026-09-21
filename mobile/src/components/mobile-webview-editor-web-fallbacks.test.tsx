@@ -54,7 +54,10 @@ vi.mock('lucide-react-native', () => ({
 // import is the codegen lookup this whole file exists because of.
 vi.mock('react-native-webview', async () => {
   const React = await import('react')
-  return { WebView: (props: object) => React.createElement('WebView', props) }
+  return {
+    WebView: ({ children, ...props }: { children?: React.ReactNode }) =>
+      React.createElement('WebView', props, children)
+  }
 })
 
 import { MobileHtmlPreview, MOBILE_HTML_PREVIEW_SANDBOX } from './MobileHtmlPreview.web'
