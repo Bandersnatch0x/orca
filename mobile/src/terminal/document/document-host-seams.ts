@@ -214,3 +214,61 @@ export function elementInRoot(root: ParentNode | null, id: string) {
   const within = root === null ? document : root
   return within.querySelector<HTMLElement>(`#${id}`)
 }
+
+/** An element a target can be tested against; a method, so a real element satisfies it. */
+export type TerminalDocumentTargetContainer = { contains(other: EventTarget | null): boolean }
+
+/**
+ * Whether an event on the page is this document's to read.
+ *
+ * The counterpart of `elementInRoot` for events rather than elements, and for the same reason: a
+ * listener on `document` is page-wide, so with two documents on one page each is handed the other's
+ * touches. Without this, a pinch in one terminal drops the selection of the terminal nobody
+ * touched, because the dispatcher's two-finger branch answers before it looks at the target.
+ *
+ * Asked once at the top of each document-level handler rather than inside its branches, because
+ * every branch has the same answer and a branch added later would not remember to ask.
+ *
+ * Inside the WebView the document *is* the page (`root === null`), so this says yes to everything
+ * and the native document's dispatcher is unchanged.
+ */
+export function eventTargetInRoot(
+  root: TerminalDocumentTargetContainer | null,
+  target: EventTarget | null
+) {
+  if (root === null) {
+    return true
+  }
+  return target !== null && root.contains(target)
+}
+
+/**
+ * This document's own fingers out of a page-wide touch list.
+ *
+ * `eventTargetInRoot` settles whose event it is; the list inside the event is a second page-wide
+ * read, because `e.touches` is every finger on the screen and not the ones on this terminal. So a
+ * finger resting in the other document makes this one see two touches and latch a pinch, or makes
+ * `length === 0` false on touchend so the tap it should fire never does — the same defect one level
+ * in, and every count and index in the dispatcher and the surface gestures reads through here.
+ *
+ * `root === null` is the WebView, whose fingers are all its own: the list comes back untouched, so
+ * the native document allocates nothing on a path that runs at frame rate.
+ *
+ * `ArrayLike` rather than `TouchList`: the filtered list is a real array, and both are read the
+ * only two ways the document reads either, by `length` and by index.
+ */
+export function touchesInRoot(
+  root: TerminalDocumentTargetContainer | null,
+  touches: ArrayLike<Touch>
+): ArrayLike<Touch> {
+  if (root === null) {
+    return touches
+  }
+  const mine: Touch[] = []
+  for (let i = 0; i < touches.length; i++) {
+    if (eventTargetInRoot(root, touches[i].target)) {
+      mine.push(touches[i])
+    }
+  }
+  return mine
+}

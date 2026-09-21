@@ -1,5 +1,6 @@
 import type { TerminalDocumentScope } from './document-scope'
 import { scheduleDocumentFrame } from './document-frame-registry'
+import { touchesInRoot } from './document-host-seams'
 import { clampPan, getCellHeight } from './fit-scale'
 import { notify } from './host-notify'
 import { attachSurfaceMouseClickDragHandler } from './mouse-click-drag'
@@ -99,20 +100,21 @@ export function attachSurfaceEventHandlers(
         cancelAnimationFrame(scope.touchGesture.momentumId)
         scope.touchGesture.momentumId = null
       }
-      if (e.touches.length === 2) {
+      const touches = touchesInRoot(scope.root, e.touches)
+      if (touches.length === 2) {
         scope.touchGesture.isPinching = true
         scope.smoothScrollOffsetY = 0
-        scope.touchGesture.pinchDist = getDistance(e.touches[0], e.touches[1])
+        scope.touchGesture.pinchDist = getDistance(touches[0], touches[1])
         scope.touchGesture.pinchScale = scope.userScale
-        const mx = (e.touches[0].clientX + e.touches[1].clientX) / 2
-        const my = (e.touches[0].clientY + e.touches[1].clientY) / 2
+        const mx = (touches[0].clientX + touches[1].clientX) / 2
+        const my = (touches[0].clientY + touches[1].clientY) / 2
         const total = getTotalScale(scope)
         scope.touchGesture.pinchSurfX = (mx - scope.panX) / total
         scope.touchGesture.pinchSurfY = (my - scope.panY) / total
-      } else if (e.touches.length === 1) {
+      } else if (touches.length === 1) {
         scope.touchGesture.isPinching = false
-        scope.touchGesture.lastX = e.touches[0].clientX
-        scope.touchGesture.lastY = e.touches[0].clientY
+        scope.touchGesture.lastX = touches[0].clientX
+        scope.touchGesture.lastY = touches[0].clientY
         scope.touchGesture.lastTime = Date.now()
         scope.touchGesture.velY = 0
         scope.touchGesture.accumDelta = 0
@@ -133,11 +135,12 @@ export function attachSurfaceEventHandlers(
       e.preventDefault()
       e.stopPropagation()
 
-      if (e.touches.length === 2) {
+      const touches = touchesInRoot(scope.root, e.touches)
+      if (touches.length === 2) {
         scope.touchGesture.isPinching = true
-        const dist = getDistance(e.touches[0], e.touches[1])
-        const mx = (e.touches[0].clientX + e.touches[1].clientX) / 2
-        const my = (e.touches[0].clientY + e.touches[1].clientY) / 2
+        const dist = getDistance(touches[0], touches[1])
+        const mx = (touches[0].clientX + touches[1].clientX) / 2
+        const my = (touches[0].clientY + touches[1].clientY) / 2
 
         const ratio = dist / scope.touchGesture.pinchDist
         // Why: userScale is a CSS multiplier on the current font size; bound it so
@@ -154,9 +157,9 @@ export function attachSurfaceEventHandlers(
         scope.panY = my - scope.touchGesture.pinchSurfY * total
         clampPan(scope)
         updateTransform(scope)
-      } else if (e.touches.length === 1 && !scope.touchGesture.isPinching) {
-        const x = e.touches[0].clientX,
-          y = e.touches[0].clientY
+      } else if (touches.length === 1 && !scope.touchGesture.isPinching) {
+        const x = touches[0].clientX,
+          y = touches[0].clientY
         const now = Date.now(),
           dt = now - scope.touchGesture.lastTime
 
@@ -210,7 +213,8 @@ export function attachSurfaceEventHandlers(
         return
       }
 
-      if (scope.touchGesture.isPinching && e.touches.length < 2) {
+      const touches = touchesInRoot(scope.root, e.touches)
+      if (scope.touchGesture.isPinching && touches.length < 2) {
         scope.touchGesture.isPinching = false
         // Why: a finished pinch snaps to the nearest preset and becomes the new
         // font size (reflowing the grid), so pinch-to-zoom IS the in-terminal way
@@ -227,9 +231,9 @@ export function attachSurfaceEventHandlers(
         if (changed) {
           notify(scope, { type: 'haptic', kind: 'selection' })
         }
-        if (e.touches.length === 1) {
-          scope.touchGesture.lastX = e.touches[0].clientX
-          scope.touchGesture.lastY = e.touches[0].clientY
+        if (touches.length === 1) {
+          scope.touchGesture.lastX = touches[0].clientX
+          scope.touchGesture.lastY = touches[0].clientY
           scope.touchGesture.lastTime = Date.now()
           scope.touchGesture.velY = 0
           scope.touchGesture.accumDelta = 0
@@ -237,17 +241,20 @@ export function attachSurfaceEventHandlers(
         return
       }
 
-      if (e.touches.length === 0) {
+      if (touches.length === 0) {
         let vel = scope.touchGesture.velY
         const FRICTION = 0.972
         const MIN_VEL = 0.012
-        function momentumStep() {
-          vel *= FRICTION
+        let lastMomentumTime = performance.now()
+        function momentumStep(frameTime: number) {
+          const elapsed = Math.max(1, Math.min(50, frameTime - lastMomentumTime))
+          lastMomentumTime = frameTime
+          vel *= FRICTION ** (elapsed / 16)
           if (Math.abs(vel) < MIN_VEL) {
             scope.touchGesture.momentumId = null
             return
           }
-          const delta = vel * 16
+          const delta = vel * elapsed
           if (shouldRouteScrollToTerminalInput(scope)) {
             resetSmoothScrollOffset(scope)
             const effectiveCellH = getCellHeight(scope) * getTotalScale(scope)

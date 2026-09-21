@@ -4,6 +4,11 @@ import { notify } from './host-notify'
 import { viewportToCell } from './viewport-cell'
 import type { TerminalDocumentScope } from './document-scope'
 import { notifyTerminalSurfaceTap } from './surface-tap'
+import {
+  eventTargetInRoot,
+  touchesInRoot,
+  type TerminalDocumentTargetContainer
+} from './document-host-seams'
 
 /** The press duration that starts a selection, in milliseconds. */
 const LONG_PRESS_MS = 500
@@ -29,10 +34,7 @@ export type TerminalTouchDispatch = {
   longPressFingerInsideOverlay: boolean
 }
 
-/** An element a target can be tested against; a method so a real element satisfies it. */
-type TerminalDocumentTargetContainer = { contains(other: EventTarget | null): boolean }
-
-export function touchById(touches: TouchList, id: number | null) {
+export function touchById(touches: ArrayLike<Touch>, id: number | null) {
   for (let i = 0; i < touches.length; i++) {
     if (touches[i].identifier === id) {
       return touches[i]
@@ -96,8 +98,22 @@ export function dispatcherShouldBlockSurface(scope: TerminalDocumentScope) {
 const CAPTURE_ACTIVE = { capture: true, passive: false }
 const CAPTURE_PASSIVE = { capture: true, passive: true }
 
+/**
+ * Whether a touch belongs to this document (ruling 22's last page-wide read).
+ *
+ * `e.target` is the element the finger went down on and stays that element for the life of the
+ * touch, so a select-drag that travels outside the host still answers yes on move and end.
+ */
+function touchIsThisDocuments(scope: TerminalDocumentScope, e: { target: EventTarget | null }) {
+  return eventTargetInRoot(scope.root, e.target)
+}
+
 function onDocumentTouchStart(scope: TerminalDocumentScope, e: TouchEvent) {
-  const t = e.touches[0]
+  if (!touchIsThisDocuments(scope, e)) {
+    return
+  }
+  const touches = touchesInRoot(scope.root, e.touches)
+  const t = touches[0]
   const target = e.target
   const onHandle = target === scope.handleStart || target === scope.handleEnd
   const inOverlay = targetInside(target, scope.selectionOverlay)
@@ -107,14 +123,14 @@ function onDocumentTouchStart(scope: TerminalDocumentScope, e: TouchEvent) {
   // taps never resolve as a link tap on touchend.
   scope.tapCandidate = null
 
-  if (e.touches.length === 2) {
+  if (touches.length === 2) {
     // pinch latch
     if (scope.selMode === 'select') {
       notify(scope, { type: 'mobile-clip-cancel-by-pinch' })
       cancelSelect(scope)
     }
     scope.touchDispatch.mode = 'pinch'
-    scope.touchDispatch.touchIds = [e.touches[0].identifier, e.touches[1].identifier]
+    scope.touchDispatch.touchIds = [touches[0].identifier, touches[1].identifier]
     clearLongPress(scope)
     return
   }
@@ -153,8 +169,12 @@ function onDocumentTouchStart(scope: TerminalDocumentScope, e: TouchEvent) {
 }
 
 function onDocumentTouchMove(scope: TerminalDocumentScope, e: TouchEvent) {
+  if (!touchIsThisDocuments(scope, e)) {
+    return
+  }
+  const touches = touchesInRoot(scope.root, e.touches)
   if (scope.touchDispatch.mode === 'select-drag') {
-    const t = touchById(e.touches, scope.touchDispatch.touchId)
+    const t = touchById(touches, scope.touchDispatch.touchId)
     if (!t || !scope.sel || !scope.sel.activeHandle) {
       return
     }
@@ -164,16 +184,16 @@ function onDocumentTouchMove(scope: TerminalDocumentScope, e: TouchEvent) {
   }
   if (scope.touchDispatch.mode === 'surface' || scope.touchDispatch.mode === 'pinch') {
     // long-press slop check
-    if (scope.longPressTimer && e.touches.length === 1) {
-      if (touchSlopExceeded(scope, e.touches[0])) {
+    if (scope.longPressTimer && touches.length === 1) {
+      if (touchSlopExceeded(scope, touches[0])) {
         clearLongPress(scope)
       }
     }
     // Why: disqualify the tap only once the finger travels past TAP_SLOP
     // (a scroll/pan), independent of the long-press timer — so a tap that
     // jitters under TAP_SLOP still opens the link/path under the finger.
-    if (scope.tapCandidate && e.touches.length === 1) {
-      const mt = e.touches[0]
+    if (scope.tapCandidate && touches.length === 1) {
+      const mt = touches[0]
       if (mt.identifier === scope.tapCandidate.identifier) {
         const dx = Math.abs(mt.clientX - scope.tapCandidate.x)
         const dy = Math.abs(mt.clientY - scope.tapCandidate.y)
@@ -181,7 +201,7 @@ function onDocumentTouchMove(scope: TerminalDocumentScope, e: TouchEvent) {
           scope.tapCandidate = null
         }
       }
-    } else if (e.touches.length !== 1) {
+    } else if (touches.length !== 1) {
       scope.tapCandidate = null
     }
     // existing surface handler will run from its own listener
@@ -189,6 +209,10 @@ function onDocumentTouchMove(scope: TerminalDocumentScope, e: TouchEvent) {
 }
 
 function onDocumentTouchEnd(scope: TerminalDocumentScope, e: TouchEvent) {
+  if (!touchIsThisDocuments(scope, e)) {
+    return
+  }
+  const touches = touchesInRoot(scope.root, e.touches)
   if (scope.touchDispatch.mode === 'select-drag') {
     if (scope.sel) {
       scope.sel.activeHandle = null
@@ -199,11 +223,11 @@ function onDocumentTouchEnd(scope: TerminalDocumentScope, e: TouchEvent) {
     return
   }
   if (scope.touchDispatch.mode === 'pinch') {
-    if (e.touches.length < 2) {
-      scope.touchDispatch.mode = e.touches.length === 1 ? 'surface' : 'idle'
+    if (touches.length < 2) {
+      scope.touchDispatch.mode = touches.length === 1 ? 'surface' : 'idle'
       scope.touchDispatch.touchIds = null
-      if (e.touches.length === 1) {
-        scope.touchDispatch.touchId = e.touches[0].identifier
+      if (touches.length === 1) {
+        scope.touchDispatch.touchId = touches[0].identifier
       }
     }
     return
@@ -213,7 +237,7 @@ function onDocumentTouchEnd(scope: TerminalDocumentScope, e: TouchEvent) {
     // TAP_SLOP) rather than longPressOrigin, which the press-to-select slop
     // can null mid-tap — that was dropping URL/file taps that moved a few px.
     if (
-      e.touches.length === 0 &&
+      touches.length === 0 &&
       scope.tapCandidate &&
       scope.selMode !== 'select' &&
       Date.now() - scope.tapCandidate.t <= TAP_MAX_MS
@@ -222,14 +246,17 @@ function onDocumentTouchEnd(scope: TerminalDocumentScope, e: TouchEvent) {
     }
     clearLongPress(scope)
     scope.tapCandidate = null
-    if (e.touches.length === 0) {
+    if (touches.length === 0) {
       scope.touchDispatch.mode = 'idle'
       scope.touchDispatch.touchId = null
     }
   }
 }
 
-function onDocumentTouchCancel(scope: TerminalDocumentScope) {
+function onDocumentTouchCancel(scope: TerminalDocumentScope, e: TouchEvent) {
+  if (!touchIsThisDocuments(scope, e)) {
+    return
+  }
   clearLongPress(scope)
   scope.tapCandidate = null
   stopEdgeScroll(scope)
@@ -253,7 +280,7 @@ export function startTapDispatch(scope: TerminalDocumentScope) {
   const start = (e: TouchEvent) => onDocumentTouchStart(scope, e)
   const move = (e: TouchEvent) => onDocumentTouchMove(scope, e)
   const end = (e: TouchEvent) => onDocumentTouchEnd(scope, e)
-  const cancel = () => onDocumentTouchCancel(scope)
+  const cancel = (e: TouchEvent) => onDocumentTouchCancel(scope, e)
   document.addEventListener('touchstart', start, CAPTURE_ACTIVE)
   document.addEventListener('touchmove', move, CAPTURE_ACTIVE)
   document.addEventListener('touchend', end, CAPTURE_PASSIVE)

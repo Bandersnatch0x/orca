@@ -71,7 +71,10 @@ describe('TerminalWebView scroll routing', () => {
     )
     expect(touchMoveBlock).toContain('routeScrollLines(scope, lines, x, y)')
 
-    const momentumBlock = sliceBetween('function momentumStep() {', 'if (Math.abs(vel) > MIN_VEL)')
+    const momentumBlock = sliceBetween(
+      'function momentumStep(frameTime: number) {',
+      'if (Math.abs(vel) > MIN_VEL)'
+    )
     expect(momentumBlock.indexOf('if (shouldRouteScrollToTerminalInput(scope))')).toBeLessThan(
       momentumBlock.indexOf('if (!applyNormalBufferScrollDelta(scope, delta))')
     )
@@ -98,7 +101,10 @@ describe('TerminalWebView scroll routing', () => {
     expect(touchMoveBlock).toContain('if (enqueueNormalBufferScrollDelta(scope, deltaY))')
     expect(touchMoveBlock).toContain('scope.touchGesture.velY = 0')
 
-    const momentumBlock = sliceBetween('function momentumStep() {', 'if (Math.abs(vel) > MIN_VEL)')
+    const momentumBlock = sliceBetween(
+      'function momentumStep(frameTime: number) {',
+      'if (Math.abs(vel) > MIN_VEL)'
+    )
     expect(momentumBlock).toContain('if (!applyNormalBufferScrollDelta(scope, delta))')
     expect(momentumBlock).toContain('scope.touchGesture.momentumId = null')
   })
@@ -189,6 +195,13 @@ describe('TerminalWebView scroll routing', () => {
     expect(source).toContain('scope.touchGesture.velY * 0.55 + instantVelocity * 0.45')
     expect(source).toContain('const FRICTION = 0.972')
     expect(source).toContain('const MIN_VEL = 0.012')
+    // #21687: the decay is per elapsed millisecond, so a 120 Hz screen coasts the same distance.
+    expect(source).toContain('let lastMomentumTime = performance.now()')
+    expect(source).toContain(
+      'const elapsed = Math.max(1, Math.min(50, frameTime - lastMomentumTime))'
+    )
+    expect(source).toContain('vel *= FRICTION ** (elapsed / 16)')
+    expect(source).toContain('const delta = vel * elapsed')
   })
 
   it('keeps selection edge autoscroll active and extends the dragged endpoint', () => {
