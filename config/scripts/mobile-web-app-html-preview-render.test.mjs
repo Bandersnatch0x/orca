@@ -317,11 +317,9 @@ async function open(
   const pixelBefore = await probePixel(page)
   if (act) {
     await act({ page, frame: frames()[0] ?? null })
-    if (awaitMainFrameNavigation) {
-      await waitForMainFrameNavigation(page, navigations)
-    } else {
-      await settleWithoutNavigation(page)
-    }
+    await (awaitMainFrameNavigation
+      ? waitForMainFrameNavigation(page, navigations)
+      : settleWithoutNavigation(page))
   }
   const result = {
     page,
