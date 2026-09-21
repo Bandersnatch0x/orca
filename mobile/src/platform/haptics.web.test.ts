@@ -30,13 +30,15 @@ afterEach(() => {
 })
 
 describe('the haptic each page function asks the shell for', () => {
+  // Kind first, because the title reads the first argument: `%#` consumes none, so with the
+  // function in front `%s` printed its whole body as the name of the case.
   it.each([
-    [triggerMediumImpact, 'mediumImpact'],
-    [triggerSelection, 'selection'],
-    [triggerSuccess, 'success'],
-    [triggerError, 'error'],
-    [triggerEdgeBump, 'edgeBump']
-  ] as const)('posts exactly one %# notify, carrying %s', (trigger, kind) => {
+    ['mediumImpact', triggerMediumImpact],
+    ['selection', triggerSelection],
+    ['success', triggerSuccess],
+    ['error', triggerError],
+    ['edgeBump', triggerEdgeBump]
+  ] as const)('posts exactly one notify, carrying %s', (kind, trigger) => {
     trigger()
     expect(asked).toEqual([kind])
   })

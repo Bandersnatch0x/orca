@@ -17,9 +17,9 @@ import { z } from 'zod'
 /**
  * The grant, a single token rather than the notify's own name.
  *
- * `GRANT_NAME_PATTERN` in the manifest contract admits a dotted path only for a `native.<a>.<b>`
- * verb, so a route declaring `native.haptics.trigger` would have its whole bundle refused. One
- * token also matches what the capability is: an app either plays haptics or it does not.
+ * The notify table's grants are tokens — `navigate`, `storage` — because a notify is not a verb:
+ * `MOBILE_WEB_SHELL_GRANTS` spreads the dotted names from the verb table alone. One token is also
+ * what the capability is: an app either plays haptics or it does not.
  */
 export const BRIDGE_HAPTICS_GRANT = 'haptics'
 

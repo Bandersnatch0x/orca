@@ -22,7 +22,8 @@ export const MOBILE_WEB_SHELL_GRANTS = [
   // `wantsBinary`. Named where the rule that reads it lives, so the two cannot drift.
   BRIDGE_SCREENCAST_BINARY_GRANT,
   // The device's own feedback, played by the app's functions on the page's behalf. A token rather
-  // than the notify's dotted name, which is a spelling no manifest route may declare.
+  // than the notify's dotted name, because a notify is not a verb: the dotted names below are the
+  // verb table's, spread from it.
   BRIDGE_HAPTICS_GRANT,
   // Spread rather than restated: the verb table is keyed on this same tuple, so a verb cannot be
   // advertised without a row and a row cannot exist without being advertised.
@@ -57,7 +58,13 @@ export function matchesRoutePattern(pathname: string, pattern: string): boolean 
   })
 }
 
-/** The patterns this shell will render from the page: listed, and needing nothing it lacks. */
+/**
+ * The patterns this shell will render from the page: listed, and needing nothing it lacks.
+ *
+ * `every` and not `some`: one grant this build lacks takes the whole route native, so a token every
+ * page route declares couples the whole set to a shell that carries it — `haptics` is the first,
+ * and against a shell without it no page route is served at all.
+ */
 export function implementedPageRoutes(routes: readonly MobileWebPageRoute[] | undefined): string[] {
   return (routes ?? [])
     .filter((route) => route.grants.every(implementsGrant))

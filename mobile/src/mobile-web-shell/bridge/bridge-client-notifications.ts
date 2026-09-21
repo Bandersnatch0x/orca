@@ -25,9 +25,9 @@ import { captureBridgeError } from './bridge-error-capture'
  *
  * Only the two ungated notifies reach that throw. A grant is read off the session, so before `init`
  * there is no grant either and `navigate`, `navigate-back`, `externalLink`, `storage` and the
- * haptic answer false without asking: that is the same false they answer a shell that withheld the grant, and
- * every caller already handles it — `useRouteHandoff` pushes or goes back inside the page instead,
- * where a throw would take down a tap handler nobody wrapped.
+ * haptic answer false without asking: that is the same false they answer a shell that withheld the
+ * grant, and every caller already handles it — `useRouteHandoff` pushes or goes back inside the
+ * page instead, where a throw would take down a tap handler nobody wrapped.
  *
  * `notifyPageFault` reads the session instead of requiring it for a different reason: its one caller
  * is an error boundary, and a report that threw would replace the page's last word with an error

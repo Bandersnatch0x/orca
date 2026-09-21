@@ -25,7 +25,8 @@ export type BridgeNotifyName = Extract<BridgeClientMessage, { type: 'notify' }>[
  * inert while every page is offered all of them, and load-bearing the moment a grant is per-route.
  *
  * Haptics is the second whose name is not its grant, and for a different reason from
- * `navigate-back`: a dotted name is a verb's spelling and no manifest route may declare one.
+ * `navigate-back`: every grant in this table is a token because a notify is not a verb, and the
+ * dotted names in `MOBILE_WEB_SHELL_GRANTS` come from the verb table alone.
  */
 const BRIDGE_NOTIFY_GRANTS: Readonly<Record<BridgeNotifyName, string | null>> = {
   foreground: null,

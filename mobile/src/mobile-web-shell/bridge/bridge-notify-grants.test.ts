@@ -107,16 +107,17 @@ describe('the grant table', () => {
  * Haptics, the first notify added since the protocol's own, and the second whose name is not its
  * grant: `native.haptics.trigger` rides the single token `haptics`.
  *
- * Dotted names are the verb table's spelling and a grant may not carry one — `GRANT_NAME_PATTERN`
- * admits `native.<seg>.<seg>` for a verb and a bare camelCase token for everything else — so a
- * route declaring the notify's own name declares a grant no manifest may name.
+ * A token because a notify is not a verb: every grant in that table is one, and the dotted names
+ * `MOBILE_WEB_SHELL_GRANTS` carries are spread from the verb table. A route declaring the notify's
+ * own name would be declaring something no shell advertises, which the case below pins.
  */
 describe('the haptics notify', () => {
   it('is refused on a route that was granted no haptics', () => {
     expect(bridgeNotifyRefusal({ name: BRIDGE_HAPTICS_NOTIFY, initSent: true, granted: [] })).toBe(
       'ungranted'
     )
-    // Granted everything else this shell has, so the refusal is the haptics row and not an empty list.
+    // Granted everything else this shell has, so the refusal is the haptics row and not an
+    // empty list.
     expect(
       bridgeNotifyRefusal({
         name: BRIDGE_HAPTICS_NOTIFY,
@@ -166,7 +167,7 @@ describe('the haptics notify', () => {
  */
 describe('a grant table missing a row', () => {
   it('does not typecheck', () => {
-    // @ts-expect-error TS2741: no row for `native.haptics.trigger`, which is the hole the Record closes.
+    // @ts-expect-error TS2741: no row for the haptics notify, the hole the Record closes.
     const incomplete: Readonly<Record<BridgeNotifyName, string | null>> = {
       foreground: null,
       terminalViewport: null,

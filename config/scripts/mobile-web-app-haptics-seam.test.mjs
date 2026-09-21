@@ -245,6 +245,11 @@ describeClosure(
      * Grants are resolved once, from the route the shell opened, and carried for the life of the
      * session. A route that imports the seam and declares nothing is a page whose taps are silent
      * with nothing on screen to say why.
+     *
+     * The cost of the answer being every route: `implementedPageRoutes` filters on
+     * `grants.every(implementsGrant)`, so against a shell that does not carry the token no page
+     * route is served at all and the phone renders the native screens. The mechanism is pinned in
+     * `mobile/src/mobile-web-shell/page-route-policy.test.ts`.
      */
     it('declares haptics on exactly the routes whose closure reaches the seam', async () => {
       const reaching = []
