@@ -44,6 +44,7 @@ internal class OrcaMobileWebShellView(
 ) : ExpoView(context, appContext) {
   private val onLoadState by EventDispatcher<Map<String, Any>>()
   private val onBridgeMessage by EventDispatcher<Map<String, Any>>()
+  private val onExternalNavigation by EventDispatcher<Map<String, Any>>()
 
   private var generationDirectory = ""
   private var sessionId = ""
@@ -354,12 +355,23 @@ internal class OrcaMobileWebShellView(
       return refusedResponse()
     }
 
-    override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean =
-      mobileWebShellDropsNavigation(
+    override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
+      val dropped = mobileWebShellDropsNavigation(
         requestParts(request.url),
         served?.originHost,
         request.isForMainFrame
       )
+      // A dropped main-frame navigation is the user aiming the top frame somewhere else -- a tap on
+      // a link inside the sealed HTML-preview frame, which Chromium hands up as a top-frame
+      // request. Offered to the host, which owns the scheme list and the opener; a drop that is not
+      // offered stays what it has always been, silent.
+      mobileWebShellDroppedNavigationUrl(
+        request.url?.toString(),
+        request.isForMainFrame,
+        dropped
+      )?.let { onExternalNavigation(mapOf("url" to it)) }
+      return dropped
+    }
 
     override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
       // The document that spoke is being replaced, so its proxy stops being somewhere to post: the

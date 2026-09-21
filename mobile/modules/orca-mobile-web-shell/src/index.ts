@@ -6,6 +6,9 @@ import type { MobileWebShellLoadStatePayload } from './load-state'
 /** One raw JSON envelope, exactly as the page posted it. Parsing is the caller's. */
 export type MobileWebShellBridgeMessagePayload = { json: string }
 
+/** The URL of a main-frame navigation the shell cancelled, as the document spelled it. */
+export type MobileWebShellExternalNavigationPayload = { url: string }
+
 export type OrcaMobileWebShellViewProps = ViewProps & {
   /**
    * Absolute path of an activated generation directory: `index.html`, `manifest.json`, and
@@ -29,6 +32,16 @@ export type OrcaMobileWebShellViewProps = ViewProps & {
    * (`MobileWebShellBridge.maxMessageByteCount`); a refusal is silent and reaches no event.
    */
   onBridgeMessage?: (event: NativeSyntheticEvent<MobileWebShellBridgeMessagePayload>) => void
+  /**
+   * A main-frame navigation was cancelled, which is the user aiming the top frame off the document:
+   * a tap on a link inside the sealed HTML-preview frame, which the browser hands up as a top-frame
+   * request. The URL is unfiltered by design — `readBridgeExternalLinkUrl` owns the scheme list and
+   * lives in the half that ships over the air — so a handler must run it through that before
+   * opening anything. Bounded natively at 4096 characters so an artifact cannot spend the boundary.
+   */
+  onExternalNavigation?: (
+    event: NativeSyntheticEvent<MobileWebShellExternalNavigationPayload>
+  ) => void
 }
 
 /** What a ref on the view carries. Expo puts the view's functions on the component prototype. */

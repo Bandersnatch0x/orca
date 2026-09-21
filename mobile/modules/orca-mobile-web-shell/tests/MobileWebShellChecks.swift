@@ -8,6 +8,7 @@ import Foundation
 //     ios/MobileWebShellOrigin.swift ios/MobileWebShellGeneration.swift ios/MobileWebShellCsp.swift \
 //     ios/MobileWebShellLoadState.swift ios/MobileWebShellResponseHeaders.swift \
 //     ios/MobileWebShellBridge.swift ios/MobileWebShellAppliedProps.swift \
+//     ios/MobileWebShellNavigationPolicy.swift \
 //     tests/MobileWebShellChecks.swift && /tmp/mobile-web-shell-checks
 @main struct MobileWebShellChecks {
   static let session = "sess-01JN_aZ9"
@@ -507,6 +508,60 @@ import Foundation
     precondition(gate.refusedCount == 2)
   }
 
+  /// A cancelled navigation is either offered to the host to open or left silent. The rule is the
+  /// frame, not the scheme: TypeScript's `readBridgeExternalLinkUrl` owns which URLs open, and a
+  /// second scheme list here would be two rules that drift.
+  static func checkCancelledNavigation() {
+    let link = "https://example.com/artifact-link"
+    let offered = MobileWebShellNavigationPolicy.cancelledNavigationUrl(
+      url: link, isMainFrame: true, cancelled: true
+    )
+    precondition(offered == link)
+    // Allowed navigations are the served document; nothing to open.
+    precondition(
+      MobileWebShellNavigationPolicy.cancelledNavigationUrl(
+        url: link, isMainFrame: true, cancelled: false
+      ) == nil
+    )
+    // A subframe is the sealed preview loading itself, which is not the user leaving the app.
+    precondition(
+      MobileWebShellNavigationPolicy.cancelledNavigationUrl(
+        url: link, isMainFrame: false, cancelled: true
+      ) == nil
+    )
+    precondition(
+      MobileWebShellNavigationPolicy.cancelledNavigationUrl(
+        url: nil, isMainFrame: true, cancelled: true
+      ) == nil
+    )
+    precondition(
+      MobileWebShellNavigationPolicy.cancelledNavigationUrl(
+        url: "", isMainFrame: true, cancelled: true
+      ) == nil
+    )
+    // The crossing cap, at it and one past it.
+    let cap = MobileWebShellNavigationPolicy.maxCancelledNavigationUrlCharacters
+    let prefix = "https://example.com/"
+    let atCap = prefix + String(repeating: "a", count: cap - prefix.count)
+    precondition(atCap.count == cap)
+    precondition(
+      MobileWebShellNavigationPolicy.cancelledNavigationUrl(
+        url: atCap, isMainFrame: true, cancelled: true
+      ) == atCap
+    )
+    precondition(
+      MobileWebShellNavigationPolicy.cancelledNavigationUrl(
+        url: atCap + "a", isMainFrame: true, cancelled: true
+      ) == nil
+    )
+    // A scheme the opener will refuse still crosses: one filter, in the half that updates.
+    precondition(
+      MobileWebShellNavigationPolicy.cancelledNavigationUrl(
+        url: "javascript:alert(1)", isMainFrame: true, cancelled: true
+      ) == "javascript:alert(1)"
+    )
+  }
+
   static func main() {
     checkSessionIds()
     checkRequestResolution()
@@ -517,6 +572,7 @@ import Foundation
     checkLoadStateMachine()
     checkResponseHeaders()
     checkNavigationErrors()
+    checkCancelledNavigation()
     checkAppliedProps()
     checkBridgeAcceptance()
     checkBridgePostTarget()

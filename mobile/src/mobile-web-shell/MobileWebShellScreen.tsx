@@ -18,6 +18,7 @@ import {
   isDevelopmentBuild,
   useMobileWebShellDroppedFrames
 } from './mobile-web-shell-dev-facts'
+import { cancelledShellNavigationTarget } from './cancelled-navigation-target'
 import { useMobileWebShellBridge } from './use-mobile-web-shell-bridge'
 import type { MobileWebShellRuntime } from './mobile-web-shell-runtime'
 import { useNativeDeviceVerbs } from '../platform/use-native-device-verbs'
@@ -162,6 +163,17 @@ export function MobileWebShellScreen({
   // Declared before the bridge so the handler it is handed already belongs to this session: the
   // media verbs hold staged files, and a registry born after the host would outlive the page.
   const serveNativeVerb = useNativeDeviceVerbs(state.kind === 'ready' ? state.sessionId : null)
+  // Straight to the system handler, and the one opener the shell has: the page's `externalLink`
+  // notify and a cancelled top-frame navigation both arrive here already filtered. The only failure
+  // left is a device with nothing registered for the scheme -- a `mailto:` on a phone with no mail
+  // account. Reported rather than swallowed, because nothing crosses back for either path, and not
+  // rethrown, because both run on a native frame handler.
+  const openUrlForPage = (url: string) => {
+    void Linking.openURL(url).catch((error: unknown) => {
+      console.warn('[web-shell] could not open a URL for the page', { url, error })
+    })
+  }
+
   const bridge = useMobileWebShellBridge({
     hostId,
     route,
@@ -208,11 +220,7 @@ export function MobileWebShellScreen({
     // mail account. Reported rather than swallowed: nothing crosses back for a notify, so this is
     // the one dead tap the verb does not rule out, and silence is what would hide it. Still not
     // rethrown, because this runs on the native frame handler.
-    onExternalLink: (url: string) => {
-      void Linking.openURL(url).catch((error: unknown) => {
-        console.warn('[web-shell] could not open a URL for the page', { url, error })
-      })
-    },
+    onExternalLink: openUrlForPage,
     // The page's own Back goes nowhere: it holds the one history entry the entry wrote, so the only
     // stack to pop is this one.
     onNavigateBack: popShellStack,
@@ -270,6 +278,15 @@ export function MobileWebShellScreen({
         sessionId={state.sessionId}
         bridgeEnabled={bridge.bridgeEnabled}
         onBridgeMessage={bridge.onBridgeMessage}
+        onExternalNavigation={(event) => {
+          const target = cancelledShellNavigationTarget(event.nativeEvent.url)
+          if (target === null) {
+            // Cancelled and not openable: the document's own reloads and anything outside the three
+            // allowed schemes. Silent, as every cancelled navigation was before this event existed.
+            return
+          }
+          openUrlForPage(target)
+        }}
         onLoadState={(event) => {
           const parsed = parseMobileWebShellLoadState(event.nativeEvent)
           if (parsed?.state === 'failed') {

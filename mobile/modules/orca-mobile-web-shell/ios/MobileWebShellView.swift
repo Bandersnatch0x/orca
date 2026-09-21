@@ -175,6 +175,7 @@ internal final class MobileWebShellBridgeMessageTooLargeException: GenericExcept
 final class OrcaMobileWebShellView: ExpoView, WKNavigationDelegate, WKUIDelegate {
   let onLoadState = EventDispatcher()
   let onBridgeMessage = EventDispatcher()
+  let onExternalNavigation = EventDispatcher()
 
   private let schemeHandler = MobileWebShellSchemeHandler()
   private let bridgeReceiver = MobileWebShellBridgeReceiver()
@@ -461,8 +462,20 @@ final class OrcaMobileWebShellView: ExpoView, WKNavigationDelegate, WKUIDelegate
       decisionHandler(.cancel)
       return
     }
-    let allowed = navigationAction.targetFrame?.isMainFrame == true &&
-      isDocumentUrl(navigationAction.request.url)
+    let isMainFrame = navigationAction.targetFrame?.isMainFrame == true
+    let allowed = isMainFrame && isDocumentUrl(navigationAction.request.url)
+    // A cancelled main-frame navigation is the user aiming the top frame somewhere else -- a tap on
+    // a link inside the sealed HTML-preview frame, which the browser hands up as a top-frame
+    // request. Offered to the host, which owns the scheme list and the opener; a cancel that is not
+    // offered stays what it has always been, silent.
+    if !allowed,
+       let url = MobileWebShellNavigationPolicy.cancelledNavigationUrl(
+         url: navigationAction.request.url?.absoluteString,
+         isMainFrame: isMainFrame,
+         cancelled: true
+       ) {
+      onExternalNavigation(["url": url])
+    }
     decisionHandler(allowed ? .allow : .cancel)
   }
 
