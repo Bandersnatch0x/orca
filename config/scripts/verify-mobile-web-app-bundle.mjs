@@ -39,34 +39,23 @@ export function mobileWebAppBundleMaxAssets(routeCount, imageCount) {
 export const MOBILE_WEB_APP_BUNDLE_MAX_TOTAL_BYTES = 9 * 1024 * 1024
 
 /**
- * The scripts one deferred vendor engine emits, which no route count predicts.
- *
- * `import('mermaid')` (C7.10 item B, ruling 28) lands 103 emitted scripts rather than one, because
- * mermaid lazily imports each of its own diagram types and the split follows those boundaries.
- * Measured at mermaid 11.17.2: 172 scripts with it against 69 with it aliased to a stub. Held as
- * its own term so the route term below still catches a page split running away, which is what that
- * term is for — folding 103 into it would have raised the fence and said nothing.
- *
- * None of it is a download: every one hangs off a `dynamic-import` edge, and
- * `mobile-web-app-session-terminal-closure.test.mjs` is the fence for that. It is an asset count,
- * and it is the reason the derived ceiling now crosses the shell's 256 at 24 routes rather than 50.
- */
-export const MOBILE_WEB_APP_BUNDLE_DEFERRED_ENGINE_CHUNKS = 103
-
-/**
  * How many scripts the page may be cut into, for a given number of routes. A chunk is emitted per
  * distinct set of importers rather than per route, so the count is combinatorial in what the
  * routes share: 8 routes measure 23 chunks, 10 measure 40, 12 measure 47, 14 measure 69, about
  * three more per route at the top. Four per route with a flat 16 leaves the next few routes room,
  * so a route added in C2 fails on its own weight and not on a number measured before it existed.
- * The deferred engine's scripts are added separately, above, because they grow with the engine
- * rather than with the route tree.
+ *
+ * The route count is the only term, deliberately. A deferred engine belongs inside one artifact and
+ * costs one script: C7.10 item B first reached mermaid with `import('mermaid')`, which emitted 103
+ * more because mermaid lazily imports each of its own diagram types, and a second term admitting
+ * those would have raised this fence far enough to admit any split at all. The build test's control
+ * is what holds that line.
  *
  * This is the ceiling that catches a split running away; MOBILE_WEB_APP_BUNDLE_MAX_ENTRY_BYTES
  * below is the one that catches it collapsing, and it is the real budget of the two.
  */
 export function mobileWebAppBundleMaxChunks(routeCount) {
-  return 4 * routeCount + 16 + MOBILE_WEB_APP_BUNDLE_DEFERRED_ENGINE_CHUNKS
+  return 4 * routeCount + 16
 }
 
 /**
