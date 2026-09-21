@@ -252,7 +252,10 @@ afterAll(async () => {
  * `csp: null` is the control arm. The foreign origin's hit list is reset per open, so what it holds
  * is this artifact's doing.
  */
-async function open(browser, { extra = {}, csp = 'shipped', sandbox, act } = {}) {
+async function open(
+  browser,
+  { extra = {}, csp = 'shipped', sandbox, act, awaitMainFrameNavigation = false } = {}
+) {
   const origin = csp === 'shipped' ? origins.shipped : origins.none
   nonceCounter += 1
   const nonce = `n${String(nonceCounter)}`
@@ -314,7 +317,11 @@ async function open(browser, { extra = {}, csp = 'shipped', sandbox, act } = {})
   const pixelBefore = await probePixel(page)
   if (act) {
     await act({ page, frame: frames()[0] ?? null })
-    await page.waitForTimeout(600)
+    if (awaitMainFrameNavigation) {
+      await waitForMainFrameNavigation(page, navigations)
+    } else {
+      await settleWithoutNavigation(page)
+    }
   }
   const result = {
     page,
@@ -450,6 +457,7 @@ for (const engine of ['chromium', 'webkit']) {
         // and the native tests named above are where that is pinned; what this counts is that the
         // request is real and reaches the shell at all.
         const root = await open(browser(), {
+          awaitMainFrameNavigation: true,
           act: async ({ frame }) => {
             await frame?.click('#rootlink', { timeout: 2000 }).catch(() => {})
           }
@@ -460,6 +468,7 @@ for (const engine of ['chromium', 'webkit']) {
 
         // `href=""` is the same navigation spelled as "this document", and it resolves the same way.
         const empty = await open(browser(), {
+          awaitMainFrameNavigation: true,
           act: async ({ frame }) => {
             await frame?.click('#emptylink', { timeout: 2000 }).catch(() => {})
           }
@@ -471,6 +480,7 @@ for (const engine of ['chromium', 'webkit']) {
 
       it("hands a user's tap on a link to the top frame, exactly once", async () => {
         const read = await open(browser(), {
+          awaitMainFrameNavigation: true,
           act: async ({ frame }) => {
             await frame?.click('#toplink', { timeout: 2000 }).catch(() => {})
           }
@@ -609,6 +619,50 @@ async function waitForLoadedFrame(page) {
     }
     await page.waitForTimeout(50)
   }
+}
+
+/**
+ * The moment the action's navigation exists, for an arm that expects one.
+ *
+ * No clock on the way through: the route handler above records a main-frame navigation as the browser
+ * dispatches it, so the oracles are read after the thing under test rather than after a wait. The
+ * deadline is the failure path only, and it is there for the message -- an arm whose click missed its
+ * target says so here instead of spending the case's whole timeout.
+ *
+ * Measured, so it is not sold as more than it is: with this replaced by a no-op every arm still
+ * passes, because the reads that follow are each a round trip and the record lands during them. It is
+ * the load the CI runner was under that this is for, which is the same condition that produced the
+ * frame-commit race above.
+ */
+async function waitForMainFrameNavigation(page, navigations) {
+  const deadline = Date.now() + 15_000
+  while (!navigations.some((one) => one.main)) {
+    if (Date.now() > deadline) {
+      throw new Error('the action produced no main-frame navigation to read')
+    }
+    await page.waitForTimeout(10)
+  }
+}
+
+/**
+ * Where an absence is read, for the arms that expect no navigation at all.
+ *
+ * Nothing signals "the tap produced nothing", so this one is bounded rather than awaited. Two painted
+ * frames inside the page come first: by the second, a navigation the click started has been dispatched
+ * and would already be in the list the arms above read. The 200 ms after it is for the popup queue,
+ * which is a browser-process event with no in-page counterpart to await.
+ *
+ * What keeps these absences honest is not the length of that wait: the arms that read 1 on the same
+ * counters take the path above, so a counter that had stopped counting reds there.
+ */
+async function settleWithoutNavigation(page) {
+  await page.evaluate(
+    () =>
+      new Promise((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+      })
+  )
+  await page.waitForTimeout(200)
 }
 
 /** One pixel of the frame's own fill, which is what says the artifact parsed and painted. */
