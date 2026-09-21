@@ -20,9 +20,9 @@ import {
  * re-anchored rather than adjusted: the base this note used to name is far enough back that main
  * has moved 44,296 bytes below its number through changes that are not this lane's.
  *
- *   modules        4320 -> 4321   (+1)
- *   local modules   970 ->  971   (+1)
- *   minified bytes  3,768,122 -> 3,764,932   (-3,190)
+ *   modules        4320 -> 4322   (+2)
+ *   local modules   970 ->  972   (+2)
+ *   minified bytes  3,768,122 -> 3,764,937   (-3,185)
  *
  * What moved is which files carry the document, not whether the page carries it. C7.5 already put
  * the document's own source modules in this closure and started them per mount, and ruling 25 keeps
@@ -30,10 +30,12 @@ import {
  * reading at all — the bundle the phone loads is built from the same modules and is not imported
  * here.
  *
- * The +1 is three modules in and two out. In: `create-terminal-document` holds the start and stop
+ * The +2 is four modules in and two out. In: `create-terminal-document` holds the start and stop
  * sequence, `document-frame-registry` holds the frames, `escape-introducers` holds the two control
- * bytes. Out: `document-constants`, which existed because a generated string cannot import, and
- * `runtime-constants`, whose one element read is the first line of `startSurfaceSwap`.
+ * bytes, and `terminal-text-scales` holds the presets both the document and `storage/preferences`
+ * read — a leaf, because the document is bundled for the WebView and must not reach that module's
+ * AsyncStorage import. Out: `document-constants`, which existed because a generated string cannot
+ * import, and `runtime-constants`, whose one element read is the first line of `startSurfaceSwap`.
  *
  * The bytes fall because threading the scope deletes a closure: every function names its state as a
  * parameter, and a parameter minifies to one character where a shared module-level object could not.
