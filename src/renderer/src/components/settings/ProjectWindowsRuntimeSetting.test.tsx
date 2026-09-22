@@ -283,14 +283,15 @@ describe('ProjectWindowsRuntimeSetting', () => {
       expect(updateProject).toHaveBeenCalledTimes(1)
 
       clickButton(container, 'WSL')
+      // Why assert first: without a rendered Apply button the test would pass
+      // vacuously, never exercising the commit guard it exists to pin.
       const applyButton = Array.from(container.querySelectorAll('button')).find((button) =>
         button.textContent?.includes('Apply runtime change')
       )
-      if (applyButton) {
-        act(() => {
-          applyButton.dispatchEvent(new MouseEvent('click', { bubbles: true }))
-        })
-      }
+      expect(applyButton).toBeTruthy()
+      act(() => {
+        applyButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      })
 
       // Why still 1: the lock guard no-ops the commit, so Apply adds no update.
       expect(updateProject).toHaveBeenCalledTimes(1)
