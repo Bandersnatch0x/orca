@@ -115,6 +115,23 @@ describe('buildProjectHostSetupOptions', () => {
     expect(options[0]).toMatchObject({ label: LOCAL_HOST_LABEL, repoId: 'win-repo' })
   })
 
+  it('does not apply the WSL storage label to a non-local host', () => {
+    const options = buildProjectHostSetupOptions({
+      projectId: 'project-1',
+      eligibleRepos: [repo('remote-repo')],
+      hosts: [host('ssh:builder')],
+      projectHostSetups: [
+        // Why: a remote host never reaches \\wsl.localhost; the gate on host kind
+        // keeps the storage label off it even if a path happens to parse as UNC.
+        setup('remote', 'project-1', 'ssh:builder', 'remote-repo', {
+          path: '\\\\wsl.localhost\\Debian\\home\\u\\sample-project'
+        })
+      ]
+    })
+
+    expect(options[0]).toMatchObject({ label: 'builder', repoId: 'remote-repo' })
+  })
+
   it('uses saved host labels for ready runtime setup choices', () => {
     const options = buildProjectHostSetupOptions({
       projectId: 'project-1',

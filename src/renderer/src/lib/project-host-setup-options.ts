@@ -135,10 +135,14 @@ function buildReadySetupOptions({
       )
     })
     .map((setup) => {
-      const hostLabel = hostById.get(setup.hostId)?.label || getExecutionHostLabel(setup.hostId)
+      const host = hostById.get(setup.hostId)
+      const hostLabel = host?.label || getExecutionHostLabel(setup.hostId)
       // Why: a WSL-UNC setup path is where the worktree mirror lands, so the
       // run-target row names the storage distro instead of reading as Windows.
-      const storageDistro = parseWslUncPath(setup.path)?.distro ?? null
+      // Gated on a local host to match RepositoryHostSetupsSection — only the
+      // local machine reaches \\wsl.localhost, so a remote host never qualifies.
+      const storageDistro =
+        host?.kind === 'local' ? (parseWslUncPath(setup.path)?.distro ?? null) : null
       return {
         id: setup.id,
         kind: 'ready' as const,
