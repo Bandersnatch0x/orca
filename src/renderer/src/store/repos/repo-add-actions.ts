@@ -132,16 +132,22 @@ export function createRepoAddActions(
           // Why after the set(): the project row carrying the runtime override only exists once the repo is in state.
           warnIfProjectCrossesWslFilesystemBoundary(repo, get().projects, get().settings)
           // Why here: a project stored on \\wsl.localhost\<distro> must run in
-          // that distro, and this is the one chokepoint every folder add (nested,
-          // multi, non-git) funnels through — pinning it here covers the paths
-          // that never reach useCompleteGitRepoAdd's git-repo pin.
+          // that distro. This chokepoint covers the folder adds that funnel
+          // through addRepoPath (non-git confirm, nested open-as-folder, and
+          // multi-folder picks); nested *import* pins in importNestedRepos, and
+          // git-repo clone/create pin via useCompleteGitRepoAdd.
           const wslDistro = target.kind === 'local' ? parseWslUncPath(repo.path)?.distro : null
           if (wslDistro) {
             const pinnedProject = get().projects.find((p) => p.sourceRepoIds.includes(repo.id))
             if (pinnedProject) {
-              void get().updateProject(pinnedProject.id, {
+              const pinned = await get().updateProject(pinnedProject.id, {
                 localWindowsRuntimePreference: { kind: 'wsl', distro: wslDistro }
               })
+              if (!pinned) {
+                console.warn(
+                  `Failed to pin WSL runtime (${wslDistro}) for project ${pinnedProject.id}`
+                )
+              }
             }
           }
         }
