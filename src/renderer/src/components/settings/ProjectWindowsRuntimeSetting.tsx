@@ -119,8 +119,9 @@ export function ProjectWindowsRuntimeSetting({
   const defaultRuntimeLabel = getDefaultRuntimeLabel(settings)
   const commitRuntimePreference = (nextPreference: LocalWindowsRuntimePreference): void => {
     setPendingPreference(null)
-    // Why: storage pins the runtime while locked — reject any value that would
-    // contradict the lock so a stale pending Apply can never overwrite it.
+    // Why: storage pins the runtime while locked, so no commit is accepted —
+    // normalization already persisted the locked distro, and this no-op stops a
+    // stale pending Apply from writing anything over it.
     if (lockedWslDistro !== null) {
       return
     }

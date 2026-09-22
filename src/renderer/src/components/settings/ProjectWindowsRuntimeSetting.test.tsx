@@ -249,6 +249,59 @@ describe('ProjectWindowsRuntimeSetting', () => {
     }
   })
 
+  it('refuses to commit a pending change while the storage lock is active', () => {
+    const updateProject = vi.fn().mockResolvedValue(true)
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    // Why windows-host: a stored preference that contradicts the lock makes the
+    // mount effect normalize once, so a second updateProject can only come from
+    // an Apply the guard must block.
+    const lockedProject: Project = {
+      ...project,
+      localWindowsRuntimePreference: { kind: 'windows-host' }
+    }
+
+    try {
+      act(() => {
+        root.render(
+          <ProjectWindowsRuntimeSetting
+            project={lockedProject}
+            settings={getDefaultSettings('/tmp')}
+            isLocalWindowsProject
+            repoPath="\\wsl.localhost\Debian\home\u\sample-project"
+            wslAvailable
+            wslDistros={['Debian']}
+            wslCapabilitiesLoading={false}
+            runtimeSessionSummary={{ liveTerminalCount: 1, activeTaskCount: 0 }}
+            updateProject={updateProject}
+          />
+        )
+      })
+
+      // The mount effect normalizes the contradicting stored preference once.
+      expect(updateProject).toHaveBeenCalledTimes(1)
+
+      clickButton(container, 'WSL')
+      const applyButton = Array.from(container.querySelectorAll('button')).find((button) =>
+        button.textContent?.includes('Apply runtime change')
+      )
+      if (applyButton) {
+        act(() => {
+          applyButton.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+        })
+      }
+
+      // Why still 1: the lock guard no-ops the commit, so Apply adds no update.
+      expect(updateProject).toHaveBeenCalledTimes(1)
+    } finally {
+      act(() => {
+        root.unmount()
+      })
+      container.remove()
+    }
+  })
+
   it('shows repair copy instead of silently falling back when a selected WSL distro is missing', () => {
     const markup = renderToStaticMarkup(
       <ProjectWindowsRuntimeSetting
