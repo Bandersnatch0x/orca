@@ -139,8 +139,10 @@ function buildReadySetupOptions({
       const hostLabel = host?.label || getExecutionHostLabel(setup.hostId)
       // Why: a WSL-UNC setup path is where the worktree mirror lands, so the
       // run-target row names the storage distro instead of reading as Windows.
-      // Gated on a local host to match RepositoryHostSetupsSection — only the
-      // local machine reaches \\wsl.localhost, so a remote host never qualifies.
+      // Scoped to local by product decision: this series ships the WSL runtime
+      // only for the local Windows host, so the label follows the same scope. A
+      // Windows SSH host can also report a \\wsl.localhost path — labelling that
+      // is deferred with the rest of the remote-WSL story.
       const storageDistro =
         host?.kind === 'local' ? (parseWslUncPath(setup.path)?.distro ?? null) : null
       return {
