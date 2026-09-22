@@ -116,21 +116,26 @@ export function createNestedRepositoryActions(
           : get().fetchRepos(catalogOptions))
         set({ folderWorkspacePathStatuses: {} })
         // Why: nested import bypasses addRepoPath, so pin the WSL runtime for
-        // every imported project on \\wsl.localhost\<distro> here — not just the
-        // first, which is all the caller's onGitRepoReady hook covers.
+        // every newly imported project on \\wsl.localhost\<distro> here — not
+        // just the first, which is all the caller's onGitRepoReady hook covers.
+        // Why status === 'imported': re-importing must not silently overwrite a
+        // runtime the user deliberately set on an already-known project.
         if (target.kind === 'local') {
           const projects = get().projects
           for (const entry of result.projects) {
             const repoId = entry.projectId
             const wslDistro = parseWslUncPath(entry.path)?.distro
-            if (!repoId || !wslDistro) {
+            if (entry.status !== 'imported' || !repoId || !wslDistro) {
               continue
             }
             const pinned = projects.find((candidate) => candidate.sourceRepoIds.includes(repoId))
             if (pinned) {
-              void get().updateProject(pinned.id, {
+              const pinnedOk = await get().updateProject(pinned.id, {
                 localWindowsRuntimePreference: { kind: 'wsl', distro: wslDistro }
               })
+              if (!pinnedOk) {
+                console.warn(`Failed to pin WSL runtime (${wslDistro}) for project ${pinned.id}`)
+              }
             }
           }
         }
