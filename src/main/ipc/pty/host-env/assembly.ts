@@ -20,6 +20,7 @@ import {
   PROXY_ENV_KEYS
 } from '../../../../shared/network-proxy'
 import { addWslEnvKeys } from '../../../../shared/wsl-env'
+import { wslConfiguredProxyCrossesBoundary } from '../../../wsl/wsl-guest-proxy-gateway'
 import { isTuiAgentEnabled } from '../../../../shared/tui-agent-selection'
 import type { BuildPtyHostEnvOptions } from './types'
 import { stripInheritedOrcaCodexHomeOverride } from './codex-home'
@@ -48,10 +49,12 @@ export function buildPtyHostEnv(
 ): Record<string, string> {
   mergePersistedWindowsPath(baseEnv)
   Object.assign(baseEnv, buildConfiguredProxyEnv(opts.networkProxySettings))
-  if (opts.isWsl) {
+  if (opts.isWsl && wslConfiguredProxyCrossesBoundary(opts.networkProxySettings)) {
     // Why: WSLENV is the only channel that carries host variables into a distro
-    // — without registering the proxy keys, the guest shell never sees them,
-    // rewritten to the host gateway or not.
+    // — without registering the proxy keys, the guest shell never sees the
+    // gateway-rewritten proxy. Gated on a non-loopback configured URL so an
+    // env-inherited or unverified loopback proxy is dropped at the boundary
+    // (the pre-series behavior) instead of breaking the guest's traffic.
     addWslEnvKeys(baseEnv, [...PROXY_ENV_KEYS, ...NO_PROXY_ENV_KEYS])
   }
 

@@ -46,9 +46,11 @@ export function buildWslProxyProbeScript(proxyUrl: string): string | null {
     return null
   }
   // Why bare: /dev/tcp rejects bracketed IPv6 literals ("[fd00::1]" is parsed
-  // as a hostname), so the address must go in unbracketed.
+  // as a hostname), so the address must go in unbracketed. Why quoted: the
+  // nested bash expands command substitutions, and normalizeProxyUrl passes
+  // hostnames like `x$(id)` through — quoting neutralizes them at probe time.
   const hostname = url.hostname.replace(/^\[|\]$/gu, '')
-  const probeScript = `:</dev/tcp/${hostname}/${port}`
+  const probeScript = `:</dev/tcp/${quotePosixShell(hostname)}/${port}`
   return [
     'if command -v timeout >/dev/null 2>&1 &&',
     `timeout 1 bash -c ${quotePosixShell(probeScript)} >/dev/null 2>&1; then`,
@@ -279,6 +281,28 @@ export async function resolveWslGuestProxySettings(
     return settings ?? undefined
   }
   return { ...settings, httpProxyUrl: gatewayProxyUrl }
+}
+
+/**
+ * Whether the settings-configured proxy may cross the wsl.exe boundary. Only a
+ * non-loopback URL does: a loopback URL here means the resolver kept it (probe
+ * errored, or gateway unavailable), and forwarding an unverified loopback
+ * proxy into the guest reproduces the exact breakage the rewrite exists to
+ * fix. Mirrored-networking users keep working via their own WSLENV setup or
+ * direct egress, as before this series.
+ */
+export function wslConfiguredProxyCrossesBoundary(
+  settings: NetworkProxySettings | null | undefined
+): boolean {
+  const configured = normalizeProxyUrl(settings?.httpProxyUrl)
+  if (!configured.ok || !configured.value) {
+    return false
+  }
+  try {
+    return !isLoopbackProxyHostname(new URL(configured.value).hostname)
+  } catch {
+    return false
+  }
 }
 
 export function _resetWslGuestProxyCachesForTests(): void {

@@ -159,7 +159,8 @@ describe('fetchViaPty', () => {
     })
     await vi.advanceTimersByTimeAsync(0)
 
-    const [spawnFile, spawnArgs] = spawnMock.mock.calls[0] as [string, string[]]
+    const spawnFile = spawnMock.mock.calls[0]?.[0] as string
+    const spawnArgs = spawnMock.mock.calls[0]?.[1] as string[]
     expect(spawnFile).toBe('wsl.exe')
     const bashCommand = spawnArgs.at(-1) as string
     expect(bashCommand).toContain('mkdir -p "$orca_rate_limit_cwd"')
@@ -192,7 +193,7 @@ describe('fetchViaPty', () => {
     })
     await vi.advanceTimersByTimeAsync(0)
 
-    const bashCommand = (spawnMock.mock.calls[0] as [string, string[]])[1].at(-1) as string
+    const bashCommand = spawnMock.mock.calls[0]?.[1]?.at(-1) as string
     expect(bashCommand).toContain("export HTTPS_PROXY='http://172.28.112.193:7890'")
 
     term.emitExit()

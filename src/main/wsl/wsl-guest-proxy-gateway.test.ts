@@ -13,7 +13,8 @@ import {
   parseWslGatewayProbeOutput,
   parseWslProxyProbeOutput,
   replaceProxyHostname,
-  resolveWslGuestProxySettings
+  resolveWslGuestProxySettings,
+  wslConfiguredProxyCrossesBoundary
 } from './wsl-guest-proxy-gateway'
 
 const GATEWAY_SCRIPT_MARKER = 'ip route show default'
@@ -49,7 +50,7 @@ function scriptRoutes(routes: { match: string; stdout: string }[]): void {
 function probeTargets(): string[] {
   return runWslProcessMock.mock.calls.map(([spec]) => {
     const match = /\/dev\/tcp\/(\S+?)\/(\d+)/.exec(spec.script ?? '')
-    return match ? `${match[1]}/${match[2]}` : 'gateway'
+    return match ? `${match[1].replace(/['\\]/g, '')}/${match[2]}` : 'gateway'
   })
 }
 
@@ -94,17 +95,26 @@ describe('replaceProxyHostname', () => {
 describe('buildWslProxyProbeScript', () => {
   it('probes the explicit port', () => {
     const script = buildWslProxyProbeScript('http://127.0.0.1:7890')
-    expect(script).toContain('/dev/tcp/127.0.0.1/7890')
+    // Why the escaped form: the host is POSIX-quoted inside the probe script
+    // (command-substitution hardening), which renders the quote-splice as
+    // backslash-escaped single quotes around the token.
+    expect(script).toContain(String.raw`/dev/tcp/'\''127.0.0.1'\''/7890`)
     expect(script).toContain('printf reachable')
   })
 
   it('defaults the port from the scheme', () => {
-    expect(buildWslProxyProbeScript('https://localhost')).toContain('/dev/tcp/localhost/443')
-    expect(buildWslProxyProbeScript('http://localhost')).toContain('/dev/tcp/localhost/80')
+    expect(buildWslProxyProbeScript('https://localhost')).toContain(
+      String.raw`/dev/tcp/'\''localhost'\''/443`
+    )
+    expect(buildWslProxyProbeScript('http://localhost')).toContain(
+      String.raw`/dev/tcp/'\''localhost'\''/80`
+    )
   })
 
   it('probes bare IPv6 hosts (/dev/tcp rejects bracketed literals)', () => {
-    expect(buildWslProxyProbeScript('http://[::1]:7890')).toContain('/dev/tcp/::1/7890')
+    expect(buildWslProxyProbeScript('http://[::1]:7890')).toContain(
+      String.raw`/dev/tcp/'\''::1'\''/7890`
+    )
   })
 })
 
@@ -161,6 +171,25 @@ describe('parseWslGatewayProbeOutput', () => {
   })
 })
 
+describe('buildWslProxyProbeScript injection hardening', () => {
+  it('quotes the hostname so command substitutions cannot expand in the nested bash', () => {
+    const script = buildWslProxyProbeScript('http://x$(id):7890')
+    expect(script).toContain("'x$(id)'")
+  })
+})
+
+describe('wslConfiguredProxyCrossesBoundary', () => {
+  it('allows only a non-loopback configured proxy', () => {
+    expect(wslConfiguredProxyCrossesBoundary({ httpProxyUrl: 'http://172.28.112.193:7890' })).toBe(
+      true
+    )
+    expect(wslConfiguredProxyCrossesBoundary({ httpProxyUrl: 'http://127.0.0.1:7890' })).toBe(false)
+    expect(wslConfiguredProxyCrossesBoundary({ httpProxyUrl: 'http://localhost:7890' })).toBe(false)
+    expect(wslConfiguredProxyCrossesBoundary({})).toBe(false)
+    expect(wslConfiguredProxyCrossesBoundary(null)).toBe(false)
+  })
+})
+
 describe('resolveWslGuestProxySettings', () => {
   const settings = {
     httpProxyUrl: 'http://127.0.0.1:7890',
@@ -168,10 +197,10 @@ describe('resolveWslGuestProxySettings', () => {
   }
 
   it('runs the probe inside the target distro over bash without the login PATH', async () => {
-    scriptRoutes([{ match: '127.0.0.1/7890', stdout: 'reachable' }])
+    scriptRoutes([{ match: "127.0.0.1'\\''/7890", stdout: 'reachable' }])
     await resolveWslGuestProxySettings(settings, { isWsl: true, distro: 'Ubuntu' })
     expect(runWslProcessMock).toHaveBeenCalledWith({
-      script: expect.stringContaining('/dev/tcp/127.0.0.1/7890'),
+      script: expect.stringContaining(String.raw`/dev/tcp/'\''127.0.0.1'\''/7890`),
       shell: 'bash',
       distro: 'Ubuntu',
       loginPath: 'none',
@@ -201,7 +230,7 @@ describe('resolveWslGuestProxySettings', () => {
   })
 
   it('keeps the loopback URL when the guest can reach it (mirrored networking)', async () => {
-    scriptRoutes([{ match: '127.0.0.1/7890', stdout: 'reachable' }])
+    scriptRoutes([{ match: "127.0.0.1'\\''/7890", stdout: 'reachable' }])
     const resolved = await resolveWslGuestProxySettings(settings, { isWsl: true })
     expect(resolved).toBe(settings)
     expect(probeTargets()).toEqual(['127.0.0.1/7890'])
@@ -209,9 +238,9 @@ describe('resolveWslGuestProxySettings', () => {
 
   it('rewrites a loopback proxy to the host gateway when the guest confirms the rewrite', async () => {
     scriptRoutes([
-      { match: '127.0.0.1/7890', stdout: 'unreachable' },
+      { match: "127.0.0.1'\\''/7890", stdout: 'unreachable' },
       { match: GATEWAY_SCRIPT_MARKER, stdout: 'route=172.28.112.193 resolv=172.28.112.193' },
-      { match: '172.28.112.193/7890', stdout: 'reachable' }
+      { match: "172.28.112.193'\\''/7890", stdout: 'reachable' }
     ])
     const resolved = await resolveWslGuestProxySettings(settings, { isWsl: true, distro: 'Ubuntu' })
     expect(resolved).toEqual({
@@ -223,9 +252,9 @@ describe('resolveWslGuestProxySettings', () => {
 
   it('keeps the original URL when the gateway rewrite is unreachable from the guest', async () => {
     scriptRoutes([
-      { match: '127.0.0.1/7890', stdout: 'unreachable' },
+      { match: "127.0.0.1'\\''/7890", stdout: 'unreachable' },
       { match: GATEWAY_SCRIPT_MARKER, stdout: 'route=172.28.112.193' },
-      { match: '172.28.112.193/7890', stdout: 'unreachable' }
+      { match: "172.28.112.193'\\''/7890", stdout: 'unreachable' }
     ])
     const resolved = await resolveWslGuestProxySettings(settings, { isWsl: true })
     expect(resolved).toBe(settings)
@@ -233,7 +262,7 @@ describe('resolveWslGuestProxySettings', () => {
 
   it('keeps the original URL when no gateway can be resolved', async () => {
     scriptRoutes([
-      { match: '127.0.0.1/7890', stdout: 'unreachable' },
+      { match: "127.0.0.1'\\''/7890", stdout: 'unreachable' },
       { match: GATEWAY_SCRIPT_MARKER, stdout: 'gateway=' }
     ])
     const resolved = await resolveWslGuestProxySettings(settings, { isWsl: true })
@@ -247,7 +276,7 @@ describe('resolveWslGuestProxySettings', () => {
   })
 
   it('caches the loopback verdict across spawns', async () => {
-    scriptRoutes([{ match: '127.0.0.1/7890', stdout: 'reachable' }])
+    scriptRoutes([{ match: "127.0.0.1'\\''/7890", stdout: 'reachable' }])
     await resolveWslGuestProxySettings(settings, { isWsl: true })
     await resolveWslGuestProxySettings(settings, { isWsl: true })
     expect(probeTargets()).toEqual(['127.0.0.1/7890'])
@@ -255,10 +284,10 @@ describe('resolveWslGuestProxySettings', () => {
 
   it('reuses the cached gateway for another proxy URL on the same distro', async () => {
     scriptRoutes([
-      { match: '127.0.0.1/7890', stdout: 'unreachable' },
-      { match: 'localhost/7890', stdout: 'unreachable' },
+      { match: "127.0.0.1'\\''/7890", stdout: 'unreachable' },
+      { match: "localhost'\\''/7890", stdout: 'unreachable' },
       { match: GATEWAY_SCRIPT_MARKER, stdout: 'route=172.28.112.193' },
-      { match: '172.28.112.193/7890', stdout: 'reachable' }
+      { match: "172.28.112.193'\\''/7890", stdout: 'reachable' }
     ])
     const first = await resolveWslGuestProxySettings(settings, { isWsl: true, distro: 'Ubuntu' })
     const second = await resolveWslGuestProxySettings(
@@ -282,9 +311,9 @@ describe('resolveWslGuestProxySettings', () => {
 
   it('resolves the gateway separately per distro', async () => {
     scriptRoutes([
-      { match: '127.0.0.1/7890', stdout: 'unreachable' },
+      { match: "127.0.0.1'\\''/7890", stdout: 'unreachable' },
       { match: GATEWAY_SCRIPT_MARKER, stdout: 'route=172.28.112.193' },
-      { match: '172.28.112.193/7890', stdout: 'reachable' }
+      { match: "172.28.112.193'\\''/7890", stdout: 'reachable' }
     ])
     await resolveWslGuestProxySettings(settings, { isWsl: true, distro: 'Ubuntu' })
     await resolveWslGuestProxySettings(settings, { isWsl: true, distro: 'Debian' })
