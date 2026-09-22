@@ -91,9 +91,10 @@ export function configureLocalPtyProvider(args: {
         agentStatusHooksEnabled: isAgentStatusHooksEnabled(ptySettings),
         disabledTuiAgents: ptySettings?.disabledTuiAgents,
         codexStatusHooksEnabled: isCodexStatusHooksEnabled(ptySettings),
-        // Why: a Windows loopback proxy dies inside WSL2 NAT; the helper swaps
-        // in the host gateway when the guest confirms it can reach it.
-        networkProxySettings: await wslProxyForTarget(ptySettings, codexSelectionTarget),
+        // Why: a Windows loopback proxy dies inside WSL2 NAT; the helper swaps in
+        // the host gateway when the guest confirms it, and reports whether the
+        // resolved proxy should cross into the guest via WSLENV.
+        wslProxyResolution: await wslProxyForTarget(ptySettings, codexSelectionTarget),
         routeBrowserOpensToClient: runtime?.shouldRelayTerminalBrowserOpens?.()
       })
       // Why: agents need their terminal handle at process start to self-identify in orchestration messages without an extra RPC.

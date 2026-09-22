@@ -238,71 +238,72 @@ export type WslGuestProxyContext = {
   distro?: string | null
 }
 
+/** The host-side proxy plus whether it should be forwarded into the guest. */
+export type WslGuestProxyResolution = {
+  /** Host-side proxy settings — rewritten only on a guest-confirmed gateway. */
+  settings: NetworkProxySettings | undefined
+  /**
+   * Whether the resolved proxy should cross the wsl.exe boundary via WSLENV. A
+   * non-loopback proxy always crosses; a loopback proxy crosses only when the
+   * guest confirmed it reachable (mirrored networking / WSL1). An unverified
+   * loopback — probe errored, or the rewrite could not confirm a gateway —
+   * stays out, reproducing the pre-series behavior instead of breaking egress.
+   */
+  crossesBoundary: boolean
+}
+
 /**
- * Returns `settings` unchanged on every fast path and on any probe failure, so
- * callers can unconditionally feed the result where a NetworkProxySettings is
- * expected. Only a guest-confirmed gateway rewrite produces a new object.
+ * Resolves the proxy to apply for a guest shell. `settings` is returned
+ * unchanged on every fast path and on any probe failure (only a guest-confirmed
+ * gateway rewrite produces a new object), so callers can feed `.settings`
+ * wherever a NetworkProxySettings is expected; `.crossesBoundary` says whether
+ * the caller should also register the proxy keys in WSLENV.
  */
 export async function resolveWslGuestProxySettings(
   settings: NetworkProxySettings | null | undefined,
   context: WslGuestProxyContext
-): Promise<NetworkProxySettings | undefined> {
+): Promise<WslGuestProxyResolution> {
+  const unchanged = settings ?? undefined
   if (!context.isWsl || process.platform !== 'win32') {
-    return settings ?? undefined
+    return { settings: unchanged, crossesBoundary: false }
   }
   const configured = normalizeProxyUrl(settings?.httpProxyUrl)
   if (!configured.ok || !configured.value) {
-    return settings ?? undefined
+    return { settings: unchanged, crossesBoundary: false }
   }
   let loopbackUrl: URL
   try {
     loopbackUrl = new URL(configured.value)
   } catch {
-    return settings ?? undefined
+    return { settings: unchanged, crossesBoundary: false }
   }
   if (!isLoopbackProxyHostname(loopbackUrl.hostname)) {
-    return settings ?? undefined
+    // A non-loopback proxy is reachable from the guest as configured.
+    return { settings: unchanged, crossesBoundary: true }
   }
 
   const distro = context.distro ?? null
-  // Why !== false, not === true: an errored probe ("could not ask") must keep
-  // the user's URL instead of racing into a rewrite on a maybe-good gateway —
-  // the JSDoc promises settings unchanged on any probe failure.
-  if ((await probeProxyReachability(configured.value, distro)) !== false) {
-    return settings ?? undefined
+  const verdict = await probeProxyReachability(configured.value, distro)
+  if (verdict === true) {
+    // Guest-confirmed loopback (mirrored networking / WSL1): the guest shares
+    // the host loopback, so forward the user's URL untouched.
+    return { settings: unchanged, crossesBoundary: true }
+  }
+  // Why not rewrite on a non-false verdict: an errored probe ("could not ask")
+  // keeps the user's URL host-side but must not forward an unverified loopback.
+  if (verdict !== false) {
+    return { settings: unchanged, crossesBoundary: false }
   }
 
   const gateway = await resolveWslHostGateway(distro)
   if (!gateway) {
-    return settings ?? undefined
+    return { settings: unchanged, crossesBoundary: false }
   }
   const gatewayProxyUrl = replaceProxyHostname(configured.value, gateway)
   if ((await probeProxyReachability(gatewayProxyUrl, distro)) !== true) {
-    return settings ?? undefined
+    return { settings: unchanged, crossesBoundary: false }
   }
-  return { ...settings, httpProxyUrl: gatewayProxyUrl }
-}
-
-/**
- * Whether the settings-configured proxy may cross the wsl.exe boundary. Only a
- * non-loopback URL does: a loopback URL here means the resolver kept it (probe
- * errored, or gateway unavailable), and forwarding an unverified loopback
- * proxy into the guest reproduces the exact breakage the rewrite exists to
- * fix. Mirrored-networking users keep working via their own WSLENV setup or
- * direct egress, as before this series.
- */
-export function wslConfiguredProxyCrossesBoundary(
-  settings: NetworkProxySettings | null | undefined
-): boolean {
-  const configured = normalizeProxyUrl(settings?.httpProxyUrl)
-  if (!configured.ok || !configured.value) {
-    return false
-  }
-  try {
-    return !isLoopbackProxyHostname(new URL(configured.value).hostname)
-  } catch {
-    return false
-  }
+  return { settings: { ...settings, httpProxyUrl: gatewayProxyUrl }, crossesBoundary: true }
 }
 
 export function _resetWslGuestProxyCachesForTests(): void {
@@ -318,7 +319,7 @@ export function _resetWslGuestProxyCachesForTests(): void {
 export async function wslProxyForTarget(
   settings: NetworkProxySettings | null | undefined,
   target: CodexAccountSelectionTarget
-): Promise<NetworkProxySettings | undefined> {
+): Promise<WslGuestProxyResolution> {
   return resolveWslGuestProxySettings(settings, {
     isWsl: target.runtime === 'wsl',
     distro: target.runtime === 'wsl' ? target.wslDistro : null

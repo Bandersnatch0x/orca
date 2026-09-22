@@ -13,8 +13,7 @@ import {
   parseWslGatewayProbeOutput,
   parseWslProxyProbeOutput,
   replaceProxyHostname,
-  resolveWslGuestProxySettings,
-  wslConfiguredProxyCrossesBoundary
+  resolveWslGuestProxySettings
 } from './wsl-guest-proxy-gateway'
 
 const GATEWAY_SCRIPT_MARKER = 'ip route show default'
@@ -178,18 +177,6 @@ describe('buildWslProxyProbeScript injection hardening', () => {
   })
 })
 
-describe('wslConfiguredProxyCrossesBoundary', () => {
-  it('allows only a non-loopback configured proxy', () => {
-    expect(wslConfiguredProxyCrossesBoundary({ httpProxyUrl: 'http://172.28.112.193:7890' })).toBe(
-      true
-    )
-    expect(wslConfiguredProxyCrossesBoundary({ httpProxyUrl: 'http://127.0.0.1:7890' })).toBe(false)
-    expect(wslConfiguredProxyCrossesBoundary({ httpProxyUrl: 'http://localhost:7890' })).toBe(false)
-    expect(wslConfiguredProxyCrossesBoundary({})).toBe(false)
-    expect(wslConfiguredProxyCrossesBoundary(null)).toBe(false)
-  })
-})
-
 describe('resolveWslGuestProxySettings', () => {
   const settings = {
     httpProxyUrl: 'http://127.0.0.1:7890',
@@ -210,29 +197,35 @@ describe('resolveWslGuestProxySettings', () => {
 
   it('passes settings through untouched when the shell is not WSL', async () => {
     const resolved = await resolveWslGuestProxySettings(settings, { isWsl: false })
-    expect(resolved).toBe(settings)
+    expect(resolved.settings).toBe(settings)
+    expect(resolved.crossesBoundary).toBe(false)
     expect(runWslProcessMock).not.toHaveBeenCalled()
   })
 
-  it('passes settings through for a non-loopback proxy', async () => {
+  it('crosses a non-loopback proxy into the guest without probing', async () => {
     const resolved = await resolveWslGuestProxySettings(
       { httpProxyUrl: 'http://192.168.1.10:7890' },
       { isWsl: true }
     )
-    expect(resolved).toEqual({ httpProxyUrl: 'http://192.168.1.10:7890' })
+    expect(resolved.settings).toEqual({ httpProxyUrl: 'http://192.168.1.10:7890' })
+    expect(resolved.crossesBoundary).toBe(true)
     expect(runWslProcessMock).not.toHaveBeenCalled()
   })
 
-  it('passes settings through when no proxy is configured', async () => {
+  it('passes settings through and does not cross when no proxy is configured', async () => {
     const resolved = await resolveWslGuestProxySettings({}, { isWsl: true })
-    expect(resolved).toEqual({})
+    expect(resolved.settings).toEqual({})
+    expect(resolved.crossesBoundary).toBe(false)
     expect(runWslProcessMock).not.toHaveBeenCalled()
   })
 
-  it('keeps the loopback URL when the guest can reach it (mirrored networking)', async () => {
+  it('crosses the loopback URL when the guest can reach it (mirrored networking)', async () => {
     scriptRoutes([{ match: "127.0.0.1'\\''/7890", stdout: 'reachable' }])
     const resolved = await resolveWslGuestProxySettings(settings, { isWsl: true })
-    expect(resolved).toBe(settings)
+    // Why crosses: a guest-confirmed loopback works inside the distro, so the
+    // user's URL must still be forwarded via WSLENV instead of being dropped.
+    expect(resolved.settings).toBe(settings)
+    expect(resolved.crossesBoundary).toBe(true)
     expect(probeTargets()).toEqual(['127.0.0.1/7890'])
   })
 
@@ -243,36 +236,42 @@ describe('resolveWslGuestProxySettings', () => {
       { match: "172.28.112.193'\\''/7890", stdout: 'reachable' }
     ])
     const resolved = await resolveWslGuestProxySettings(settings, { isWsl: true, distro: 'Ubuntu' })
-    expect(resolved).toEqual({
+    expect(resolved.settings).toEqual({
       httpProxyUrl: 'http://172.28.112.193:7890/',
       httpProxyBypassRules: 'internal.example.com'
     })
+    expect(resolved.crossesBoundary).toBe(true)
     expect(probeTargets()).toEqual(['127.0.0.1/7890', 'gateway', '172.28.112.193/7890'])
   })
 
-  it('keeps the original URL when the gateway rewrite is unreachable from the guest', async () => {
+  it('keeps the original URL but does not cross when the gateway rewrite is unreachable', async () => {
     scriptRoutes([
       { match: "127.0.0.1'\\''/7890", stdout: 'unreachable' },
       { match: GATEWAY_SCRIPT_MARKER, stdout: 'route=172.28.112.193' },
       { match: "172.28.112.193'\\''/7890", stdout: 'unreachable' }
     ])
     const resolved = await resolveWslGuestProxySettings(settings, { isWsl: true })
-    expect(resolved).toBe(settings)
+    expect(resolved.settings).toBe(settings)
+    expect(resolved.crossesBoundary).toBe(false)
   })
 
-  it('keeps the original URL when no gateway can be resolved', async () => {
+  it('keeps the original URL but does not cross when no gateway can be resolved', async () => {
     scriptRoutes([
       { match: "127.0.0.1'\\''/7890", stdout: 'unreachable' },
       { match: GATEWAY_SCRIPT_MARKER, stdout: 'gateway=' }
     ])
     const resolved = await resolveWslGuestProxySettings(settings, { isWsl: true })
-    expect(resolved).toBe(settings)
+    expect(resolved.settings).toBe(settings)
+    expect(resolved.crossesBoundary).toBe(false)
   })
 
-  it('keeps the original URL when the guest probes fail (wsl.exe busy)', async () => {
+  it('keeps the original URL but does not cross when the guest probes fail (wsl.exe busy)', async () => {
     runWslProcessMock.mockRejectedValue(new Error('wsl.exe timed out'))
     const resolved = await resolveWslGuestProxySettings(settings, { isWsl: true })
-    expect(resolved).toBe(settings)
+    // Why not cross: an errored probe cannot confirm the loopback is reachable,
+    // so an unverified loopback stays out of the guest (pre-series behavior).
+    expect(resolved.settings).toBe(settings)
+    expect(resolved.crossesBoundary).toBe(false)
   })
 
   it('caches the loopback verdict across spawns', async () => {
@@ -294,11 +293,11 @@ describe('resolveWslGuestProxySettings', () => {
       { httpProxyUrl: 'http://localhost:7890' },
       { isWsl: true, distro: 'Ubuntu' }
     )
-    expect(first).toEqual({
+    expect(first.settings).toEqual({
       httpProxyUrl: 'http://172.28.112.193:7890/',
       httpProxyBypassRules: 'internal.example.com'
     })
-    expect(second).toEqual({ httpProxyUrl: 'http://172.28.112.193:7890/' })
+    expect(second.settings).toEqual({ httpProxyUrl: 'http://172.28.112.193:7890/' })
     // Why the last probe is absent: the rewritten URL is shared with the first
     // resolution, so its cached verdict answers the second call directly.
     expect(probeTargets()).toEqual([

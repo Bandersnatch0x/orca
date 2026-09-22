@@ -62,7 +62,7 @@ describe('fetchViaPty', () => {
     vi.clearAllMocks()
     resolveClaudeCommandMock.mockReturnValue('claude')
     resolveWslGuestProxySettingsMock.mockImplementation((settings: unknown) =>
-      Promise.resolve(settings)
+      Promise.resolve({ settings, crossesBoundary: false })
     )
   })
 
@@ -159,10 +159,10 @@ describe('fetchViaPty', () => {
     })
     await vi.advanceTimersByTimeAsync(0)
 
-    const spawnFile = spawnMock.mock.calls[0]?.[0] as string
-    const spawnArgs = spawnMock.mock.calls[0]?.[1] as string[]
+    const spawnFile = spawnMock.mock.calls[0]?.[0]
+    const spawnArgs = spawnMock.mock.calls[0]?.[1]
     expect(spawnFile).toBe('wsl.exe')
-    const bashCommand = spawnArgs.at(-1) as string
+    const bashCommand = spawnArgs.at(-1)
     expect(bashCommand).toContain('mkdir -p "$orca_rate_limit_cwd"')
     expect(bashCommand).toContain('cd "$orca_rate_limit_cwd"')
     expect(bashCommand).toContain("export HTTPS_PROXY='http://127.0.0.1:7890'")
@@ -176,7 +176,8 @@ describe('fetchViaPty', () => {
     const term = makeMockTerm()
     spawnMock.mockReturnValue(term)
     resolveWslGuestProxySettingsMock.mockResolvedValue({
-      httpProxyUrl: 'http://172.28.112.193:7890'
+      settings: { httpProxyUrl: 'http://172.28.112.193:7890' },
+      crossesBoundary: true
     })
 
     const resultPromise = fetchViaPty({
@@ -193,7 +194,7 @@ describe('fetchViaPty', () => {
     })
     await vi.advanceTimersByTimeAsync(0)
 
-    const bashCommand = spawnMock.mock.calls[0]?.[1]?.at(-1) as string
+    const bashCommand = spawnMock.mock.calls[0]?.[1]?.at(-1)
     expect(bashCommand).toContain("export HTTPS_PROXY='http://172.28.112.193:7890'")
 
     term.emitExit()

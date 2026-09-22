@@ -66,10 +66,10 @@ export async function fetchViaPty(options?: {
       : null
   // Why: a Windows loopback proxy dies inside WSL2 NAT; swap in the host
   // gateway when the guest confirms it can reach it (no-op otherwise).
-  const networkProxySettings = await resolveWslGuestProxySettings(options?.networkProxySettings, {
-    isWsl: wslConfig !== null,
-    distro: wslConfig?.distro ?? null
-  })
+  const { settings: networkProxySettings } = await resolveWslGuestProxySettings(
+    options?.networkProxySettings,
+    { isWsl: wslConfig !== null, distro: wslConfig?.distro ?? null }
+  )
   // Why: the uncached gateway-rewrite path can run three WSL probes (up to 15s)
   // before returning — an abort during that window must not still spawn the PTY.
   if (options?.signal?.aborted) {

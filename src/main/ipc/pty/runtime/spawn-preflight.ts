@@ -288,9 +288,10 @@ export async function prepareRuntimePtySpawn(
         agentStatusHooksEnabled: isAgentStatusHooksEnabled(ptySettings),
         disabledTuiAgents: ptySettings?.disabledTuiAgents,
         codexStatusHooksEnabled: isCodexStatusHooksEnabled(ptySettings),
-        // Why: a Windows loopback proxy dies inside WSL2 NAT; the helper swaps
-        // in the host gateway when the guest confirms it can reach it.
-        networkProxySettings: await wslProxyForTarget(ptySettings, ctx.codexSelectionTarget),
+        // Why: a Windows loopback proxy dies inside WSL2 NAT; the helper swaps in
+        // the host gateway when the guest confirms it, and reports whether the
+        // resolved proxy should cross into the guest via WSLENV.
+        wslProxyResolution: await wslProxyForTarget(ptySettings, ctx.codexSelectionTarget),
         routeBrowserOpensToClient: ctx.deps.runtime?.shouldRelayTerminalBrowserOpens?.(),
         deferGitConfigGuardToDaemon:
           ctx.provider.supportsGitCredentialGuardHost?.(ctx.sessionId) === true
