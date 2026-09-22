@@ -74,8 +74,14 @@ export function ProjectWindowsRuntimeSetting({
   // align the stored preference with the lock instead of displaying a lie.
   useEffect(() => {
     if (!project || !lockedWslDistro) {
+      // Why reset: the lock is off (distro gone / WSL unavailable). Clearing the
+      // ref lets a later re-engage re-normalize instead of skipping on a stale key.
+      normalizedLockRef.current = null
       return
     }
+    // Why: the lock overrides any half-made choice — drop a pending change so the
+    // Apply/Cancel banner cannot linger over a locked, non-editable control.
+    setPendingPreference(null)
     const stored = normalizeProjectRuntimePreference(project.localWindowsRuntimePreference)
     if (stored.kind === 'wsl' && stored.distro === lockedWslDistro) {
       return

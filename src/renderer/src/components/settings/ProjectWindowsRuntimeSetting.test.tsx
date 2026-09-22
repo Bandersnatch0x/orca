@@ -196,6 +196,59 @@ describe('ProjectWindowsRuntimeSetting', () => {
     }
   })
 
+  it('drops a pending runtime change when the storage lock engages', () => {
+    const updateProject = vi.fn()
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+
+    try {
+      act(() => {
+        root.render(
+          <ProjectWindowsRuntimeSetting
+            project={project}
+            settings={getDefaultSettings('/tmp')}
+            isLocalWindowsProject
+            wslAvailable
+            wslDistros={['Ubuntu-24.04', 'Debian']}
+            wslCapabilitiesLoading={false}
+            runtimeSessionSummary={{ liveTerminalCount: 1, activeTaskCount: 1 }}
+            updateProject={updateProject}
+          />
+        )
+      })
+
+      clickButton(container, 'WSL')
+      expect(container.textContent).toContain('Runtime change pending')
+
+      // Why: moving the project onto \\wsl.localhost\Debian must lock the runtime
+      // and retire the half-made pending choice — not leave both on screen.
+      act(() => {
+        root.render(
+          <ProjectWindowsRuntimeSetting
+            project={project}
+            settings={getDefaultSettings('/tmp')}
+            isLocalWindowsProject
+            repoPath="\\wsl.localhost\Debian\home\u\sample-project"
+            wslAvailable
+            wslDistros={['Ubuntu-24.04', 'Debian']}
+            wslCapabilitiesLoading={false}
+            runtimeSessionSummary={{ liveTerminalCount: 1, activeTaskCount: 1 }}
+            updateProject={updateProject}
+          />
+        )
+      })
+
+      expect(container.textContent).not.toContain('Runtime change pending')
+      expect(container.textContent).toContain('runtime is locked to that distro')
+    } finally {
+      act(() => {
+        root.unmount()
+      })
+      container.remove()
+    }
+  })
+
   it('shows repair copy instead of silently falling back when a selected WSL distro is missing', () => {
     const markup = renderToStaticMarkup(
       <ProjectWindowsRuntimeSetting
