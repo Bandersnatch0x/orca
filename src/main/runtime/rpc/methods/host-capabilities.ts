@@ -4,7 +4,6 @@ import {
   getWslHomeAsync,
   isWslAvailableAsync,
   listRunningWslDistrosAsync,
-  listWslDistros,
   listWslDistrosAsync
 } from '../../../wsl'
 import { isGitBashAvailable } from '../../../git-bash'
@@ -49,7 +48,7 @@ export const HOST_CAPABILITY_METHODS = [
     name: 'host.wsl.getDistroHome',
     params: DistroHomeParams,
     handler: async (params) => {
-      if (!listWslDistros().includes(params.distro)) {
+      if (!(await listWslDistrosAsync()).includes(params.distro)) {
         return { home: null }
       }
       return { home: await getWslHomeAsync(params.distro) }
