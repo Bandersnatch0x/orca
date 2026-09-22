@@ -216,6 +216,61 @@ describe('ProjectWindowsRuntimeSetting', () => {
     expect(markup).toContain('Choose an installed distro or switch this project to Windows.')
   })
 
+  it('locks the runtime to the storage distro for projects on a WSL UNC path', () => {
+    vi.useFakeTimers()
+    const updateProject = vi.fn()
+    const { container, root } = renderClient({
+      project,
+      settings: getDefaultSettings('/tmp'),
+      isLocalWindowsProject: true,
+      repoPath: '\\\\wsl.localhost\\Debian\\home\\u\\sample-project',
+      wslAvailable: true,
+      wslDistros: ['Debian'],
+      wslCapabilitiesLoading: false,
+      updateProject
+    })
+
+    try {
+      act(() => {
+        vi.runAllTimers()
+      })
+      // Why: storage and execution must agree — the selector locks to the
+      // storage distro and normalizes a contradicting stored preference.
+      expect(updateProject).toHaveBeenCalledWith('project-1', {
+        localWindowsRuntimePreference: { kind: 'wsl', distro: 'Debian' }
+      })
+      expect(container.textContent).toContain('runtime is locked to that distro')
+      // Why aria-disabled: a native disabled button leaves the tab order (see
+      // SettingsFormControls), so the segments disable via aria-disabled.
+      const disabledButtons = Array.from(
+        container.querySelectorAll('button[aria-disabled="true"]')
+      ).map((button) => button.textContent?.trim())
+      expect(disabledButtons).toContain('Windows')
+      expect(disabledButtons).toContain('Default (Windows)')
+    } finally {
+      cleanupClient(container, root)
+      vi.useRealTimers()
+    }
+  })
+
+  it('keeps the runtime switchable when the storage distro is no longer installed', () => {
+    const markup = renderToStaticMarkup(
+      <ProjectWindowsRuntimeSetting
+        project={project}
+        settings={getDefaultSettings('/tmp')}
+        isLocalWindowsProject
+        repoPath="\\wsl.localhost\gone\home\u\proj"
+        wslAvailable
+        wslDistros={['Ubuntu-24.04']}
+        wslCapabilitiesLoading={false}
+        updateProject={vi.fn()}
+      />
+    )
+
+    expect(markup).not.toContain('runtime is locked to that distro')
+    expect(markup).not.toContain('aria-disabled="true"')
+  })
+
   it('does not render for remote or non-Windows-owned projects', () => {
     const markup = renderToStaticMarkup(
       <ProjectWindowsRuntimeSetting
