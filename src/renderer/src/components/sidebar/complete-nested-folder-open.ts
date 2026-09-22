@@ -3,6 +3,8 @@ import { useAppStore } from '@/store'
 import type { NestedRepoScanResult } from '../../../../shared/project-group-types'
 import type { CapturedRuntimeOwner } from './add-repo-runtime-owner'
 import { trackNestedFolderOpen } from './track-nested-folder-open'
+import { parseWslUncPath } from '../../../../shared/wsl-paths'
+import { pinAddedRepoWslRuntimePreference } from './add-repo-store-upsert'
 
 export async function completeNestedFolderOpen(args: {
   scan: NestedRepoScanResult
@@ -41,6 +43,12 @@ export async function completeNestedFolderOpen(args: {
       return
     }
     if (repo) {
+      // Why: a non-git folder on \\wsl.localhost\<distro> must run in that distro
+      // too — this path skips useCompleteGitRepoAdd, so pin the runtime here.
+      const wslDistro = parseWslUncPath(repo.path)?.distro
+      if (wslDistro) {
+        pinAddedRepoWslRuntimePreference(repo.id, wslDistro)
+      }
       args.closeModal()
     }
   } catch (err) {
