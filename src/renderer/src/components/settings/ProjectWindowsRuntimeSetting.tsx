@@ -119,6 +119,11 @@ export function ProjectWindowsRuntimeSetting({
   const defaultRuntimeLabel = getDefaultRuntimeLabel(settings)
   const commitRuntimePreference = (nextPreference: LocalWindowsRuntimePreference): void => {
     setPendingPreference(null)
+    // Why: storage pins the runtime while locked — reject any value that would
+    // contradict the lock so a stale pending Apply can never overwrite it.
+    if (lockedWslDistro !== null) {
+      return
+    }
     if (nextPreference.kind === 'inherit-global') {
       void updateProject(project.id, { localWindowsRuntimePreference: undefined })
       return
