@@ -139,11 +139,15 @@ describe('fetchViaPty', () => {
     await resultPromise
   })
 
-  it('exports the configured proxy inside the WSL launch command', async () => {
+  it('exports the configured proxy inside the WSL launch command when it crosses the boundary', async () => {
     // Why: Windows-side spawn env does not cross into the distro, so the proxy
     // must be exported in the bash command for the inner claude to see it.
     const term = makeMockTerm()
     spawnMock.mockReturnValue(term)
+    resolveWslGuestProxySettingsMock.mockResolvedValue({
+      settings: { httpProxyUrl: 'http://127.0.0.1:7890' },
+      crossesBoundary: true
+    })
 
     const resultPromise = fetchViaPty({
       networkProxySettings: { httpProxyUrl: 'http://127.0.0.1:7890' },
@@ -166,6 +170,38 @@ describe('fetchViaPty', () => {
     expect(bashCommand).toContain('mkdir -p "$orca_rate_limit_cwd"')
     expect(bashCommand).toContain('cd "$orca_rate_limit_cwd"')
     expect(bashCommand).toContain("export HTTPS_PROXY='http://127.0.0.1:7890'")
+    expect(bashCommand).toContain('exec claude')
+
+    term.emitExit()
+    await resultPromise
+  })
+
+  it('does not export an unverified loopback proxy into the WSL launch command', async () => {
+    // Why: the resolver reports crossesBoundary=false for a loopback it could
+    // not confirm; exporting it would only force a dead egress path in the guest.
+    const term = makeMockTerm()
+    spawnMock.mockReturnValue(term)
+    resolveWslGuestProxySettingsMock.mockResolvedValue({
+      settings: { httpProxyUrl: 'http://127.0.0.1:7890' },
+      crossesBoundary: false
+    })
+
+    const resultPromise = fetchViaPty({
+      networkProxySettings: { httpProxyUrl: 'http://127.0.0.1:7890' },
+      authPreparation: {
+        configDir: '/home/u/.claude',
+        runtime: 'wsl',
+        wslDistro: 'Ubuntu',
+        wslLinuxConfigDir: '/home/u/.claude',
+        envPatch: { CLAUDE_CONFIG_DIR: '/home/u/.claude' },
+        stripAuthEnv: false,
+        provenance: 'system'
+      }
+    })
+    await vi.advanceTimersByTimeAsync(0)
+
+    const bashCommand = spawnMock.mock.calls[0]?.[1]?.at(-1)
+    expect(bashCommand).not.toContain('HTTPS_PROXY')
     expect(bashCommand).toContain('exec claude')
 
     term.emitExit()

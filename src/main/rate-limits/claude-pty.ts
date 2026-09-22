@@ -59,17 +59,19 @@ export async function fetchViaPty(options?: {
     authPreparation?.runtime === 'wsl' &&
     authPreparation.wslDistro &&
     authPreparation.wslLinuxConfigDir
-      ? {
-          distro: authPreparation.wslDistro,
-          linuxConfigDir: authPreparation.wslLinuxConfigDir
-        }
+      ? { distro: authPreparation.wslDistro, linuxConfigDir: authPreparation.wslLinuxConfigDir }
       : null
   // Why: a Windows loopback proxy dies inside WSL2 NAT; swap in the host
   // gateway when the guest confirms it can reach it (no-op otherwise).
-  const { settings: networkProxySettings } = await resolveWslGuestProxySettings(
-    options?.networkProxySettings,
-    { isWsl: wslConfig !== null, distro: wslConfig?.distro ?? null }
-  )
+  const wslProxyResolution = await resolveWslGuestProxySettings(options?.networkProxySettings, {
+    isWsl: wslConfig !== null,
+    distro: wslConfig?.distro ?? null
+  })
+  // Why drop it: an unverified loopback the guest cannot reach is worse than no
+  // proxy — exporting it into the guest command only forces a dead egress path,
+  // so keep it out unless the resolver confirmed it crosses the boundary.
+  const networkProxySettings =
+    wslConfig && !wslProxyResolution.crossesBoundary ? undefined : wslProxyResolution.settings
   // Why: the uncached gateway-rewrite path can run three WSL probes (up to 15s)
   // before returning — an abort during that window must not still spawn the PTY.
   if (options?.signal?.aborted) {
